@@ -24,3 +24,7 @@ Homestead.json
 Homestead.yaml
 Thumbs.db
 /.claude/settings.local.json
+/test-results
+/playwright-report
+/blob-report
+/playwright/.cache
