@@ -1,0 +1,12 @@
+includes:
+    - ./vendor/larastan/larastan/extension.neon
+    - phpstan-baseline.neon
+
+parameters:
+    level: 6
+    paths:
+        - app
+        - database/seeders
+        - database/factories
+    treatPhpDocTypesAsCertain: false
+    # Livewire anonymous-class SFCs inside .blade.php aren't scanned; their logic is covered by feature tests.

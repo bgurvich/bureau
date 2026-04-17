@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Property extends Model
 {
-    use BelongsToHousehold, HasTags, HasMedia, HasValuations;
+    use BelongsToHousehold, HasMedia, HasTags, HasValuations;
 
     protected $guarded = [];
 

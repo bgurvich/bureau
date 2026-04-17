@@ -13,7 +13,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Account extends Model
 {
-    use BelongsToHousehold, HasTags, HasMedia, HasValuations;
+    use BelongsToHousehold, HasMedia, HasTags, HasValuations;
 
     protected $guarded = [];
 

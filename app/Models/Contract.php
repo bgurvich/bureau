@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Contract extends Model
 {
-    use BelongsToHousehold, HasTags, HasMedia;
+    use BelongsToHousehold, HasMedia, HasTags;
 
     protected $guarded = [];
 

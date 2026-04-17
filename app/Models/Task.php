@@ -12,7 +12,7 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
 
 class Task extends Model
 {
-    use BelongsToHousehold, HasTags, HasMedia;
+    use BelongsToHousehold, HasMedia, HasTags;
 
     protected $guarded = [];
 

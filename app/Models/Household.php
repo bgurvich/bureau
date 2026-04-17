@@ -12,7 +12,7 @@ use Stancl\Tenancy\Database\Concerns\HasDomains;
 
 class Household extends Model implements Tenant, TenantWithDatabase
 {
-    use HasFactory, HasDatabase, HasDomains;
+    use HasDatabase, HasDomains, HasFactory;
 
     protected $guarded = [];
 
@@ -43,6 +43,7 @@ class Household extends Model implements Tenant, TenantWithDatabase
     public function setInternal(string $key, $value): static
     {
         $this->setAttribute($key, $value);
+
         return $this;
     }
 

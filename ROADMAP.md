@@ -64,16 +64,41 @@ Status legend: ✅ in v1 schema · 🏗 v1 wiring (post-schema) · 🧭 deferred
 - ✅ mail_messages (parsed inbound)
 - ✅ mail_attachments (link to media)
 
+### Time tracker (personal, adapted from nfp)
+- ✅ projects (billable, hourly_rate, client_contact, per-user)
+- ✅ time_entries (historical, duration_seconds, activity_date, billable flag)
+- ✅ time_tracker_sessions (one live session per user; start/pause/resume/stop; quantize-on-stop)
+- ✅ Top-bar Livewire widget (start / pause / resume / stop / discard); dashboard tile for today & this-week hours
+
+### User profile (per-user preferences)
+- ✅ `users.locale`, `users.timezone`, `users.date_format`, `users.time_format`, `users.week_starts_on`
+- ✅ `ApplyUserPreferences` middleware sets `app()->setLocale()` per request
+- ✅ `App\Support\Formatting` helpers (date / time / datetime / money) read current user's profile
+
 ---
 
 ## v1 wiring — after schema, still in scope
 
+- ✅ Dark-theme shell layout (sidebar + header + time-tracker widget in top bar)
+- ✅ Minimal password auth (Livewire Login SFC, POST logout, EnsureHousehold middleware)
+- ✅ Dashboard home at `/` with 5 radar tiles (Money, Time, Commitments, Documents, Attention) + Time tracker tile — each powered by real queries against the scoped tenant
+- ✅ Demo data seeder (accounts, transactions, transfers, contracts, insurance, property, vehicle, valuations, tasks, meetings, documents, recurring rules+projections, projects, time entries)
+- ✅ Pest 4 feature + unit tests (auth redirect, login, dashboard renders, logout, tenancy scope, TimeTrackerSession elapsed math)
+- ✅ Playwright smoke e2e (login page renders, unauth redirects, authenticated dashboard visible)
+- ✅ Larastan / PHPStan level 6 wired; baseline committed and shrinks-only
+- ✅ Laravel Pint formatting gate
+- ✅ `lang/en.json` + UI strings wrapped in `__()` (navigation, login, layout — expanding over time)
+- ✅ WCAG 2.1 AA basics: `<html lang>`, semantic landmarks (`<main>`, `<nav>`), skip-to-main link, focus-visible rings, `aria-current`, `aria-label`, `aria-invalid` + `aria-describedby` on form errors
 - 🏗 Postmark inbound webhook → creates `mail_messages` + draft transaction/media
 - 🏗 RRULE projection generator (artisan command + scheduled job)
 - 🏗 MediaFolder rescan artisan command (discover files → create media)
 - 🏗 spatie/laravel-backup config → nightly DB dump + media sync, retention GFS
 - 🏗 Monthly `snapshots` generator (net-worth rollup into snapshots table)
-- 🏗 Seeder: default categories + base currencies + my household
+- 🏗 Drill-down screens for each domain (list + detail + capture form); today they are "coming soon" stubs
+- 🏗 Profile editor surface (locale, timezone, date/time formats, notification prefs)
+- 🏗 Full `__()` coverage across radar tiles and time-tracker widget; translations added as locales arrive
+- 🏗 WCAG deep audit — axe-core in Playwright, manual keyboard walkthrough, Lighthouse ≥ 95 on dashboard
+- 🏗 Shrink the PHPStan L6 baseline (fix real type issues, especially `CurrentHousehold::get()` Eloquent-model-vs-Household return type, Formatting nullsafe warnings, seed-helper iterable type)
 
 ---
 

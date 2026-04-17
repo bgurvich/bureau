@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Document extends Model
 {
-    use BelongsToHousehold, HasTags, HasMedia;
+    use BelongsToHousehold, HasMedia, HasTags;
 
     protected $guarded = [];
 

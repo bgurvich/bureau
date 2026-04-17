@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
 
 class Prescription extends Model
 {
-    use BelongsToHousehold, HasTags, HasMedia;
+    use BelongsToHousehold, HasMedia, HasTags;
 
     protected $guarded = [];
 

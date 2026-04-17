@@ -37,6 +37,7 @@ class CurrentHousehold
         if ($id === null) {
             throw new \RuntimeException('No current household resolved.');
         }
+
         return $id;
     }
 }
