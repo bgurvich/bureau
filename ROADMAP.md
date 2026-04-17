@@ -95,6 +95,16 @@ Status legend: ✅ in v1 schema · 🏗 v1 wiring (post-schema) · 🧭 deferred
 - 🏗 spatie/laravel-backup config → nightly DB dump + media sync, retention GFS
 - 🏗 Monthly `snapshots` generator (net-worth rollup into snapshots table)
 - 🏗 Drill-down screens for each domain (list + detail + capture form); today they are "coming soon" stubs
+- 🏗 **Header — global controls** (Livewire SFCs in the top bar, keyboard-shortcut-driven):
+  - Global search (⌘/Ctrl+K) — command-palette style across domains: contacts, transactions, tasks, contracts, documents, notes, media. Fuzzy match over titles + descriptions + tags; result groups by domain; keyboard nav; Enter opens detail.
+  - Quick add (⌘/Ctrl+.) — modal with a type picker (transaction, task, contact, note, meeting, document, time entry) then a minimal form per type. The same entry point used from any screen.
+  - Alerts bell — dropdown of pending reminders + overdue items + recently-fired events; badge count from the attention radar's sum; mark-as-read / dismiss; "see all" → attention radar drill-down. Live-updates via Livewire poll or broadcast.
+- 🏗 **User dropdown in header** (replace current sidebar user-card + Sign-out affordance; that footer slot goes back to sidebar content):
+  - Avatar + name trigger in top-right; opens a menu.
+  - **Profile** → profile editor (locale, timezone, date/time formats, notification prefs).
+  - **Theme** → Light / Dark / System selector; persists on `users.theme` (schema TBD) and in `localStorage` for pre-auth pages.
+  - **Language** → locale selector backed by `users.locale`; immediate page reload with the new locale active.
+  - **Sign out** → POST `/logout`.
 - 🏗 Profile editor surface (locale, timezone, date/time formats, notification prefs)
 - 🏗 Full `__()` coverage across radar tiles and time-tracker widget; translations added as locales arrive
 - 🏗 WCAG deep audit — axe-core in Playwright, manual keyboard walkthrough, Lighthouse ≥ 95 on dashboard
