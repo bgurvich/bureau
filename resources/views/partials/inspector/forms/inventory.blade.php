@@ -104,6 +104,47 @@
         <input wire:model="inventory_warranty_expires_on" id="i-in-warranty" type="date"
                class="w-full rounded-md border border-neutral-700 bg-neutral-950 px-2 py-2 text-sm text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
     </div>
+    <details class="text-xs" @if ($inventory_is_for_sale) open @endif>
+        <summary class="cursor-pointer text-sm font-medium text-neutral-200 hover:text-neutral-50">{{ __('For sale') }}</summary>
+        <div class="mt-3 space-y-3">
+            <label class="flex items-center gap-2 text-sm text-neutral-300">
+                <input wire:model.live="inventory_is_for_sale" type="checkbox" class="rounded border-neutral-700 bg-neutral-950">
+                {{ __('Currently listed') }}
+            </label>
+            @if ($inventory_is_for_sale)
+                <div class="grid grid-cols-3 gap-3">
+                    <div>
+                        <label for="i-in-lstplat" class="mb-1 block text-xs text-neutral-400">{{ __('Platform') }}</label>
+                        <select wire:model="inventory_listing_platform" id="i-in-lstplat"
+                                class="w-full rounded-md border border-neutral-700 bg-neutral-950 px-2 py-2 text-sm text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                            <option value="">—</option>
+                            @foreach (App\Support\Enums::inventoryListingPlatforms() as $v => $l)
+                                <option value="{{ $v }}">{{ $l }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div>
+                        <label for="i-in-lstask" class="mb-1 block text-xs text-neutral-400">{{ __('Asking price') }}
+                            <span class="ml-1 font-mono text-[10px] text-neutral-500">{{ $inventory_listing_asking_currency }}</span>
+                        </label>
+                        <input wire:model="inventory_listing_asking_amount" id="i-in-lstask" type="number" step="0.01"
+                               class="w-full rounded-md border border-neutral-700 bg-neutral-950 px-2 py-2 text-sm tabular-nums text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                    </div>
+                    <div>
+                        <label for="i-in-lstpost" class="mb-1 block text-xs text-neutral-400">{{ __('Posted') }}</label>
+                        <input wire:model="inventory_listing_posted_at" id="i-in-lstpost" type="date"
+                               class="w-full rounded-md border border-neutral-700 bg-neutral-950 px-2 py-2 text-sm text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                    </div>
+                </div>
+                <div>
+                    <label for="i-in-lsturl" class="mb-1 block text-xs text-neutral-400">{{ __('Listing URL') }}</label>
+                    <input wire:model="inventory_listing_url" id="i-in-lsturl" type="url" inputmode="url"
+                           class="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 font-mono text-xs text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                    @error('inventory_listing_url')<div role="alert" class="mt-1 text-xs text-rose-400">{{ $message }}</div>@enderror
+                </div>
+            @endif
+        </div>
+    </details>
     @include('partials.inspector.fields.disposition', ['dateModel' => 'inventory_disposed_on'])
     @include('partials.inspector.fields.photos')
     @include('partials.inspector.fields.notes')

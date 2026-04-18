@@ -122,6 +122,7 @@ class extends Component
             ->when($this->propertyFilter !== '', fn ($q) => $q->where('location_property_id', $this->propertyFilter))
             ->when($this->statusFilter === 'unprocessed', fn ($q) => $q->whereNull('processed_at'))
             ->when($this->statusFilter === 'processed', fn ($q) => $q->whereNotNull('processed_at'))
+            ->when($this->statusFilter === 'for_sale', fn ($q) => $q->where('is_for_sale', true))
             ->when($this->warrantyOnly, fn ($q) => $q
                 ->whereNotNull('warranty_expires_on')
                 ->whereDate('warranty_expires_on', '>=', now()->toDateString())
@@ -380,6 +381,7 @@ Passport holder
                 <option value="">{{ __('All') }}</option>
                 <option value="unprocessed">{{ __('Unprocessed') }}@if ($this->unprocessedCount > 0) ({{ $this->unprocessedCount }})@endif</option>
                 <option value="processed">{{ __('Processed') }}</option>
+                <option value="for_sale">{{ __('For sale') }}</option>
             </select>
         </div>
         <label class="flex items-center gap-2 text-xs text-neutral-300">
@@ -500,6 +502,9 @@ Passport holder
                                     @endif
                                     @if ($i->category)
                                         <span class="shrink-0 rounded bg-neutral-800 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-neutral-400">{{ $i->category }}</span>
+                                    @endif
+                                    @if ($i->is_for_sale)
+                                        <span class="shrink-0 rounded bg-emerald-900/40 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-emerald-300">{{ __('for sale') }}</span>
                                     @endif
                                 </div>
                                 <div class="mt-0.5 flex flex-wrap gap-3 text-[11px] text-neutral-500">

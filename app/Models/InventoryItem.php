@@ -23,6 +23,9 @@ class InventoryItem extends Model
         'processed_at' => 'datetime',
         'disposed_on' => 'date',
         'sale_amount' => 'decimal:4',
+        'is_for_sale' => 'boolean',
+        'listing_asking_amount' => 'decimal:4',
+        'listing_posted_at' => 'date',
     ];
 
     public function property(): BelongsTo

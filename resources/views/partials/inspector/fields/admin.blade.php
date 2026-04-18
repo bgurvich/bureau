@@ -6,7 +6,7 @@
     @endphp
     @if ($showOwner || $admin_created_at || $admin_updated_at)
         <details class="text-xs">
-            <summary class="cursor-pointer text-neutral-500 hover:text-neutral-300">{{ __('Admin') }}</summary>
+            <summary class="cursor-pointer text-sm font-medium text-neutral-200 hover:text-neutral-50">{{ __('Admin') }}</summary>
             <div class="mt-3 space-y-3">
                 @if ($showOwner)
                     <div>

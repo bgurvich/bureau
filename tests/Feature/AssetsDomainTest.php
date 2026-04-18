@@ -107,6 +107,37 @@ it('renders a photo thumbnail on inventory rows that have one attached', functio
         ->assertSee(route('media.file', $media), false);
 });
 
+it('saves inventory listing fields and filters by for-sale', function () {
+    authedInHousehold();
+
+    $item = InventoryItem::create(['name' => 'Old bike', 'category' => 'other']);
+
+    Livewire::test('inspector')
+        ->call('openInspector', 'inventory', $item->id)
+        ->set('inventory_is_for_sale', true)
+        ->set('inventory_listing_platform', 'ebay')
+        ->set('inventory_listing_asking_amount', '325.00')
+        ->set('inventory_listing_asking_currency', 'USD')
+        ->set('inventory_listing_url', 'https://example.com/listing/123')
+        ->set('inventory_listing_posted_at', '2026-04-18')
+        ->call('save');
+
+    $fresh = $item->fresh();
+    expect((bool) $fresh->is_for_sale)->toBeTrue()
+        ->and($fresh->listing_platform)->toBe('ebay')
+        ->and((float) $fresh->listing_asking_amount)->toBe(325.0)
+        ->and($fresh->listing_url)->toBe('https://example.com/listing/123')
+        ->and($fresh->listing_posted_at->toDateString())->toBe('2026-04-18');
+
+    InventoryItem::create(['name' => 'Kept item', 'category' => 'other', 'processed_at' => now()]);
+
+    $this->get('/inventory?status=for_sale')
+        ->assertOk()
+        ->assertSee('Old bike')
+        ->assertSee('for sale')
+        ->assertDontSee('Kept item');
+});
+
 it('accepts multiple photos in a single upload', function () {
     Storage::fake('local');
     authedInHousehold();

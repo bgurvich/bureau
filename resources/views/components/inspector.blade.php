@@ -69,6 +69,18 @@ new class extends Component
 
     public string $inventory_disposed_on = '';
 
+    public bool $inventory_is_for_sale = false;
+
+    public string $inventory_listing_asking_amount = '';
+
+    public string $inventory_listing_asking_currency = 'USD';
+
+    public string $inventory_listing_platform = '';
+
+    public string $inventory_listing_url = '';
+
+    public string $inventory_listing_posted_at = '';
+
     // Admin-section meta (read-only display, loaded from the record on edit).
     public ?int $admin_owner_id = null;
 
@@ -1023,6 +1035,12 @@ new class extends Component
         $this->sale_amount = $i->sale_amount !== null ? (string) $i->sale_amount : '';
         $this->sale_currency = $i->sale_currency ?: $this->householdCurrency();
         $this->buyer_contact_id = $i->buyer_contact_id;
+        $this->inventory_is_for_sale = (bool) $i->is_for_sale;
+        $this->inventory_listing_asking_amount = $i->listing_asking_amount !== null ? (string) $i->listing_asking_amount : '';
+        $this->inventory_listing_asking_currency = $i->listing_asking_currency ?: $this->householdCurrency();
+        $this->inventory_listing_platform = $i->listing_platform ?? '';
+        $this->inventory_listing_url = $i->listing_url ?? '';
+        $this->inventory_listing_posted_at = $i->listing_posted_at?->toDateString() ?? '';
         $this->notes = $i->notes ?? '';
     }
 
@@ -1827,6 +1845,12 @@ new class extends Component
             'sale_amount' => 'nullable|numeric',
             'sale_currency' => 'nullable|string|size:3',
             'buyer_contact_id' => 'nullable|integer|exists:contacts,id',
+            'inventory_is_for_sale' => 'boolean',
+            'inventory_listing_asking_amount' => 'nullable|numeric',
+            'inventory_listing_asking_currency' => 'nullable|string|size:3',
+            'inventory_listing_platform' => ['nullable', Rule::in(array_keys(Enums::inventoryListingPlatforms()))],
+            'inventory_listing_url' => 'nullable|url|max:512',
+            'inventory_listing_posted_at' => 'nullable|date',
             'notes' => 'nullable|string|max:5000',
         ]);
 
@@ -1853,6 +1877,12 @@ new class extends Component
             'sale_amount' => $data['sale_amount'] !== '' ? (float) $data['sale_amount'] : null,
             'sale_currency' => $data['sale_currency'] ?: null,
             'buyer_contact_id' => $data['buyer_contact_id'] ?: null,
+            'is_for_sale' => (bool) ($data['inventory_is_for_sale'] ?? false),
+            'listing_asking_amount' => $data['inventory_listing_asking_amount'] !== '' ? (float) $data['inventory_listing_asking_amount'] : null,
+            'listing_asking_currency' => $data['inventory_listing_asking_currency'] ?: null,
+            'listing_platform' => $data['inventory_listing_platform'] ?: null,
+            'listing_url' => $data['inventory_listing_url'] ?: null,
+            'listing_posted_at' => $data['inventory_listing_posted_at'] ?: null,
             'notes' => $data['notes'] ?: null,
         ];
 

@@ -1,5 +1,6 @@
 <?php
 
+use App\Jobs\OcrMedia;
 use App\Models\Media;
 use App\Models\MediaFolder;
 use App\Models\Tag;
@@ -90,6 +91,17 @@ class extends Component
         $m->tags()->sync($ids);
 
         unset($this->media, $this->counts);
+    }
+
+    public function retryOcr(): void
+    {
+        $m = Media::find($this->previewId);
+        if (! $m) {
+            return;
+        }
+        $m->forceFill(['ocr_status' => 'pending'])->save();
+        OcrMedia::dispatch($m->id);
+        unset($this->media);
     }
 
     public function deleteMedia(): void
@@ -379,9 +391,27 @@ class extends Component
                         <dl class="grid grid-cols-2 gap-2 rounded-md border border-neutral-800 bg-neutral-900/60 p-3 text-[11px] text-neutral-400">
                             <div><dt class="text-neutral-500">{{ __('Size') }}</dt><dd class="tabular-nums text-neutral-200">{{ FileSize::format($m->size) }}</dd></div>
                             <div><dt class="text-neutral-500">{{ __('Type') }}</dt><dd class="text-neutral-200">{{ $m->mime ?: '—' }}</dd></div>
-                            <div><dt class="text-neutral-500">{{ __('OCR') }}</dt><dd class="text-neutral-200">{{ $m->ocr_status ?: '—' }}</dd></div>
+                            <div>
+                                <dt class="text-neutral-500">{{ __('OCR') }}</dt>
+                                <dd class="flex items-center gap-2 text-neutral-200">
+                                    <span>{{ $m->ocr_status ?: '—' }}</span>
+                                    @if (in_array($m->ocr_status, ['pending', 'failed', 'done'], true) && str_starts_with((string) $m->mime, 'image/'))
+                                        <button type="button" wire:click="retryOcr"
+                                                class="rounded px-1.5 py-0.5 text-[10px] text-neutral-400 hover:bg-neutral-800 hover:text-neutral-100 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-neutral-300">
+                                            <span wire:loading.remove wire:target="retryOcr">{{ __('retry') }}</span>
+                                            <span wire:loading wire:target="retryOcr">{{ __('running…') }}</span>
+                                        </button>
+                                    @endif
+                                </dd>
+                            </div>
                             <div><dt class="text-neutral-500">{{ __('Uploaded') }}</dt><dd class="tabular-nums text-neutral-200">{{ Formatting::date($m->created_at) }}</dd></div>
                         </dl>
+                        @if ($m->ocr_text)
+                            <details class="rounded-md border border-neutral-800 bg-neutral-900/60 text-[11px]">
+                                <summary class="cursor-pointer px-3 py-2 text-neutral-400 hover:text-neutral-200">{{ __('Extracted text') }}</summary>
+                                <pre class="max-h-60 overflow-auto whitespace-pre-wrap border-t border-neutral-800 px-3 py-2 font-mono text-neutral-200">{{ $m->ocr_text }}</pre>
+                            </details>
+                        @endif
                     </div>
                     <footer class="flex items-center justify-between gap-2 border-t border-neutral-800 bg-neutral-900/50 px-4 py-3">
                         <button type="button"

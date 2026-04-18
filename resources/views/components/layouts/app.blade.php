@@ -39,6 +39,7 @@
                                 [__('Bookkeeper'), 'bookkeeper', 'file-signature'],
                             ],
                             __('Life') => [
+                                [__('Calendar'), 'calendar.index', 'calendar'],
                                 [__('Tasks'), 'calendar.tasks', 'check-square'],
                                 [__('Meetings'), 'calendar.meetings', 'calendar'],
                                 [__('Contacts'), 'relationships.contacts', 'user'],

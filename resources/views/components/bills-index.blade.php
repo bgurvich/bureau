@@ -86,7 +86,7 @@ class extends Component
     <header class="flex items-baseline justify-between gap-4">
         <div>
             <h2 class="text-base font-semibold text-neutral-100">{{ __('Bills & Income') }}</h2>
-            <p class="mt-1 text-xs text-neutral-500">{{ __('The next 90 days of recurring obligations, projected from your rules.') }}</p>
+            <p class="mt-1 text-xs text-neutral-500">{{ __('The next 90 days of recurring obligations, projected from your recurrences.') }}</p>
         </div>
         <x-ui.new-record-button type="bill" :label="__('New bill')" shortcut="B" />
     </header>
@@ -173,11 +173,11 @@ class extends Component
     </section>
 
     <section aria-labelledby="rules-heading" class="space-y-3">
-        <h3 id="rules-heading" class="text-[10px] font-medium uppercase tracking-wider text-neutral-500">{{ __('Rule catalog') }}</h3>
+        <h3 id="rules-heading" class="text-[10px] font-medium uppercase tracking-wider text-neutral-500">{{ __('Recurrence catalog') }}</h3>
 
         @if ($this->rules->isEmpty())
             <div class="rounded-xl border border-dashed border-neutral-800 bg-neutral-900/40 p-6 text-center text-sm text-neutral-500">
-                {{ __('No active recurring rules yet.') }}
+                {{ __('No active recurrences yet.') }}
             </div>
         @else
             <ul class="divide-y divide-neutral-800 rounded-lg border border-neutral-800 bg-neutral-900/40">

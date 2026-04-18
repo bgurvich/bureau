@@ -2,7 +2,7 @@
      Shared across property/vehicle/inventory.
      Expects: @include(..., ['dateModel' => 'property_disposed_on']) --}}
 <details class="text-xs" @if ($this->{$dateModel} || $this->disposition || $this->sale_amount || $this->buyer_contact_id) open @endif>
-    <summary class="cursor-pointer text-neutral-500 hover:text-neutral-300">{{ __('Ownership ended') }}</summary>
+    <summary class="cursor-pointer text-sm font-medium text-neutral-200 hover:text-neutral-50">{{ __('Ownership ended') }}</summary>
     <div class="mt-3 space-y-3">
         <div class="grid grid-cols-2 gap-3">
             <div>

@@ -1,9 +1,11 @@
 <?php
 
+use App\Jobs\OcrMedia;
 use App\Models\Household;
 use App\Models\Media;
 use App\Support\CurrentHousehold;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 
@@ -37,6 +39,80 @@ it('opens preview, saves metadata, and deletes media from the library', function
     $c->call('deleteMedia')->assertSet('previewId', null);
     expect(Media::find($m->id))->toBeNull();
     expect(Storage::disk('local')->exists('media/keep.jpg'))->toBeFalse();
+});
+
+it('runs Tesseract on a pending Media and stores the extracted text', function () {
+    Storage::fake('local');
+    authedInHousehold();
+
+    Storage::disk('local')->put('scans/receipt.jpg', 'fake');
+    $m = Media::create([
+        'disk' => 'local', 'path' => 'scans/receipt.jpg',
+        'original_name' => 'receipt.jpg', 'mime' => 'image/jpeg', 'size' => 4,
+        'ocr_status' => 'pending',
+    ]);
+
+    Process::fake(fn () => Process::result(output: "Total \$42.00\nVisa **** 1234"));
+
+    (new OcrMedia($m->id))->handle();
+
+    $fresh = $m->fresh();
+    expect($fresh->ocr_status)->toBe('done')
+        ->and($fresh->ocr_text)->toContain('Total $42.00');
+});
+
+it('marks OCR as failed when the tesseract binary errors', function () {
+    Storage::fake('local');
+    authedInHousehold();
+
+    Storage::disk('local')->put('bad.jpg', 'fake');
+    $m = Media::create([
+        'disk' => 'local', 'path' => 'bad.jpg',
+        'original_name' => 'bad.jpg', 'mime' => 'image/jpeg', 'size' => 4,
+        'ocr_status' => 'pending',
+    ]);
+
+    Process::fake(fn () => Process::result(exitCode: 1, errorOutput: 'cannot read'));
+
+    (new OcrMedia($m->id))->handle();
+
+    expect($m->fresh()->ocr_status)->toBe('failed');
+});
+
+it('skips OCR for non-image media', function () {
+    authedInHousehold();
+
+    $m = Media::create([
+        'disk' => 'local', 'path' => 'doc.pdf',
+        'original_name' => 'doc.pdf', 'mime' => 'application/pdf', 'size' => 100,
+        'ocr_status' => 'pending',
+    ]);
+
+    (new OcrMedia($m->id))->handle();
+
+    expect($m->fresh()->ocr_status)->toBe('skip');
+});
+
+it('retries OCR from the Media preview modal', function () {
+    Storage::fake('local');
+    authedInHousehold();
+
+    Storage::disk('local')->put('r.jpg', 'fake');
+    $m = Media::create([
+        'disk' => 'local', 'path' => 'r.jpg',
+        'original_name' => 'r.jpg', 'mime' => 'image/jpeg', 'size' => 4,
+        'ocr_status' => 'failed',
+    ]);
+
+    Process::fake(fn () => Process::result(output: 'RETRY TEXT'));
+
+    Livewire::test('media-index')
+        ->call('openPreview', $m->id)
+        ->call('retryOcr');
+
+    $fresh = $m->fresh();
+    expect($fresh->ocr_status)->toBe('done')
+        ->and($fresh->ocr_text)->toBe('RETRY TEXT');
 });
 
 it('renders the Media drill-down', function () {

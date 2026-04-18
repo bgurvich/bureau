@@ -26,6 +26,7 @@ Route::middleware(['auth', 'preferences', 'household'])->group(function () {
     Route::livewire('/bills', 'bills-index')->name('fiscal.recurring');
     Route::livewire('/bookkeeper', 'bookkeeper')->name('bookkeeper');
     Route::post('/bookkeeper/export', BookkeeperExportController::class)->name('bookkeeper.export');
+    Route::livewire('/calendar', 'calendar-index')->name('calendar.index');
     Route::livewire('/tasks', 'tasks-index')->name('calendar.tasks');
     Route::livewire('/meetings', 'meetings-index')->name('calendar.meetings');
     Route::livewire('/contacts', 'contacts-index')->name('relationships.contacts');
@@ -48,6 +49,8 @@ Route::middleware(['auth', 'preferences', 'household'])->group(function () {
     Route::prefix('m')->group(function () {
         Route::livewire('/', 'mobile.capture')->name('mobile.capture');
         Route::livewire('/capture/inventory', 'mobile.capture-inventory')->name('mobile.capture.inventory');
+        Route::livewire('/capture/note', 'mobile.capture-note')->name('mobile.capture.note');
+        Route::livewire('/capture/photo', 'mobile.capture-photo')->name('mobile.capture.photo');
         Route::livewire('/inbox', 'mobile.inbox')->name('mobile.inbox');
         Route::livewire('/search', 'mobile.search')->name('mobile.search');
         Route::livewire('/me', 'mobile.me')->name('mobile.me');

@@ -356,6 +356,25 @@ class Enums
         ];
     }
 
+    /** Inventory listing platform — where the item is posted for sale. */
+    /**
+     * @return array<string, string>
+     */
+    public static function inventoryListingPlatforms(): array
+    {
+        return [
+            'ebay' => __('eBay'),
+            'craigslist' => __('Craigslist'),
+            'facebook' => __('Facebook Marketplace'),
+            'offerup' => __('OfferUp'),
+            'poshmark' => __('Poshmark'),
+            'mercari' => __('Mercari'),
+            'nextdoor' => __('Nextdoor'),
+            'local' => __('Local'),
+            'other' => __('Other'),
+        ];
+    }
+
     /** How an asset left ownership — drives disposition fields on property/vehicle/inventory. */
     /**
      * @return array<string, string>
