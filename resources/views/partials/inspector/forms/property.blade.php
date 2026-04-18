@@ -66,6 +66,7 @@
             </select>
         </div>
     </div>
+    @include('partials.inspector.fields.photos')
     @include('partials.inspector.fields.notes')
     @include('partials.inspector.fields.tags')
     @include('partials.inspector.fields.admin')

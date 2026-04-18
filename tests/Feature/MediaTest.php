@@ -115,6 +115,31 @@ it('retries OCR from the Media preview modal', function () {
         ->and($fresh->ocr_text)->toBe('RETRY TEXT');
 });
 
+it('surfaces OCR text hits in global search and deep-links back to the media preview', function () {
+    authedInHousehold();
+
+    $m = Media::create([
+        'disk' => 'local', 'path' => 'bill.jpg',
+        'original_name' => 'bill.jpg', 'mime' => 'image/jpeg', 'size' => 1,
+        'ocr_status' => 'done',
+        'ocr_text' => 'Acme Energy statement — account #9921 — total $142.03',
+    ]);
+
+    $c = Livewire::test('global-search')
+        ->call('openSearch')
+        ->set('query', 'Acme Energy');
+
+    $results = $c->get('results');
+    $hit = collect($results)->firstWhere('group', __('Media'));
+    expect($hit)->not->toBeNull()
+        ->and($hit['subtitle'])->toContain('Acme Energy');
+
+    // Deep link to /media?focus=<id> auto-opens the preview modal
+    Livewire::withQueryParams(['focus' => $m->id])
+        ->test('media-index')
+        ->assertSet('previewId', $m->id);
+});
+
 it('renders the Media drill-down', function () {
     authedInHousehold();
 

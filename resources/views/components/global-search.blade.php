@@ -4,9 +4,13 @@ use App\Models\Account;
 use App\Models\Contact;
 use App\Models\Contract;
 use App\Models\Document;
+use App\Models\InventoryItem;
+use App\Models\Media;
 use App\Models\Note;
+use App\Models\Property;
 use App\Models\Task;
 use App\Models\Transaction;
+use App\Models\Vehicle;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\On;
@@ -174,6 +178,73 @@ new class extends Component
                 'subtitle' => trim($a->type.($a->institution ? ' · '.$a->institution : '')),
                 'group' => __('Accounts'),
                 'url' => route('fiscal.accounts'),
+            ];
+        }
+
+        foreach (Vehicle::query()
+            ->where(fn ($b) => $b->where('make', 'like', $like)
+                ->orWhere('model', 'like', $like)
+                ->orWhere('license_plate', 'like', $like)
+                ->orWhere('vin', 'like', $like))
+            ->limit(3)->get(['id', 'make', 'model', 'year', 'license_plate']) as $v) {
+            $out[] = [
+                'type' => 'vehicle', 'id' => (int) $v->id,
+                'title' => trim(($v->year ? $v->year.' ' : '').($v->make ?? '').' '.($v->model ?? '')),
+                'subtitle' => (string) ($v->license_plate ?? ''),
+                'group' => __('Vehicles'),
+                'inspector' => true,
+            ];
+        }
+
+        foreach (Property::query()
+            ->where('name', 'like', $like)
+            ->limit(3)->get(['id', 'name', 'kind']) as $p) {
+            $out[] = [
+                'type' => 'property', 'id' => (int) $p->id,
+                'title' => (string) $p->name,
+                'subtitle' => (string) $p->kind,
+                'group' => __('Properties'),
+                'inspector' => true,
+            ];
+        }
+
+        foreach (InventoryItem::query()
+            ->where(fn ($b) => $b->where('name', 'like', $like)
+                ->orWhere('brand', 'like', $like)
+                ->orWhere('model_number', 'like', $like)
+                ->orWhere('serial_number', 'like', $like))
+            ->limit(3)->get(['id', 'name', 'brand', 'category']) as $i) {
+            $out[] = [
+                'type' => 'inventory', 'id' => (int) $i->id,
+                'title' => (string) $i->name,
+                'subtitle' => trim(($i->brand ? $i->brand.' · ' : '').($i->category ?? '')),
+                'group' => __('Inventory'),
+                'inspector' => true,
+            ];
+        }
+
+        // Media — matches filename AND OCR-extracted text from scanned receipts
+        // and bills. Jump to /media with ?focus={id} to auto-open the preview.
+        foreach (Media::query()
+            ->where(fn ($b) => $b->where('original_name', 'like', $like)
+                ->orWhere('ocr_text', 'like', $like))
+            ->orderByDesc('captured_at')
+            ->orderByDesc('id')
+            ->limit(5)->get(['id', 'original_name', 'ocr_text', 'mime']) as $m) {
+            $snippet = '';
+            if ($m->ocr_text) {
+                $pos = mb_stripos((string) $m->ocr_text, $q);
+                $start = max(0, $pos !== false ? $pos - 30 : 0);
+                $snippet = mb_substr((string) $m->ocr_text, $start, 120);
+                if ($start > 0) {
+                    $snippet = '… '.$snippet;
+                }
+            }
+            $out[] = [
+                'title' => $m->original_name ?: __('Media').' #'.$m->id,
+                'subtitle' => trim($snippet ?: (string) $m->mime),
+                'group' => __('Media'),
+                'url' => route('records.media', ['focus' => $m->id]),
             ];
         }
 

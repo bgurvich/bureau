@@ -72,6 +72,7 @@
                class="w-full rounded-md border border-neutral-700 bg-neutral-950 px-2 py-2 text-sm text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
         <p class="mt-1 text-[11px] text-neutral-500">{{ __('Free-trial window; leave blank if this is already a paid contract.') }}</p>
     </div>
+    @include('partials.inspector.fields.photos')
     @include('partials.inspector.fields.notes')
     @include('partials.inspector.fields.tags')
     @include('partials.inspector.fields.admin')

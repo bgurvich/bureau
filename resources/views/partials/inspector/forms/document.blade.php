@@ -44,6 +44,7 @@
         <input wire:model="in_case_of_pack" type="checkbox" class="rounded border-neutral-700 bg-neutral-950">
         {{ __('Include in the in-case-of-emergency pack') }}
     </label>
+    @include('partials.inspector.fields.photos')
     @include('partials.inspector.fields.notes')
     @include('partials.inspector.fields.tags')
     @include('partials.inspector.fields.admin')

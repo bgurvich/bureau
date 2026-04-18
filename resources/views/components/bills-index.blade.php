@@ -149,7 +149,16 @@ class extends Component
                                         </div>
                                         <div class="flex items-center justify-end gap-1 text-[10px] uppercase tracking-wider">
                                             @if ($p->status === 'matched')
-                                                <span class="rounded bg-emerald-900/30 px-1.5 py-0.5 text-emerald-400">{{ __('paid') }}</span>
+                                                @if ($p->matched_transaction_id)
+                                                    <button type="button"
+                                                            wire:click="$dispatch('inspector-open', {{ json_encode(['type' => 'transaction', 'id' => $p->matched_transaction_id]) }})"
+                                                            title="{{ __('Open matched transaction') }}"
+                                                            class="rounded bg-emerald-900/30 px-1.5 py-0.5 text-emerald-400 hover:bg-emerald-900/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                                                        {{ __('paid') }}
+                                                    </button>
+                                                @else
+                                                    <span class="rounded bg-emerald-900/30 px-1.5 py-0.5 text-emerald-400">{{ __('paid') }}</span>
+                                                @endif
                                             @endif
                                             @if ($p->autopay)
                                                 <span class="rounded bg-neutral-800 px-1.5 py-0.5 text-neutral-400">{{ __('auto') }}</span>

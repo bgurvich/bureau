@@ -45,6 +45,7 @@ Route::middleware(['auth', 'preferences', 'household'])->group(function () {
     Route::livewire('/media', 'media-index')->name('records.media');
     Route::get('/media/{media}/file', MediaFileController::class)->name('media.file');
     Route::livewire('/online-accounts', 'online-accounts-index')->name('records.online_accounts');
+    Route::livewire('/in-case-of', 'in-case-of-pack')->name('records.in_case_of');
 
     Route::prefix('m')->group(function () {
         Route::livewire('/', 'mobile.capture')->name('mobile.capture');

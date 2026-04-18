@@ -32,6 +32,17 @@ class extends Component
 
     public ?int $previewId = null;
 
+    #[Url(as: 'focus')]
+    public ?int $focus = null;
+
+    public function mount(): void
+    {
+        if ($this->focus) {
+            $this->openPreview($this->focus);
+            $this->focus = null;
+        }
+    }
+
     public string $draft_original_name = '';
 
     public ?int $draft_folder_id = null;

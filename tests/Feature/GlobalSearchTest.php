@@ -1,8 +1,11 @@
 <?php
 
 use App\Models\Contact;
+use App\Models\InventoryItem;
 use App\Models\Note;
+use App\Models\Property;
 use App\Models\Task;
+use App\Models\Vehicle;
 use Livewire\Livewire;
 
 it('returns no results for queries shorter than two characters', function () {
@@ -52,6 +55,27 @@ it('opens via event and resets on close', function () {
         ->call('close')
         ->assertSet('open', false)
         ->assertSet('query', '');
+});
+
+it('returns vehicles, properties, and inventory as inspector-openable hits', function () {
+    $user = authedInHousehold();
+    Vehicle::create(['kind' => 'car', 'make' => 'Honda', 'model' => 'Civic', 'year' => 2020, 'license_plate' => 'ABC123', 'primary_user_id' => $user->id]);
+    Property::create(['kind' => 'home', 'name' => 'SF Apartment', 'acquired_on' => now()->subYears(2)->toDateString()]);
+    InventoryItem::create(['name' => 'Honda-branded jacket', 'category' => 'clothing']);
+
+    $results = Livewire::test('global-search')
+        ->set('query', 'honda')
+        ->get('results');
+
+    $groups = array_unique(array_column($results, 'group'));
+    expect($groups)->toContain('Vehicles', 'Inventory');
+
+    foreach ($results as $row) {
+        if (($row['group'] ?? '') === 'Vehicles') {
+            expect($row['inspector'] ?? false)->toBeTrue()
+                ->and($row['type'])->toBe('vehicle');
+        }
+    }
 });
 
 it('clamps active index within the result set', function () {
