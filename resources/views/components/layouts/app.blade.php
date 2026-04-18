@@ -63,6 +63,7 @@
                                 [__('Notes'), 'records.notes', 'note'],
                                 [__('Online accounts'), 'records.online_accounts', 'key'],
                                 [__('In case of'), 'records.in_case_of', 'shield'],
+                                [__('Tags'), 'tags.index', 'note'],
                             ],
                             __('Health') => [
                                 [__('Providers'), 'health.providers', 'stethoscope'],

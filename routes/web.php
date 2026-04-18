@@ -46,6 +46,8 @@ Route::middleware(['auth', 'preferences', 'household'])->group(function () {
     Route::get('/media/{media}/file', MediaFileController::class)->name('media.file');
     Route::livewire('/online-accounts', 'online-accounts-index')->name('records.online_accounts');
     Route::livewire('/in-case-of', 'in-case-of-pack')->name('records.in_case_of');
+    Route::livewire('/tags', 'tags-index')->name('tags.index');
+    Route::livewire('/tags/{slug}', 'tag-hub')->name('tags.show');
 
     Route::prefix('m')->group(function () {
         Route::livewire('/', 'mobile.capture')->name('mobile.capture');
