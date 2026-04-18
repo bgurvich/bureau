@@ -22,6 +22,7 @@ class Account extends Model
         'data' => 'array',
         'opened_on' => 'date',
         'closed_on' => 'date',
+        'expires_on' => 'date',
         'is_active' => 'boolean',
         'include_in_net_worth' => 'boolean',
     ];
@@ -29,6 +30,18 @@ class Account extends Model
     public function counterparty(): BelongsTo
     {
         return $this->belongsTo(Contact::class, 'counterparty_contact_id');
+    }
+
+    /** @return BelongsTo<Contact, $this> */
+    public function vendor(): BelongsTo
+    {
+        return $this->belongsTo(Contact::class, 'vendor_contact_id');
+    }
+
+    /** @return BelongsTo<User, $this> */
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
     }
 
     public function loanTerms(): HasOne

@@ -33,4 +33,10 @@ class Transaction extends Model
     {
         return $this->belongsTo(Contact::class, 'counterparty_contact_id');
     }
+
+    protected static function booted(): void
+    {
+        static::saving(fn (self $t) => PeriodLock::assertWritable($t->occurred_on));
+        static::deleting(fn (self $t) => PeriodLock::assertWritable($t->occurred_on));
+    }
 }

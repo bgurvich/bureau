@@ -14,7 +14,11 @@ class RecurringProjection extends Model
 
     protected $casts = [
         'due_on' => 'date',
+        'issued_on' => 'date',
         'amount' => 'decimal:4',
+        'autopay' => 'boolean',
+        'matched_at' => 'datetime',
+        'unmatched_at' => 'datetime',
     ];
 
     public function rule(): BelongsTo

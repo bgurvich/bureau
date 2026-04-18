@@ -18,6 +18,7 @@ class Contract extends Model
     protected $casts = [
         'starts_on' => 'date',
         'ends_on' => 'date',
+        'trial_ends_on' => 'date',
         'auto_renews' => 'boolean',
         'monthly_cost_amount' => 'decimal:4',
     ];

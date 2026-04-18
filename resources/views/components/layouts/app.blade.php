@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" data-theme="{{ auth()->user()?->theme ?? 'system' }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{{ $title ?? config('app.name') }}</title>
-    @vite(['resources/css/app.css', 'resources/js/app.js'])
+    @vite(['resources/css/app.css', 'resources/js/app.ts'])
 </head>
 <body class="min-h-screen bg-neutral-950 text-neutral-100 antialiased">
     <a href="#main"
@@ -29,40 +29,43 @@
                     @php
                         $sections = [
                             null => [
-                                [__('Dashboard'), 'dashboard'],
+                                [__('Dashboard'), 'dashboard', 'home'],
                             ],
                             __('Money') => [
-                                [__('Accounts'), 'fiscal.accounts'],
-                                [__('Transactions'), 'fiscal.transactions'],
-                                [__('Bills & Income'), 'fiscal.recurring'],
+                                [__('Overview'), 'fiscal.overview', 'pie'],
+                                [__('Accounts'), 'fiscal.accounts', 'wallet'],
+                                [__('Transactions'), 'fiscal.transactions', 'swap'],
+                                [__('Bills & Income'), 'fiscal.recurring', 'receipt'],
+                                [__('Bookkeeper'), 'bookkeeper', 'file-signature'],
                             ],
                             __('Life') => [
-                                [__('Tasks'), 'calendar.tasks'],
-                                [__('Meetings'), 'calendar.meetings'],
-                                [__('Contacts'), 'relationships.contacts'],
+                                [__('Tasks'), 'calendar.tasks', 'check-square'],
+                                [__('Meetings'), 'calendar.meetings', 'calendar'],
+                                [__('Contacts'), 'relationships.contacts', 'user'],
                             ],
                             __('Time') => [
-                                [__('Projects'), 'time.projects'],
-                                [__('Time entries'), 'time.entries'],
+                                [__('Projects'), 'time.projects', 'folder'],
+                                [__('Time entries'), 'time.entries', 'clock'],
                             ],
                             __('Commitments') => [
-                                [__('Contracts'), 'relationships.contracts'],
-                                [__('Insurance'), 'relationships.insurance'],
+                                [__('Contracts'), 'relationships.contracts', 'file-signature'],
+                                [__('Insurance'), 'relationships.insurance', 'shield'],
                             ],
                             __('Assets') => [
-                                [__('Properties'), 'assets.properties'],
-                                [__('Vehicles'), 'assets.vehicles'],
-                                [__('Inventory'), 'assets.inventory'],
+                                [__('Properties'), 'assets.properties', 'building'],
+                                [__('Vehicles'), 'assets.vehicles', 'car'],
+                                [__('Inventory'), 'assets.inventory', 'box'],
                             ],
                             __('Records') => [
-                                [__('Documents'), 'records.documents'],
-                                [__('Media'), 'records.media'],
-                                [__('Notes'), 'records.notes'],
+                                [__('Documents'), 'records.documents', 'file-text'],
+                                [__('Media'), 'records.media', 'image'],
+                                [__('Notes'), 'records.notes', 'note'],
+                                [__('Online accounts'), 'records.online_accounts', 'key'],
                             ],
                             __('Health') => [
-                                [__('Providers'), 'health.providers'],
-                                [__('Prescriptions'), 'health.prescriptions'],
-                                [__('Appointments'), 'health.appointments'],
+                                [__('Providers'), 'health.providers', 'stethoscope'],
+                                [__('Prescriptions'), 'health.prescriptions', 'pill'],
+                                [__('Appointments'), 'health.appointments', 'calendar-clock'],
                             ],
                         ];
                     @endphp
@@ -70,34 +73,18 @@
                         @if ($heading)
                             <div class="mt-4 mb-1 px-3 text-[10px] font-medium uppercase tracking-wider text-neutral-500">{{ $heading }}</div>
                         @endif
-                        @foreach ($items as [$label, $route])
+                        @foreach ($items as [$label, $route, $icon])
                             @php $active = request()->routeIs($route); @endphp
                             <a href="{{ route($route) }}"
                                @if($active) aria-current="page" @endif
-                               class="flex items-center rounded-md px-3 py-1.5 transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300
+                               class="flex items-center gap-2.5 rounded-md px-3 py-1.5 transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300
                                       {{ $active ? 'bg-neutral-800 text-neutral-50' : 'text-neutral-400 hover:bg-neutral-800/60 hover:text-neutral-100' }}">
-                                {{ $label }}
+                                @include('partials.nav-icon', ['name' => $icon])
+                                <span>{{ $label }}</span>
                             </a>
                         @endforeach
                     @endforeach
                 </nav>
-                @auth
-                    <div class="border-t border-neutral-800 px-4 py-3 text-sm">
-                        <div class="flex items-center justify-between">
-                            <div class="min-w-0">
-                                <div class="truncate text-neutral-200">{{ auth()->user()->name }}</div>
-                                <div class="truncate text-xs text-neutral-500">{{ auth()->user()->email }}</div>
-                            </div>
-                            <form method="POST" action="{{ route('logout') }}" class="shrink-0">
-                                @csrf
-                                <button type="submit"
-                                        class="rounded-md px-2 py-1 text-xs text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
-                                    {{ __('Sign out') }}
-                                </button>
-                            </form>
-                        </div>
-                    </div>
-                @endauth
             </div>
         </aside>
 
@@ -106,13 +93,37 @@
                 <div>
                     <h1 class="text-sm font-medium text-neutral-300">{{ $title ?? __('Dashboard') }}</h1>
                 </div>
-                <div class="flex items-center gap-4">
+                <div class="flex items-center gap-3">
                     @auth
                         <livewire:time-tracker />
                     @endauth
-                    <time class="text-xs text-neutral-500 tabular-nums" datetime="{{ now()->toIso8601String() }}">
-                        {{ now()->format('D · M j · Y') }}
-                    </time>
+                    @auth
+                        <button type="button"
+                                x-data
+                                x-on:click="Livewire.dispatch('global-search-open')"
+                                title="{{ __('Search') }} (/)"
+                                aria-label="{{ __('Search') }}"
+                                class="flex h-8 w-8 items-center justify-center rounded-md border border-neutral-800 bg-neutral-900 text-neutral-300 hover:border-neutral-700 hover:bg-neutral-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true"
+                                 stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="11" cy="11" r="7"/>
+                                <path d="m20 20-4-4"/>
+                            </svg>
+                        </button>
+                        <button type="button"
+                                x-data
+                                x-on:click="Livewire.dispatch('inspector-open')"
+                                title="{{ __('Quick add') }} (.)"
+                                aria-label="{{ __('Quick add') }}"
+                                class="flex h-8 w-8 items-center justify-center rounded-md border border-neutral-800 bg-neutral-900 text-neutral-300 hover:border-neutral-700 hover:bg-neutral-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                            <svg class="h-4 w-4" viewBox="0 0 16 16" fill="none" aria-hidden="true"
+                                 stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+                                <path d="M8 3v10M3 8h10"/>
+                            </svg>
+                        </button>
+                        <livewire:alerts-bell />
+                        <livewire:user-menu />
+                    @endauth
                 </div>
             </header>
             <main id="main" tabindex="-1" class="flex-1 p-6">
@@ -120,5 +131,10 @@
             </main>
         </div>
     </div>
+
+    @auth
+        <livewire:inspector />
+        <livewire:global-search />
+    @endauth
 </body>
 </html>

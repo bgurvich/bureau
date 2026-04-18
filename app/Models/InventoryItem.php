@@ -19,6 +19,10 @@ class InventoryItem extends Model
         'purchased_on' => 'date',
         'cost_amount' => 'decimal:4',
         'warranty_expires_on' => 'date',
+        'return_by' => 'date',
+        'processed_at' => 'datetime',
+        'disposed_on' => 'date',
+        'sale_amount' => 'decimal:4',
     ];
 
     public function property(): BelongsTo
@@ -29,5 +33,11 @@ class InventoryItem extends Model
     public function purchasedFrom(): BelongsTo
     {
         return $this->belongsTo(Contact::class, 'purchased_from_contact_id');
+    }
+
+    /** @return BelongsTo<Contact, $this> */
+    public function buyer(): BelongsTo
+    {
+        return $this->belongsTo(Contact::class, 'buyer_contact_id');
     }
 }

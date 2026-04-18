@@ -1,25 +1,11 @@
 <?php
 
-use App\Models\Household;
-use App\Models\User;
-
-function login(): User
-{
-    $household = Household::create(['name' => 'Test', 'default_currency' => 'USD']);
-    $user = User::create([
-        'name' => 'Alice',
-        'email' => 'alice@example.com',
-        'password' => bcrypt('secret-1234'),
-        'default_household_id' => $household->id,
-    ]);
-    $household->users()->attach($user->id, ['role' => 'owner', 'joined_at' => now()]);
-    test()->actingAs($user);
-
-    return $user;
-}
+use App\Models\Account;
+use App\Models\Transaction;
+use Livewire\Livewire;
 
 it('renders the dashboard for an authenticated user with a household', function () {
-    login();
+    authedInHousehold();
 
     $this->get('/')
         ->assertOk()
@@ -31,7 +17,7 @@ it('renders the dashboard for an authenticated user with a household', function 
 });
 
 it('serves stub domain pages as 200 for an authenticated user', function () {
-    login();
+    authedInHousehold();
 
     foreach (['/accounts', '/transactions', '/tasks', '/meetings', '/contacts', '/contracts', '/documents', '/time/projects'] as $path) {
         $this->get($path)->assertOk();
@@ -39,7 +25,31 @@ it('serves stub domain pages as 200 for an authenticated user', function () {
 });
 
 it('logs the user out on POST /logout', function () {
-    login();
+    authedInHousehold();
     $this->post('/logout')->assertRedirect('/login');
     expect(auth()->check())->toBeFalse();
+});
+
+it('money radar net worth reflects cleared transactions and transfers', function () {
+    authedInHousehold();
+
+    $account = Account::create([
+        'type' => 'bank', 'name' => 'Main', 'currency' => 'USD',
+        'opening_balance' => 1000, 'include_in_net_worth' => true, 'is_active' => true,
+    ]);
+
+    Transaction::create([
+        'account_id' => $account->id,
+        'occurred_on' => now()->subDays(3)->toDateString(),
+        'amount' => -250, 'currency' => 'USD', 'status' => 'cleared',
+    ]);
+    Transaction::create([
+        'account_id' => $account->id,
+        'occurred_on' => now()->subDays(1)->toDateString(),
+        'amount' => 100, 'currency' => 'USD', 'status' => 'pending',
+    ]);
+
+    // Net worth = 1000 + (-250) = 750. Pending $100 must NOT count.
+    Livewire::test('money-radar')
+        ->assertSet('netWorth', 750.0);
 });

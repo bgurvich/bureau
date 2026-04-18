@@ -30,4 +30,10 @@ class Transfer extends Model
     {
         return $this->belongsTo(Account::class, 'to_account_id');
     }
+
+    protected static function booted(): void
+    {
+        static::saving(fn (self $t) => PeriodLock::assertWritable($t->occurred_on));
+        static::deleting(fn (self $t) => PeriodLock::assertWritable($t->occurred_on));
+    }
 }

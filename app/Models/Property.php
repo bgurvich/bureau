@@ -7,6 +7,7 @@ use App\Models\Concerns\HasMedia;
 use App\Models\Concerns\HasTags;
 use App\Models\Concerns\HasValuations;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Property extends Model
@@ -21,10 +22,17 @@ class Property extends Model
         'disposed_on' => 'date',
         'purchase_price' => 'decimal:4',
         'size_value' => 'decimal:2',
+        'sale_amount' => 'decimal:4',
     ];
 
     public function inventoryItems(): HasMany
     {
         return $this->hasMany(InventoryItem::class, 'location_property_id');
+    }
+
+    /** @return BelongsTo<Contact, $this> */
+    public function buyer(): BelongsTo
+    {
+        return $this->belongsTo(Contact::class, 'buyer_contact_id');
     }
 }

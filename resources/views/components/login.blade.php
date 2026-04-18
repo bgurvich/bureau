@@ -62,7 +62,7 @@ class extends Component
         </label>
 
         <button type="submit"
-                class="w-full rounded-md bg-neutral-100 px-3 py-2 text-sm font-medium text-neutral-900 transition hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                class="w-full rounded-md bg-neutral-100 px-3 py-2 text-sm font-medium text-neutral-900 transition hover:bg-neutral-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
             <span wire:loading.remove wire:target="submit">{{ __('Sign in') }}</span>
             <span wire:loading wire:target="submit">{{ __('Signing in…') }}</span>
         </button>

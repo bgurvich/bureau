@@ -28,6 +28,8 @@ class Meeting extends Model
 
     public function contacts(): BelongsToMany
     {
-        return $this->belongsToMany(Contact::class)->withPivot('role', 'rsvp')->withTimestamps();
+        return $this->belongsToMany(Contact::class, 'meeting_contact')
+            ->withPivot('role', 'rsvp')
+            ->withTimestamps();
     }
 }

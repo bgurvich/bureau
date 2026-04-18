@@ -20,6 +20,8 @@ class RecurringRule extends Model
         'dtstart' => 'date',
         'until' => 'date',
         'active' => 'boolean',
+        'autopay' => 'boolean',
+        'due_offset_days' => 'integer',
     ];
 
     public function account(): BelongsTo

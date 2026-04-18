@@ -13,7 +13,6 @@ use App\Models\InsurancePolicy;
 use App\Models\Meeting;
 use App\Models\Project;
 use App\Models\Property;
-use App\Models\RecurringProjection;
 use App\Models\RecurringRule;
 use App\Models\Task;
 use App\Models\TimeEntry;
@@ -23,7 +22,7 @@ use App\Models\User;
 use App\Models\Vehicle;
 use App\Support\CurrentHousehold;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -58,6 +57,7 @@ class DatabaseSeeder extends Seeder
             CurrentHousehold::set($household);
 
             $this->seedCategories($household->id);
+            $this->call(SystemCategoriesSeeder::class);
             $this->seedDemoData($household, $user);
         });
     }
@@ -378,7 +378,7 @@ class DatabaseSeeder extends Seeder
         ]);
 
         // ── Recurring rules + projections (bill/income horizon) ──────────────
-        $rent = RecurringRule::create([
+        RecurringRule::create([
             'kind' => 'bill', 'title' => 'Rent',
             'amount' => -2200, 'currency' => 'USD',
             'rrule' => 'FREQ=MONTHLY;BYMONTHDAY=1',
@@ -388,7 +388,7 @@ class DatabaseSeeder extends Seeder
             'category_id' => $cat('housing/rent-mortgage'),
             'lead_days' => 5,
         ]);
-        $netflixRule = RecurringRule::create([
+        RecurringRule::create([
             'kind' => 'bill', 'title' => 'Netflix',
             'amount' => -15.49, 'currency' => 'USD',
             'rrule' => 'FREQ=MONTHLY;BYMONTHDAY=12',
@@ -396,7 +396,7 @@ class DatabaseSeeder extends Seeder
             'account_id' => $amex->id,
             'category_id' => $cat('subscriptions/media'),
         ]);
-        $payrollRule = RecurringRule::create([
+        RecurringRule::create([
             'kind' => 'income', 'title' => 'Acme Corp payroll',
             'amount' => 4850, 'currency' => 'USD',
             'rrule' => 'FREQ=MONTHLY;BYMONTHDAY=1,15',
@@ -405,7 +405,7 @@ class DatabaseSeeder extends Seeder
             'counterparty_contact_id' => $employer->id,
             'category_id' => $cat('salary', 'income'),
         ]);
-        $filterRule = RecurringRule::create([
+        RecurringRule::create([
             'kind' => 'maintenance', 'title' => 'Change HVAC filter',
             'rrule' => 'FREQ=MONTHLY;INTERVAL=3',
             'dtstart' => now()->subMonths(2)->toDateString(),
@@ -414,23 +414,12 @@ class DatabaseSeeder extends Seeder
             'lead_days' => 7,
         ]);
 
-        // materialize a few projections for the next 60 days (manual, not RRULE-expanded)
-        $this->projectRule($rent, [
-            now()->addDays(3 - now()->day + 1)->toDateString(),     // next-month 1st approx
-            now()->addMonth()->startOfMonth()->toDateString(),
-            now()->addMonths(2)->startOfMonth()->toDateString(),
-        ]);
-        $this->projectRule($netflixRule, [
-            now()->addDays(max(1, 12 - now()->day))->toDateString(),
-            now()->addMonth()->day(12)->toDateString(),
-        ]);
-        $this->projectRule($payrollRule, [
-            now()->addDays(max(1, 15 - now()->day))->toDateString(),
-            now()->addMonth()->day(1)->toDateString(),
-            now()->addMonth()->day(15)->toDateString(),
-        ]);
-        $this->projectRule($filterRule, [
-            now()->addDays(5)->toDateString(),
+        // materialize projections via the real RRULE generator so demo data
+        // matches what the scheduled command produces in production.
+        Artisan::call('recurring:project', [
+            '--household' => $household->id,
+            '--horizon' => 90,
+            '--backfill' => 30,
         ]);
 
         // ── Projects + time entries ──────────────────────────────────────────
@@ -478,19 +467,6 @@ class DatabaseSeeder extends Seeder
                 'activity_date' => $ended->toDateString(),
                 'description' => $desc,
                 'billable' => $project->billable,
-            ]);
-        }
-    }
-
-    private function projectRule(RecurringRule $rule, array $dates): void
-    {
-        foreach ($dates as $date) {
-            RecurringProjection::create([
-                'rule_id' => $rule->id,
-                'due_on' => $date,
-                'amount' => $rule->amount,
-                'currency' => $rule->currency,
-                'status' => Carbon::parse($date)->isPast() ? 'overdue' : 'projected',
             ]);
         }
     }

@@ -19,10 +19,19 @@ class Vehicle extends Model
         'acquired_on' => 'date',
         'disposed_on' => 'date',
         'purchase_price' => 'decimal:4',
+        'registration_expires_on' => 'date',
+        'registration_fee_amount' => 'decimal:2',
+        'sale_amount' => 'decimal:4',
     ];
 
     public function primaryUser(): BelongsTo
     {
         return $this->belongsTo(User::class, 'primary_user_id');
+    }
+
+    /** @return BelongsTo<Contact, $this> */
+    public function buyer(): BelongsTo
+    {
+        return $this->belongsTo(Contact::class, 'buyer_contact_id');
     }
 }

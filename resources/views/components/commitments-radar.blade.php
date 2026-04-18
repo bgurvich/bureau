@@ -1,6 +1,10 @@
 <?php
 
+use App\Models\Account;
+use App\Models\Category;
 use App\Models\Contract;
+use App\Models\Transaction;
+use App\Models\Transfer;
 use Livewire\Attributes\Computed;
 use Livewire\Component;
 
@@ -42,6 +46,71 @@ new class extends Component
     {
         return \App\Support\CurrentHousehold::get()?->default_currency ?? 'USD';
     }
+
+    /**
+     * Weighted average APR across credit/loan/mortgage accounts with a balance,
+     * plus total interest paid in the last 12 months (from interest-paid category).
+     *
+     * @return array{apr: ?float, annual_interest: float}
+     */
+    #[Computed]
+    public function creditRates(): array
+    {
+        $accounts = Account::with('loanTerms:id,account_id,interest_rate')
+            ->whereIn('type', ['credit', 'loan', 'mortgage'])
+            ->where('is_active', true)
+            ->get();
+
+        $ids = $accounts->pluck('id');
+        $txn = Transaction::whereIn('account_id', $ids)->where('status', 'cleared')
+            ->selectRaw('account_id, SUM(amount) as total')->groupBy('account_id')->pluck('total', 'account_id');
+        $out = Transfer::whereIn('from_account_id', $ids)->where('status', 'cleared')
+            ->selectRaw('from_account_id, SUM(from_amount) as total')->groupBy('from_account_id')->pluck('total', 'from_account_id');
+        $in = Transfer::whereIn('to_account_id', $ids)->where('status', 'cleared')
+            ->selectRaw('to_account_id, SUM(to_amount) as total')->groupBy('to_account_id')->pluck('total', 'to_account_id');
+
+        $weightedNumerator = 0.0;
+        $weightedDenominator = 0.0;
+
+        foreach ($accounts as $a) {
+            $balance = abs(
+                (float) $a->opening_balance
+                + (float) ($txn[$a->id] ?? 0)
+                - (float) ($out[$a->id] ?? 0)
+                + (float) ($in[$a->id] ?? 0)
+            );
+            if ($balance <= 0) {
+                continue;
+            }
+            $rate = \App\Support\EffectiveRate::forAccount($a);
+            $apr = $rate['apr'] ?? null;
+            if ($apr === null && $a->loanTerms?->interest_rate !== null) {
+                $apr = (float) $a->loanTerms->interest_rate / 100.0;
+            }
+            if ($apr === null) {
+                continue;
+            }
+            $weightedNumerator += $apr * $balance;
+            $weightedDenominator += $balance;
+        }
+
+        $avgApr = $weightedDenominator > 0 ? $weightedNumerator / $weightedDenominator : null;
+
+        $interestCategoryId = Category::where('slug', 'interest-paid')->value('id');
+        $annualInterest = 0.0;
+        if ($interestCategoryId) {
+            $annualInterest = (float) Transaction::where('category_id', $interestCategoryId)
+                ->where('status', 'cleared')
+                ->where('occurred_on', '>=', now()->subYear()->toDateString())
+                ->sum('amount');
+            $annualInterest = abs($annualInterest);
+        }
+
+        return [
+            'apr' => $avgApr,
+            'annual_interest' => $annualInterest,
+        ];
+    }
 };
 ?>
 
@@ -75,5 +144,28 @@ new class extends Component
                 <div class="tabular-nums text-neutral-400">{{ $this->expiring90 }}</div>
             </div>
         </div>
+
+        @if ($this->creditRates['apr'] !== null || $this->creditRates['annual_interest'] > 0)
+            <div class="rounded-lg border border-neutral-800 bg-neutral-900 px-3 py-2 text-sm">
+                <div class="flex items-baseline justify-between gap-3">
+                    <div>
+                        <div class="text-xs text-neutral-500">{{ __('Avg APR on credit') }}</div>
+                        <div class="tabular-nums text-rose-400">
+                            @if ($this->creditRates['apr'] !== null)
+                                {{ number_format($this->creditRates['apr'] * 100, 2) }}%
+                            @else
+                                —
+                            @endif
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <div class="text-xs text-neutral-500">{{ __('Interest (12mo)') }}</div>
+                        <div class="tabular-nums text-rose-400">
+                            {{ $this->currency }} {{ number_format($this->creditRates['annual_interest'], 2) }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        @endif
     </div>
 </div>

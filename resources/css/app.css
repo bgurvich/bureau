@@ -8,11 +8,92 @@
 @theme {
     --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji';
     --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+    --font-retro: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+/*
+ * Theme scaling: the app is authored on a dark neutral palette.
+ * For light mode we invert the neutral-* tokens so existing utility
+ * classes (bg-neutral-950, text-neutral-100, etc.) map to the opposite
+ * end of the scale. Accent colors (emerald/rose/amber/sky/violet) are
+ * left untouched — their 400-level values carry both themes.
+ */
+:root {
+    color-scheme: dark;
+}
+
+html[data-resolved-theme='light'] {
+    color-scheme: light;
+
+    --color-neutral-50:  oklch(14.5% 0 0);
+    --color-neutral-100: oklch(20.5% 0 0);
+    --color-neutral-200: oklch(26.9% 0 0);
+    --color-neutral-300: oklch(37.1% 0 0);
+    --color-neutral-400: oklch(43.9% 0 0);
+    --color-neutral-500: oklch(55.6% 0 0);
+    --color-neutral-600: oklch(70.8% 0 0);
+    --color-neutral-700: oklch(87%   0 0);
+    --color-neutral-800: oklch(92.2% 0 0);
+    --color-neutral-900: oklch(97%   0 0);
+    --color-neutral-950: oklch(98.5% 0 0);
+}
+
+/*
+ * Retro = dark palette + monospace + phosphor-glow accents + faint CRT
+ * scanline. Opt-in via theme selector; stock dark stays untouched.
+ */
+html[data-resolved-theme='retro'] {
+    color-scheme: dark;
+
+    /* deepen the base a touch so scanlines read */
+    --color-neutral-950: oklch(10% 0 0);
+    --color-neutral-900: oklch(15% 0 0);
+}
+
+html[data-resolved-theme='retro'] body {
+    font-family: var(--font-retro);
+    letter-spacing: 0.01em;
+    /* faint CRT scanlines, 3px cycle, very low alpha so text stays readable */
+    background-image: repeating-linear-gradient(
+        to bottom,
+        transparent 0 2px,
+        rgba(255, 255, 255, 0.022) 2px 3px
+    );
+}
+
+html[data-resolved-theme='retro'] h1,
+html[data-resolved-theme='retro'] h2,
+html[data-resolved-theme='retro'] h3 {
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+/* phosphor glow on accent text — applies only in retro so stock dark stays crisp */
+html[data-resolved-theme='retro'] .text-emerald-400 { text-shadow: 0 0 8px rgb(52 211 153 / 0.45); }
+html[data-resolved-theme='retro'] .text-emerald-300 { text-shadow: 0 0 8px rgb(110 231 183 / 0.4); }
+html[data-resolved-theme='retro'] .text-amber-400   { text-shadow: 0 0 8px rgb(251 191 36 / 0.45); }
+html[data-resolved-theme='retro'] .text-amber-300   { text-shadow: 0 0 8px rgb(252 211 77 / 0.4); }
+html[data-resolved-theme='retro'] .text-rose-400    { text-shadow: 0 0 8px rgb(251 113 133 / 0.45); }
+html[data-resolved-theme='retro'] .text-sky-400     { text-shadow: 0 0 8px rgb(56 189 248 / 0.45); }
+html[data-resolved-theme='retro'] .text-violet-400  { text-shadow: 0 0 8px rgb(167 139 250 / 0.45); }
+
+/* active sidebar link gets a left phosphor bar */
+html[data-resolved-theme='retro'] a[aria-current='page'] {
+    box-shadow: inset 2px 0 0 rgb(52 211 153 / 0.8);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    html[data-resolved-theme='retro'] body {
+        background-image: none;
+    }
 }
 
 html {
-    color-scheme: dark;
-    background-color: #0a0a0a;
+    background-color: var(--color-neutral-950);
+}
+
+[x-cloak] {
+    display: none !important;
 }
 
 body {

@@ -9,6 +9,6 @@ trait HasMedia
 {
     public function media(): MorphToMany
     {
-        return $this->morphToMany(Media::class, 'mediable')->withPivot('role');
+        return $this->morphToMany(Media::class, 'mediable')->withPivot('role', 'position');
     }
 }

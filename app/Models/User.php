@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
-#[Fillable(['name', 'email', 'password', 'default_household_id', 'locale', 'timezone', 'date_format', 'time_format', 'week_starts_on'])]
+#[Fillable(['name', 'email', 'password', 'default_household_id', 'locale', 'timezone', 'date_format', 'time_format', 'week_starts_on', 'theme'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
@@ -24,6 +24,7 @@ class User extends Authenticatable
         'date_format' => 'Y-m-d',
         'time_format' => 'H:i',
         'week_starts_on' => 0,
+        'theme' => 'system',
     ];
 
     protected function casts(): array
@@ -45,5 +46,25 @@ class User extends Authenticatable
     public function defaultHousehold(): BelongsTo
     {
         return $this->belongsTo(Household::class, 'default_household_id');
+    }
+
+    /** @return array<string, string> */
+    public static function availableLocales(): array
+    {
+        return ['en' => 'English'];
+    }
+
+    /** @return array<string, string> */
+    public static function availableThemes(): array
+    {
+        return ['system' => 'System', 'light' => 'Light', 'dark' => 'Dark', 'retro' => 'Retro'];
+    }
+
+    public function initials(): string
+    {
+        $parts = preg_split('/\s+/', trim($this->name ?? '')) ?: [];
+        $letters = array_map(fn (string $p) => mb_substr($p, 0, 1), array_filter($parts));
+
+        return mb_strtoupper(implode('', array_slice($letters, 0, 2))) ?: '?';
     }
 }

@@ -21,6 +21,8 @@ class Contact extends Model
         'emails' => 'array',
         'addresses' => 'array',
         'favorite' => 'boolean',
+        'is_vendor' => 'boolean',
+        'is_customer' => 'boolean',
     ];
 
     public function photo(): BelongsTo
@@ -35,7 +37,9 @@ class Contact extends Model
 
     public function meetings(): BelongsToMany
     {
-        return $this->belongsToMany(Meeting::class)->withPivot('role', 'rsvp')->withTimestamps();
+        return $this->belongsToMany(Meeting::class, 'meeting_contact')
+            ->withPivot('role', 'rsvp')
+            ->withTimestamps();
     }
 
     public function transactions(): HasMany
