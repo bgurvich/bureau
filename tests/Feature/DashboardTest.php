@@ -1,6 +1,8 @@
 <?php
 
 use App\Models\Account;
+use App\Models\RecurringProjection;
+use App\Models\RecurringRule;
 use App\Models\Transaction;
 use Livewire\Livewire;
 
@@ -52,4 +54,39 @@ it('money radar net worth reflects cleared transactions and transfers', function
     // Net worth = 1000 + (-250) = 750. Pending $100 must NOT count.
     Livewire::test('money-radar')
         ->assertSet('netWorth', 750.0);
+});
+
+it('surfaces a 30-day projected net + end-balance forecast tile', function () {
+    $user = authedInHousehold();
+
+    $account = Account::create([
+        'type' => 'bank', 'name' => 'Checking', 'currency' => 'USD',
+        'opening_balance' => 1000, 'include_in_net_worth' => true, 'is_active' => true,
+        'user_id' => $user->id,
+    ]);
+
+    $rule = RecurringRule::create([
+        'kind' => 'bill', 'title' => 'Rent',
+        'amount' => -200, 'currency' => 'USD',
+        'rrule' => 'FREQ=MONTHLY;BYMONTHDAY=1',
+        'dtstart' => now()->subMonth()->toDateString(),
+        'account_id' => $account->id,
+    ]);
+    RecurringProjection::create([
+        'rule_id' => $rule->id,
+        'due_on' => now()->addDays(5)->toDateString(),
+        'amount' => -200, 'currency' => 'USD', 'status' => 'projected',
+    ]);
+    RecurringProjection::create([
+        'rule_id' => $rule->id,
+        'due_on' => now()->addDays(10)->toDateString(),
+        'amount' => 500, 'currency' => 'USD', 'status' => 'projected',
+    ]);
+
+    $forecast = Livewire::test('money-radar')->get('forecast30');
+
+    expect((float) $forecast['expense'])->toBe(-200.0)
+        ->and((float) $forecast['income'])->toBe(500.0)
+        ->and((float) $forecast['net'])->toBe(300.0)
+        ->and((float) $forecast['end_balance'])->toBe(1300.0);
 });

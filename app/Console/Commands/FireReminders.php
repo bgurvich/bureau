@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Mail\ReminderMail;
 use App\Models\Reminder;
+use App\Models\User;
 use App\Models\UserNotificationPreference;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Mail;
@@ -97,7 +98,7 @@ class FireReminders extends Command
 
     private function fireEmail(Reminder $reminder): void
     {
-        /** @var \App\Models\User|null $user */
+        /** @var User|null $user */
         $user = $reminder->user()->first();
         $to = $user?->email;
         if (! $to) {

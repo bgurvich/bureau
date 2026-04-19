@@ -104,6 +104,41 @@ new class extends Component
     }
 
     /**
+     * Deterministic forecast: signed net of projected bills + income over the
+     * next N days. Returns [income, expense, net]. Probabilistic seasonality
+     * is a future layer.
+     *
+     * @return array{income: float, expense: float, net: float, end_balance: float}
+     */
+    public function forecast(int $days): array
+    {
+        $rows = RecurringProjection::whereBetween('due_on', [
+            now()->toDateString(),
+            now()->addDays($days)->toDateString(),
+        ])
+            ->whereIn('status', ['projected', 'overdue'])
+            ->get(['amount']);
+
+        $income = (float) $rows->where('amount', '>', 0)->sum('amount');
+        $expense = (float) $rows->where('amount', '<', 0)->sum('amount');
+        $net = $income + $expense;
+
+        return [
+            'income' => $income,
+            'expense' => $expense,
+            'net' => $net,
+            'end_balance' => $this->netWorth + $net,
+        ];
+    }
+
+    /** @return array{income: float, expense: float, net: float, end_balance: float} */
+    #[Computed]
+    public function forecast30(): array
+    {
+        return $this->forecast(30);
+    }
+
+    /**
      * Last 6 monthly net-worth snapshots (oldest → newest) for the sparkline.
      * Empty array if rollups haven't run yet.
      *
@@ -188,5 +223,23 @@ new class extends Component
                 </div>
             </div>
         </div>
+
+        @php $f = $this->forecast30; @endphp
+        @if ($f['net'] !== 0.0)
+            <div class="rounded-lg border border-neutral-800 bg-neutral-900/60 px-3 py-2">
+                <div class="flex items-baseline justify-between gap-3 text-xs">
+                    <span class="text-neutral-500">{{ __('30d projected net') }}</span>
+                    <span class="tabular-nums {{ $f['net'] >= 0 ? 'text-emerald-400' : 'text-rose-400' }}">
+                        {{ $f['net'] >= 0 ? '+' : '' }}{{ number_format($f['net'], 2) }}
+                    </span>
+                </div>
+                <div class="mt-0.5 flex items-baseline justify-between gap-3 text-[11px] text-neutral-500">
+                    <span>{{ __('Ends near') }}</span>
+                    <span class="tabular-nums text-neutral-300">
+                        {{ $this->currency }} {{ number_format($f['end_balance'], 2) }}
+                    </span>
+                </div>
+            </div>
+        @endif
     </div>
 </div>

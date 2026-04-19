@@ -7,6 +7,7 @@ use App\Models\Contract;
 use App\Models\Document;
 use App\Models\Household;
 use App\Models\RecurringProjection;
+use App\Models\RecurringRule;
 use App\Models\Reminder;
 use App\Models\Task;
 use App\Support\CurrentHousehold;
@@ -59,7 +60,7 @@ class GenerateReminders extends Command
 
         $count = 0;
         foreach ($rows as $p) {
-            /** @var \App\Models\RecurringRule|null $rule */
+            /** @var RecurringRule|null $rule */
             $rule = $p->rule;
             $lead = (int) ($rule->lead_days ?? 3);
             $remindAt = CarbonImmutable::parse($p->due_on)->subDays($lead)->setTime(8, 0);
