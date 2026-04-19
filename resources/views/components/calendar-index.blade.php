@@ -286,7 +286,7 @@ class extends Component
         $gridStart = $this->gridStart();
         $today = now()->toDateString();
         $events = $this->events;
-        $inspectableTypes = ['task', 'meeting', 'contract', 'inventory', 'vehicle', 'account', 'bill', 'document'];
+        $inspectableTypes = ['task', 'meeting', 'contract', 'inventory', 'vehicle', 'account', 'bill', 'document', 'appointment'];
         $weekdayNames = [];
         $cursor = $gridStart;
         for ($i = 0; $i < 7; $i++) {

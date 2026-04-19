@@ -1,10 +1,12 @@
 <?php
 
 use App\Models\Account;
+use App\Models\Appointment;
 use App\Models\Category;
 use App\Models\Contact;
 use App\Models\Contract;
 use App\Models\Document;
+use App\Models\HealthProvider;
 use App\Models\InsurancePolicy;
 use App\Models\InsurancePolicySubject;
 use App\Models\InventoryItem;
@@ -80,6 +82,21 @@ new class extends Component
     public string $inventory_listing_url = '';
 
     public string $inventory_listing_posted_at = '';
+
+    // Appointment
+    public string $appointment_purpose = '';
+
+    public string $appointment_starts_at = '';
+
+    public string $appointment_ends_at = '';
+
+    public string $appointment_location = '';
+
+    public string $appointment_state = 'scheduled';
+
+    public ?int $appointment_provider_id = null;
+
+    public bool $appointment_self_subject = true;
 
     // Admin-section meta (read-only display, loaded from the record on edit).
     public ?int $admin_owner_id = null;
@@ -455,6 +472,7 @@ new class extends Component
             'online_account' => [OnlineAccount::class, 'user_id'],
             'transaction' => [Transaction::class, null],
             'bill' => [RecurringRule::class, null],
+            'appointment' => [Appointment::class, null],
             default => [null, null],
         };
     }
@@ -758,6 +776,7 @@ new class extends Component
             'property' => $this->loadProperty(),
             'vehicle' => $this->loadVehicle(),
             'inventory' => $this->loadInventory(),
+            'appointment' => $this->loadAppointment(),
             default => null,
         };
     }
@@ -1063,6 +1082,7 @@ new class extends Component
                 'property' => $this->saveProperty(),
                 'vehicle' => $this->saveVehicle(),
                 'inventory' => $this->saveInventory(),
+                'appointment' => $this->saveAppointment(),
                 default => null,
             };
         } catch (\App\Exceptions\PeriodLockedException $e) {
@@ -1894,6 +1914,59 @@ new class extends Component
         }
     }
 
+    private function loadAppointment(): void
+    {
+        $a = Appointment::findOrFail($this->id);
+        $this->appointment_purpose = $a->purpose ?? '';
+        $this->appointment_starts_at = $a->starts_at?->format('Y-m-d\TH:i') ?? '';
+        $this->appointment_ends_at = $a->ends_at?->format('Y-m-d\TH:i') ?? '';
+        $this->appointment_location = $a->location ?? '';
+        $this->appointment_state = $a->state ?? 'scheduled';
+        $this->appointment_provider_id = $a->provider_id;
+        // Subject is polymorphic User|Pet. Today we only support self (current user).
+        $this->appointment_self_subject = $a->subject_type === \App\Models\User::class
+            && $a->subject_id === auth()->id();
+        $this->notes = $a->notes ?? '';
+    }
+
+    private function saveAppointment(): void
+    {
+        $data = $this->validate([
+            'appointment_purpose' => 'nullable|string|max:255',
+            'appointment_starts_at' => 'required|date',
+            'appointment_ends_at' => 'nullable|date|after:appointment_starts_at',
+            'appointment_location' => 'nullable|string|max:255',
+            'appointment_state' => 'nullable|in:scheduled,completed,cancelled,no_show',
+            'appointment_provider_id' => 'nullable|integer|exists:health_providers,id',
+            'appointment_self_subject' => 'boolean',
+            'notes' => 'nullable|string|max:5000',
+        ]);
+
+        $payload = [
+            'purpose' => $data['appointment_purpose'] ?: null,
+            'starts_at' => $data['appointment_starts_at'],
+            'ends_at' => $data['appointment_ends_at'] ?: null,
+            'location' => $data['appointment_location'] ?: null,
+            'state' => $data['appointment_state'] ?: 'scheduled',
+            'provider_id' => $data['appointment_provider_id'] ?: null,
+            'notes' => $data['notes'] ?: null,
+        ];
+
+        if (($data['appointment_self_subject'] ?? false)) {
+            $payload['subject_type'] = \App\Models\User::class;
+            $payload['subject_id'] = auth()->id();
+        } else {
+            $payload['subject_type'] = null;
+            $payload['subject_id'] = null;
+        }
+
+        if ($this->id) {
+            Appointment::findOrFail($this->id)->update($payload);
+        } else {
+            $this->id = Appointment::create($payload)->id;
+        }
+    }
+
     /** @return \Illuminate\Database\Eloquent\Collection<int, Property> */
     #[Computed]
     public function propertyOptions()
@@ -2042,6 +2115,12 @@ new class extends Component
         return Contract::orderBy('title')->get(['id', 'title']);
     }
 
+    #[Computed]
+    public function healthProviders()
+    {
+        return HealthProvider::orderBy('name')->get(['id', 'name', 'specialty']);
+    }
+
     /**
      * Household members available as owner targets in the Admin section.
      *
@@ -2186,6 +2265,7 @@ new class extends Component
                 @case('property') @include('partials.inspector.forms.property')      @break
                 @case('vehicle') @include('partials.inspector.forms.vehicle')        @break
                 @case('inventory') @include('partials.inspector.forms.inventory')    @break
+                @case('appointment') @include('partials.inspector.forms.appointment') @break
             @endswitch
         </div>
 

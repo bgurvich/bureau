@@ -87,7 +87,7 @@ Status legend: ✅ in v1 schema · 🏗 v1 wiring (post-schema) · 🧭 deferred
 - ✅ Properties (home / rental / land / vacation)
 - ✅ Vehicles (car / motorcycle / bicycle / boat)
 - ✅ inventory_items (household belongings, with warranty_expires_on)
-- 💡 **Inventory listings (sell-through tracking)** — flag or side table for items currently posted to eBay / Craigslist / Facebook Marketplace. Fields: `is_for_sale`, `asking_price`, `listing_url`, `listing_platform`, `posted_at`. On sale: auto-create the matching income transaction + set `disposed_on`. Feeds a future "for-sale" filter on the inventory drill-down and a cash-unlocked tile on the money radar.
+- ✅ **Inventory listings (sell-through tracking)** — `inventory_items.is_for_sale` + `listing_asking_amount` / `_currency` + `listing_platform` (enum) + `listing_url` + `listing_posted_at`. Inspector "For sale" collapsible. Drill-down chip + `status=for_sale` filter. Auto-create matching income transaction on sale remains a follow-up.
 - ✅ **Bulk inventory capture** — paste names one per line, share property/room/container; follow-up pass per row in the Inspector.
 - ✅ **Inventory quantity** — `inventory_items.quantity` (unsigned int, default 1); shown as `× N` on the drill-down list.
 - ✅ **Inventory container** — free-text `inventory_items.container` column for the third location tier; shown as `property / room / container`. Dedicated `inventory_containers` table deferred until shared labels matter.
@@ -133,10 +133,10 @@ Status legend: ✅ in v1 schema · 🏗 v1 wiring (post-schema) · 🧭 deferred
 - ✅ WCAG 2.1 AA basics: `<html lang>`, semantic landmarks (`<main>`, `<nav>`), skip-to-main link, focus-visible rings, `aria-current`, `aria-label`, `aria-invalid` + `aria-describedby` on form errors
 - 🏗 Postmark inbound webhook → creates `mail_messages` + draft transaction/media
 - ✅ RRULE projection generator (`recurring:project` artisan command + scheduled daily at 03:00)
-- 🏗 MediaFolder rescan artisan command (discover files → create media)
-- 🏗 spatie/laravel-backup config → nightly DB dump + media sync, retention GFS
+- ✅ MediaFolder rescan artisan command (`media:rescan`) — walks each active folder, upserts Media rows idempotently, flags images as OCR-pending
+- ✅ `spatie/laravel-backup` scheduled: `backup:run` 03:30, `backup:clean` 02:30, `backup:monitor` 12:00. Off-site encrypted destination still a follow-up.
 - ✅ Monthly `snapshots` rollup (`snapshots:rollup` command + scheduled on the 2nd at 04:00) — writes `kind=net_worth` (accounts + asset valuations with purchase-price fallback + breakdown by account/asset kind) and `kind=cashflow` (income/expense/net + by-category) per household per month.
-- 🏗 Drill-down screens for each domain (list + detail + capture form); today they are "coming soon" stubs
+- ✅ Drill-down screens for each domain (list + detail + capture form) — shipped across fiscal, calendar, relationships, assets, records, health, time
 - 🏗 **Header — global controls** (Livewire SFCs in the top bar, keyboard-shortcut-driven):
   - Global search (`/` — **not** Ctrl+K, which collides with the browser URL bar) — command-palette style across domains: contacts, transactions, tasks, contracts, documents, notes, media. Fuzzy match over titles + descriptions + tags; result groups by domain; keyboard nav; Enter opens the Inspector drawer pre-loaded for that record.
   - ✅ Quick add (⌘/Ctrl+.) — Inspector drawer with a type picker, then a minimal form per type. Type-specific single-letter shortcuts also jump straight to the right form: `t`/`n`/`c`/`x` for task/note/contact/transaction.
@@ -181,11 +181,11 @@ Standard Laravel password auth ships in v1. Everything else is deferred.
 
 Ordered by ROI for the big-picture goal.
 
-1. 🏗 **Unified timeline + upcoming-obligations feed** — the time radar. Powered by `events_stream` + `recurring_projections`. Highest-leverage synthesis surface.
-2. 🏗 **Net-worth snapshots + cashflow rollups** — the money radar. Accounts + asset_valuations + transactions + transfers, joined into monthly snapshots.
-3. ✅ **Cross-domain tags** — schema in v1; UX deferred.
+1. ✅ **Unified timeline + upcoming-obligations feed** — time radar + `/calendar` month grid both aggregate across projections / tasks / meetings / appointments / expiries. `events_stream` is populated by the domain logic.
+2. ✅ **Net-worth snapshots + cashflow rollups** — money radar with sparkline; monthly `snapshots:rollup` writes net_worth + cashflow kinds. `/finance` rolls it up household-wide.
+3. ✅ **Cross-domain tags** — tag chips in drill-downs + tag hub (`/tags`, `/tags/{slug}`) walking 11 taggable models.
 4. 🏗 **Reminders engine** — multi-channel delivery (email, Slack, SMS, push, in-app, Telegram). Feeds attention radar.
-5. 🧭 **OCR + full-text search on media** — turn the scan pile into something queryable. Staged pipeline, all stays on-device (personal-affairs data never leaves the machine):
+5. 🏗 **OCR + full-text search on media** — Tier 1 shipped: Tesseract via `App\Support\Ocr` + `App\Jobs\OcrMedia`, writes to `media.ocr_text`, surfaces in global search with snippet + deep-link. Tier 2 (local LLM) and Tier 3 (vision) still deferred:
     - **Tier 1 (no LLM)**: Tesseract OCR via `thiagoalessio/tesseract_ocr`, stored on `media.ocr_text` (new column) + Meilisearch/Typesense index. Makes every scanned receipt / bill / letter text-searchable through the existing `/` palette. Deterministic, offline, fast. Structured extraction relies on regex + per-vendor templates — fragile, so…
     - **Tier 2 (+ local LLM)**: Tesseract extracts text, a local Ollama model (Llama/Mistral/Qwen) turns it into JSON (`amount, date, vendor, line_items, tax_lines, category_suggestion`), which pre-fills the Bill or Transaction form in the Inspector. Feeds the same MCP tool surface the AI assistant uses.
     - **Tier 3 (vision LLM)**: Skip Tesseract entirely for hard cases (handwritten, photographed, multi-column). Local multimodal model (LLaVA / Gemma-Vision via Ollama) parses the image directly.
@@ -195,7 +195,7 @@ Ordered by ROI for the big-picture goal.
 8. 🧭 **Automations / rules engine** — "when transaction matches merchant Y, auto-category Z"; "when contract expires in 30 days, create task"; event-driven side effects.
 9. 🧭 **Dashboards (per-domain radars + one unified "state of affairs")** — the primary UX. Drill-downs come off the dashboard.
 10. 🧭 **Timeline view** ("what happened on this date last year") — across all domains.
-11. 🧭 **Mobile capture** — snap receipt → pending transaction + media; voice note → Note; bulk-add inventory tuned for phone use (large touch targets, voice-in textarea, "snap a shelf → suggested names" flow for the walking-a-closet workflow). Web-first, PWA later.
+11. ✅ **Mobile PWA capture** — `/m` shell + manifest + service worker + bottom tabs. Shipped surfaces: photo-inventory bulk (`/m/capture/inventory`), voice + text note (`/m/capture/note` with SpeechRecognition auto-restart), photo → Media with OCR queue (`/m/capture/photo`), Inbox tab. "Snap a shelf → suggested names" flow still 💡.
 12. 🧭 **Sharing / partial visibility** — read-only spouse access to selected domains.
 13. 🧭 **Encryption at rest for media** + strong backup story (off-site, encrypted).
 14. 🧭 **Weekly review prompt** — surfaces orphan tasks, unreconciled transactions, stale contracts, expiring documents.
@@ -239,7 +239,7 @@ Each has a target shape; listed in rough priority based on personal-admin load.
 
 ### Home / property maintenance
 - 💡 `maintenance_schedules` — falls out of `recurring_rules` with `subject_type=Property`. No new table needed; seed templates below.
-- 💡 **Seed template: recurring home-maintenance rules**, each becomes a `recurring_rule` attached to a property, generates projections, and surfaces on the attention radar:
+- ✅ **Seed template: recurring home-maintenance rules** — `php artisan property:seed-maintenance {property}` (idempotent, `--dry-run` preview) creates each as a `recurring_rule` with `subject=Property`, generates projections, surfaces on the attention radar:
   - HVAC air filter replacement — every 1–3 months (varies by filter rating, pets, allergies)
   - Whole-house water filter cartridge — every 3–6 months
   - Fridge water/ice filter — every 6 months
@@ -312,7 +312,7 @@ Each has a target shape; listed in rough priority based on personal-admin load.
 - 💡 `wishlists` (item, linked_url, target_price, price_history)
 
 ### "In case of" pack
-- 🧭 Derived view, not a table — filtered render across documents + contracts + contacts + accounts marked for emergency access. Export-to-PDF for a sealed envelope.
+- ✅ `/in-case-of` derived view. Lists: documents with `in_case_of_pack=true`, online accounts flagged or `importance_tier=critical`, favorite contacts (with phones + emails), active accounts, active prescriptions. Print-friendly styling; "Print / save PDF" button. Empty state when nothing flagged.
 
 ### Online accounts inventory
 - ✅ `online_accounts` table (service_name, kind enum, url, login_email, username, mfa_method, recovery_contact_id, linked_contract_id, importance_tier, in_case_of_pack flag, notes). Explicit non-goal: not a password vault. Dedicated drill-down at `/online-accounts`, Inspector type with keyboard shortcut `O`, filters for kind + tier + ICO flag. Sidebar entry under Records. Feeds the in-case-of pack and future subscription reconciliation.
@@ -384,10 +384,10 @@ Each has a target shape; listed in rough priority based on personal-admin load.
 - 💡 **One unified "state of my life" dashboard** — pulls top tiles from every radar. Drill-downs off it.
 
 ### Cross-cutting views
-- 💡 **Unified calendar (month / week / day)** — grid views that surface every dated record on its date: meetings (`starts_at`), tasks (`due_at`), bill projections (`due_on`), appointments (`starts_at`), reminders (`remind_at`), contract `ends_on`, document `expires_on`, `trial_ends_on`, vehicle `registration_expires_on`, insurance renewal. Toggleable layers per domain, click-day → filtered agenda drawer. Distinct from the timeline (scrollable past stream) and radars (tiles).
-- 💡 **Household-wide financial view** — consolidated money page: net worth breakdown (bank / credit / cash / investment / gift_card / assets), monthly cashflow trend (from `snapshots:rollup`), active subscriptions monthly burn, upcoming 30/60/90-day obligations, trial cancel-by deadlines, gift-card face value vs remaining balance, per-category spending by month. Money radar expanded into a full drill-down with sparklines + filters.
+- ✅ **Unified calendar (month view)** — `/calendar` aggregates tasks (`due_at`), meetings / appointments (`starts_at`), bill projections (`due_on` → rule), document + contract expiries, inventory warranty + return-by, vehicle registration, gift-card expiry, prescription refills. Respects `users.week_starts_on`. Inspector-openable events per type. Week / day views still to ship.
+- ✅ **Household-wide financial view** — `/finance` with net worth + sparkline + breakdowns, monthly cashflow trend (from `snapshots:rollup`), obligations by window, gift-card face-vs-remaining, per-user split.
 - 💡 **Chronological timeline** — life-log: one scrollable stream across all domains, filterable by tag/domain/year. "This date last year."
-- 💡 **Tag hub** — pick a tag (e.g., `#rental-property`), see every entity across domains.
+- ✅ **Tag hub** — `/tags` lists tags with usage counts, `/tags/{slug}` groups every taggable record across 11 domains. Chips in drill-downs link here.
 - 💡 **Weekly review** — prompt-driven surface that forces attention to each radar in turn.
 
 ---

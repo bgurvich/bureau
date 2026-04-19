@@ -30,7 +30,7 @@
         __('Health') => [
             [null, __('Health provider'), null],
             [null, __('Prescription'), null],
-            [null, __('Appointment'), null],
+            ['appointment', __('Appointment'), null],
         ],
         __('Time') => [
             ['project', __('Project'), 'P'],

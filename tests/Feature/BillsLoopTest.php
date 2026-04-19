@@ -81,6 +81,41 @@ it('auto-matches a new transaction to the single candidate projection', function
         ->and($fresh->matched_at)->not->toBeNull();
 });
 
+it('honors a per-rule match_tolerance_days that widens the default window', function () {
+    [, , $account] = setupForBills();
+
+    // Utility bills drift by a whole week depending on the billing cycle.
+    $rule = RecurringRule::create([
+        'kind' => 'bill', 'title' => 'Utility',
+        'amount' => -85, 'currency' => 'USD',
+        'rrule' => 'FREQ=MONTHLY;BYMONTHDAY=1',
+        'dtstart' => '2026-03-01',
+        'account_id' => $account->id,
+        'match_tolerance_days' => 10,
+    ]);
+
+    $projection = RecurringProjection::create([
+        'rule_id' => $rule->id,
+        'due_on' => '2026-04-01',
+        'issued_on' => '2026-04-01',
+        'amount' => -85,
+        'currency' => 'USD',
+        'status' => 'overdue',
+    ]);
+
+    // Transaction is 8 days off — outside default (3) but inside rule's (10).
+    $txn = Transaction::create([
+        'account_id' => $account->id,
+        'occurred_on' => '2026-04-09',
+        'amount' => -85,
+        'currency' => 'USD',
+        'status' => 'cleared',
+    ]);
+
+    expect(ProjectionMatcher::attempt($txn)?->id)->toBe($projection->id);
+    expect($projection->fresh()->status)->toBe('matched');
+});
+
 it('refuses to auto-match when two candidates are tied', function () {
     [, , $account] = setupForBills();
 
