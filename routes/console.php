@@ -35,3 +35,14 @@ Schedule::command('backup:monitor')
     ->dailyAt('12:00')
     ->withoutOverlapping()
     ->onOneServer();
+
+// Reminders: generate daily from date-bearing records, fire every 5 minutes.
+Schedule::command('reminders:generate')
+    ->dailyAt('04:30')
+    ->withoutOverlapping()
+    ->onOneServer();
+
+Schedule::command('reminders:fire')
+    ->everyFiveMinutes()
+    ->withoutOverlapping()
+    ->onOneServer();
