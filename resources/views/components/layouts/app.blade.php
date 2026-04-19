@@ -30,6 +30,7 @@
                         $sections = [
                             null => [
                                 [__('Dashboard'), 'dashboard', 'home'],
+                                [__('Weekly review'), 'review', 'check-square'],
                             ],
                             __('Money') => [
                                 [__('Overview'), 'fiscal.overview', 'pie'],

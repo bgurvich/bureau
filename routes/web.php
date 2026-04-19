@@ -19,6 +19,7 @@ Route::post('/logout', function () {
 
 Route::middleware(['auth', 'preferences', 'household'])->group(function () {
     Route::livewire('/', 'dashboard')->name('dashboard');
+    Route::livewire('/review', 'weekly-review')->name('review');
     Route::livewire('/profile', 'profile')->name('profile');
     Route::livewire('/finance', 'finance-overview')->name('fiscal.overview');
     Route::livewire('/accounts', 'accounts-index')->name('fiscal.accounts');
