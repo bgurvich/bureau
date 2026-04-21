@@ -23,6 +23,13 @@ Route::post('/webhooks/paypal/inbound', PayPalWebhookController::class)
 Route::middleware('guest')->group(function () {
     Route::livewire('/login', 'login')->name('login');
 
+    // Invitation acceptance — the page resolves the token, and on submit
+    // creates a fresh User (or validates an existing one) and attaches
+    // them to the inviting household. Guest-only because a successful
+    // accept logs the user in; already-signed-in users should sign out
+    // to a different account or ask for a new invite.
+    Route::livewire('/join/{token}', 'accept-invitation')->name('invitations.accept');
+
     Route::post('/login/magic', [MagicLinkController::class, 'request'])
         ->middleware('throttle:6,1')
         ->name('magic-link.request');

@@ -1,9 +1,13 @@
 <?php
 
+use App\Mail\HouseholdInvitationMail;
+use App\Models\HouseholdInvitation;
 use App\Models\Integration;
+use App\Models\User;
 use App\Support\CurrentHousehold;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Mail;
 use Livewire\Attributes\Computed;
 use Livewire\Component;
 
@@ -35,6 +39,206 @@ new class extends Component
         $h->forceFill(['data' => $data])->save();
 
         $this->vendorIgnoreSaved = __('Saved.');
+    }
+
+    public string $inviteEmail = '';
+
+    public string $inviteRole = 'member';
+
+    public ?string $inviteMessage = null;
+
+    public ?string $inviteError = null;
+
+    /**
+     * Current user's role in the active household. Only owners can
+     * invite, resend, revoke, or remove — every mutator reads this.
+     */
+    private function currentRole(): ?string
+    {
+        $h = CurrentHousehold::get();
+        if (! $h) {
+            return null;
+        }
+        $pivot = $h->users()->where('users.id', auth()->id())->first()?->pivot;
+
+        return $pivot?->role;
+    }
+
+    private function requireOwner(): bool
+    {
+        return $this->currentRole() === 'owner';
+    }
+
+    public function sendInvite(): void
+    {
+        $this->inviteMessage = null;
+        $this->inviteError = null;
+
+        if (! $this->requireOwner()) {
+            $this->inviteError = __('Only household owners can invite new members.');
+
+            return;
+        }
+
+        $this->validate([
+            'inviteEmail' => 'required|email:rfc',
+            'inviteRole' => 'required|in:owner,member,viewer',
+        ], attributes: ['inviteEmail' => __('email')]);
+
+        $h = CurrentHousehold::get();
+        if (! $h) {
+            return;
+        }
+
+        $email = mb_strtolower(trim($this->inviteEmail));
+
+        // Guard: is this address already on the household? Silently
+        // collapse existing pending invites to a single row.
+        $alreadyMember = $h->users()
+            ->whereRaw('LOWER(users.email) = ?', [$email])
+            ->exists();
+        if ($alreadyMember) {
+            $this->inviteError = __(':email is already a member of this household.', ['email' => $email]);
+
+            return;
+        }
+
+        $existingInvite = HouseholdInvitation::where('household_id', $h->id)
+            ->whereRaw('LOWER(email) = ?', [$email])
+            ->whereNull('accepted_at')
+            ->first();
+
+        if ($existingInvite) {
+            $plain = $existingInvite->rotateToken();
+            $existingInvite->forceFill(['role' => $this->inviteRole])->save();
+            $invite = $existingInvite->fresh();
+        } else {
+            [$invite, $plain] = HouseholdInvitation::issue($h, $email, $this->inviteRole, auth()->user());
+        }
+
+        $acceptUrl = route('invitations.accept', ['token' => $plain]);
+        Mail::to($email)->send(new HouseholdInvitationMail(
+            acceptUrl: $acceptUrl,
+            household: $h,
+            invitedBy: auth()->user(),
+            inviteeEmail: $email,
+            role: $this->inviteRole,
+            expiresAt: $invite->expires_at,
+        ));
+
+        $this->inviteEmail = '';
+        $this->inviteMessage = __('Invitation sent to :email.', ['email' => $email]);
+        unset($this->pendingInvitations, $this->members);
+    }
+
+    public function resendInvite(int $invitationId): void
+    {
+        if (! $this->requireOwner()) {
+            return;
+        }
+        $h = CurrentHousehold::get();
+        $invite = HouseholdInvitation::where('household_id', $h?->id)->find($invitationId);
+        if (! $invite || $invite->isAccepted()) {
+            return;
+        }
+
+        $plain = $invite->rotateToken();
+        $acceptUrl = route('invitations.accept', ['token' => $plain]);
+        Mail::to($invite->email)->send(new HouseholdInvitationMail(
+            acceptUrl: $acceptUrl,
+            household: $invite->household,
+            invitedBy: auth()->user(),
+            inviteeEmail: $invite->email,
+            role: $invite->role,
+            expiresAt: $invite->fresh()->expires_at,
+        ));
+
+        $this->inviteMessage = __('Invitation resent to :email.', ['email' => $invite->email]);
+        unset($this->pendingInvitations);
+    }
+
+    public function revokeInvite(int $invitationId): void
+    {
+        if (! $this->requireOwner()) {
+            return;
+        }
+        $h = CurrentHousehold::get();
+        HouseholdInvitation::where('household_id', $h?->id)
+            ->whereNull('accepted_at')
+            ->where('id', $invitationId)
+            ->delete();
+        unset($this->pendingInvitations);
+    }
+
+    public function removeMember(int $userId): void
+    {
+        if (! $this->requireOwner()) {
+            return;
+        }
+        $h = CurrentHousehold::get();
+        if (! $h) {
+            return;
+        }
+
+        // Never let the household lose its last owner — otherwise no
+        // one can invite / remove members afterwards.
+        $ownersLeft = $h->users()->wherePivot('role', 'owner')->count();
+        $targetRole = $h->users()->where('users.id', $userId)->first()?->pivot?->role;
+        if ($targetRole === 'owner' && $ownersLeft <= 1) {
+            $this->inviteError = __('Can\'t remove the last owner. Promote another member first.');
+
+            return;
+        }
+        // Also block self-removal for owners — the UI should already
+        // hide the button, but enforce in case a race or tampered
+        // client call lands.
+        if ($userId === (int) auth()->id() && $targetRole === 'owner' && $ownersLeft <= 1) {
+            return;
+        }
+
+        $h->users()->detach($userId);
+        unset($this->members);
+    }
+
+    /**
+     * @return \Illuminate\Support\Collection<int, array{id:int,name:?string,email:string,role:string,joined_at:?\DateTimeInterface,is_self:bool}>
+     */
+    #[Computed]
+    public function members(): \Illuminate\Support\Collection
+    {
+        $h = CurrentHousehold::get();
+        if (! $h) {
+            return collect();
+        }
+
+        return $h->users()->orderBy('users.name')->get()->map(fn (User $u) => [
+            'id' => (int) $u->id,
+            'name' => $u->name,
+            'email' => (string) $u->email,
+            'role' => (string) ($u->pivot->role ?? 'member'),
+            'joined_at' => $u->pivot->joined_at ?? null,
+            'is_self' => (int) $u->id === (int) auth()->id(),
+        ]);
+    }
+
+    /** @return \Illuminate\Support\Collection<int, HouseholdInvitation> */
+    #[Computed]
+    public function pendingInvitations(): \Illuminate\Support\Collection
+    {
+        $h = CurrentHousehold::get();
+        if (! $h) {
+            return collect();
+        }
+
+        return HouseholdInvitation::where('household_id', $h->id)
+            ->whereNull('accepted_at')
+            ->orderByDesc('id')
+            ->get();
+    }
+
+    public function isOwner(): bool
+    {
+        return $this->requireOwner();
     }
 
     /**
@@ -150,6 +354,118 @@ new class extends Component
             {{ session('backup_ran') }}
         </div>
     @endif
+
+    {{-- Household members + invitations ──────────────────────────────── --}}
+    <section aria-labelledby="members-heading" class="rounded-xl border border-neutral-800 bg-neutral-900/40 p-5">
+        <header class="mb-4">
+            <h3 id="members-heading" class="text-sm font-semibold text-neutral-100">{{ __('Household members') }}</h3>
+            <p class="mt-1 text-xs text-neutral-500">
+                {{ __('People with access to this household. Owners can invite and remove members; everyone can read and edit the shared data.') }}
+            </p>
+        </header>
+
+        <ul class="divide-y divide-neutral-800 rounded-md border border-neutral-800">
+            @foreach ($this->members as $m)
+                <li class="flex items-center justify-between gap-3 px-3 py-2 text-xs"
+                    wire:key="member-{{ $m['id'] }}">
+                    <div class="min-w-0">
+                        <div class="text-neutral-100">
+                            {{ $m['name'] ?: $m['email'] }}
+                            @if ($m['is_self'])
+                                <span class="ml-1 text-[10px] uppercase tracking-wider text-neutral-500">{{ __('you') }}</span>
+                            @endif
+                        </div>
+                        <div class="text-[11px] text-neutral-500">
+                            {{ $m['email'] }} ·
+                            <span class="uppercase tracking-wider">{{ $m['role'] }}</span>
+                            @if ($m['joined_at'])
+                                · {{ __('joined :when', ['when' => \Carbon\CarbonImmutable::parse($m['joined_at'])->diffForHumans()]) }}
+                            @endif
+                        </div>
+                    </div>
+                    @if ($this->isOwner() && ! $m['is_self'])
+                        <button type="button"
+                                wire:click="removeMember({{ $m['id'] }})"
+                                wire:confirm="{{ __('Remove :name from the household?', ['name' => $m['name'] ?: $m['email']]) }}"
+                                class="rounded border border-rose-800/40 bg-rose-900/20 px-2 py-1 text-rose-200 hover:bg-rose-900/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                            {{ __('Remove') }}
+                        </button>
+                    @endif
+                </li>
+            @endforeach
+        </ul>
+
+        @if ($this->isOwner())
+            <div class="mt-5 space-y-3 rounded-md border border-neutral-800 bg-neutral-950/40 p-4">
+                <h4 class="text-xs font-semibold text-neutral-200">{{ __('Invite someone') }}</h4>
+                @if ($this->pendingInvitations->isNotEmpty())
+                    <div>
+                        <div class="text-[10px] uppercase tracking-wider text-neutral-500">{{ __('Pending') }}</div>
+                        <ul class="mt-1 divide-y divide-neutral-800 rounded-md border border-neutral-800">
+                            @foreach ($this->pendingInvitations as $inv)
+                                <li class="flex items-center justify-between gap-3 px-3 py-2 text-xs"
+                                    wire:key="invite-{{ $inv->id }}">
+                                    <div class="min-w-0">
+                                        <div class="text-neutral-100">{{ $inv->email }}</div>
+                                        <div class="text-[11px] text-neutral-500">
+                                            <span class="uppercase tracking-wider">{{ $inv->role }}</span>
+                                            @if ($inv->isExpired())
+                                                · <span class="text-amber-400">{{ __('expired') }}</span>
+                                            @else
+                                                · {{ __('expires :when', ['when' => $inv->expires_at->diffForHumans()]) }}
+                                            @endif
+                                        </div>
+                                    </div>
+                                    <div class="flex items-center gap-1.5">
+                                        <button type="button" wire:click="resendInvite({{ $inv->id }})"
+                                                class="rounded border border-neutral-700 bg-neutral-900 px-2 py-1 text-neutral-200 hover:border-neutral-500 hover:bg-neutral-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                                            {{ __('Resend') }}
+                                        </button>
+                                        <button type="button" wire:click="revokeInvite({{ $inv->id }})"
+                                                wire:confirm="{{ __('Revoke invitation for :email?', ['email' => $inv->email]) }}"
+                                                class="rounded border border-rose-800/40 bg-rose-900/20 px-2 py-1 text-rose-200 hover:bg-rose-900/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                                            {{ __('Revoke') }}
+                                        </button>
+                                    </div>
+                                </li>
+                            @endforeach
+                        </ul>
+                    </div>
+                @endif
+
+                <form wire:submit="sendInvite" class="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_10rem_auto]" novalidate>
+                    <div>
+                        <label for="inv-email" class="sr-only">{{ __('Email address') }}</label>
+                        <input wire:model="inviteEmail" id="inv-email" type="email"
+                               autocomplete="off" placeholder="{{ __('friend@example.com') }}"
+                               class="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100 placeholder-neutral-500 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                        @error('inviteEmail')<div role="alert" class="mt-1 text-[11px] text-rose-400">{{ $message }}</div>@enderror
+                    </div>
+                    <div>
+                        <label for="inv-role" class="sr-only">{{ __('Role') }}</label>
+                        <select wire:model="inviteRole" id="inv-role"
+                                class="w-full rounded-md border border-neutral-700 bg-neutral-950 px-2 py-2 text-sm text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                            <option value="member">{{ __('Member') }}</option>
+                            <option value="viewer">{{ __('Viewer') }}</option>
+                            <option value="owner">{{ __('Owner') }}</option>
+                        </select>
+                    </div>
+                    <button type="submit"
+                            class="rounded-md bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-900 hover:bg-neutral-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                        <span wire:loading.remove wire:target="sendInvite">{{ __('Send invite') }}</span>
+                        <span wire:loading wire:target="sendInvite">{{ __('Sending…') }}</span>
+                    </button>
+                </form>
+
+                @if ($inviteMessage)
+                    <div role="status" class="text-[11px] text-emerald-300">{{ $inviteMessage }}</div>
+                @endif
+                @if ($inviteError)
+                    <div role="alert" class="text-[11px] text-rose-400">{{ $inviteError }}</div>
+                @endif
+            </div>
+        @endif
+    </section>
 
     {{-- Integrations (household / app-wide) ──────────────────────────── --}}
     <section aria-labelledby="integrations-heading" class="rounded-xl border border-neutral-800 bg-neutral-900/40 p-5">
