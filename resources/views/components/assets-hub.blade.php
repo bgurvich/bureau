@@ -13,7 +13,7 @@ class extends Component
 
     public function setTab(string $tab): void
     {
-        if (in_array($tab, ['properties', 'vehicles', 'inventory', 'online_accounts'], true)) {
+        if (in_array($tab, ['properties', 'vehicles', 'inventory', 'online_accounts', 'in_case_of'], true)) {
             $this->tab = $tab;
         }
     }
@@ -32,6 +32,7 @@ class extends Component
             'vehicles' => __('Vehicles'),
             'inventory' => __('Inventory'),
             'online_accounts' => __('Online accounts'),
+            'in_case_of' => __('In case of'),
         ];
     @endphp
 
@@ -61,6 +62,9 @@ class extends Component
                 @break
             @case('online_accounts')
                 <livewire:online-accounts-index :key="'assets-online_accounts'" />
+                @break
+            @case('in_case_of')
+                <livewire:in-case-of-pack :key="'assets-in_case_of'" />
                 @break
             @default
                 <livewire:properties-index :key="'assets-properties'" />
