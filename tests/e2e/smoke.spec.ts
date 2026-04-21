@@ -2,9 +2,11 @@ import { test, expect } from '@playwright/test';
 
 test('login page renders', async ({ page }) => {
     await page.goto('/login');
-    await expect(page.getByRole('heading', { name: 'Sign in', level: 1 })).toBeVisible();
+    // The "Sign in with email" heading is sr-only but still a valid heading.
+    await expect(page.getByRole('heading', { name: 'Sign in with email' })).toBeAttached();
     await expect(page.getByLabel('Email', { exact: true })).toBeVisible();
     await expect(page.getByLabel('Password')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Sign in with password' })).toBeVisible();
 });
 
 test('dashboard is behind auth (unauthenticated redirects to login)', async ({ page }) => {
@@ -15,7 +17,7 @@ test('dashboard is behind auth (unauthenticated redirects to login)', async ({ p
 
 test('authenticated user sees the dashboard radars', async ({ page }) => {
     await page.goto('/login');
-    await page.getByLabel('Email', { exact: true }).fill('boris@gurvich.me');
+    await page.getByLabel('Email', { exact: true }).fill('owner@bureau.local');
     await page.getByLabel('Password').fill('change-me');
     await page.getByRole('button', { name: 'Sign in with password' }).click();
 
@@ -27,7 +29,7 @@ test('authenticated user sees the dashboard radars', async ({ page }) => {
 
 test('user-menu dropdown opens and signs out', async ({ page }) => {
     await page.goto('/login');
-    await page.getByLabel('Email', { exact: true }).fill('boris@gurvich.me');
+    await page.getByLabel('Email', { exact: true }).fill('owner@bureau.local');
     await page.getByLabel('Password').fill('change-me');
     await page.getByRole('button', { name: 'Sign in with password' }).click();
     await expect(page).toHaveURL('/');
@@ -48,7 +50,7 @@ test('user-menu dropdown opens and signs out', async ({ page }) => {
 
 test('theme toggle flips the rendered palette', async ({ page }) => {
     await page.goto('/login');
-    await page.getByLabel('Email', { exact: true }).fill('boris@gurvich.me');
+    await page.getByLabel('Email', { exact: true }).fill('owner@bureau.local');
     await page.getByLabel('Password').fill('change-me');
     await page.getByRole('button', { name: 'Sign in with password' }).click();
     await expect(page).toHaveURL('/');

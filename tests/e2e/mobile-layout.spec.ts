@@ -9,7 +9,7 @@ test.use({ viewport: { width: 390, height: 844 } });
 
 const signIn = async (page) => {
     await page.goto('/login');
-    await page.getByLabel('Email', { exact: true }).fill('boris@gurvich.me');
+    await page.getByLabel('Email', { exact: true }).fill('owner@bureau.local');
     await page.getByLabel('Password').fill('change-me');
     await page.getByRole('button', { name: 'Sign in with password' }).click();
     await expect(page).toHaveURL('/');
@@ -18,22 +18,48 @@ const signIn = async (page) => {
 test('sidebar collapses into a hamburger drawer on mobile', async ({ page }) => {
     await signIn(page);
 
-    const nav = page.getByRole('navigation', { name: 'Main navigation' });
+    const aside = page.getByRole('complementary', { name: 'Primary' });
     const hamburger = page.getByRole('button', { name: 'Toggle navigation' });
 
     await expect(hamburger).toBeVisible();
-    await expect(nav).toBeHidden();
+
+    // Drawer closed: the aside is translated off-screen to the left.
+    // Playwright's toBeHidden() doesn't treat transform as hidden, so check
+    // the bounding box — the right edge must be at or left of x=0.
+    const offScreen = async () =>
+        expect
+            .poll(async () => {
+                const box = await aside.boundingBox();
+                return box ? box.x + box.width : null;
+            })
+            .toBeLessThanOrEqual(0);
+
+    const onScreen = async () =>
+        expect
+            .poll(async () => {
+                const box = await aside.boundingBox();
+                return box?.x ?? null;
+            })
+            .toBeGreaterThanOrEqual(0);
+
+    await offScreen();
 
     await hamburger.click();
-    await expect(nav).toBeVisible();
+    await onScreen();
 
     await page.keyboard.press('Escape');
-    await expect(nav).toBeHidden();
+    await offScreen();
 
     await hamburger.click();
-    await expect(nav).toBeVisible();
-    await page.locator('[aria-hidden="true"].fixed.inset-0').click();
-    await expect(nav).toBeHidden();
+    await onScreen();
+    // Click the overlay on the right side of the viewport (away from the
+    // 240px-wide aside on the left) so the click isn't intercepted by nav
+    // links. The overlay is z-30 + md:hidden — under the aside (z-40) but
+    // on top of page content.
+    await page.locator('div.fixed.inset-0.z-30.md\\:hidden').click({
+        position: { x: 340, y: 400 },
+    });
+    await offScreen();
 });
 
 test('dashboard grid collapses to one column on mobile', async ({ page }) => {

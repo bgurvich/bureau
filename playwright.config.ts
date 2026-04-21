@@ -13,6 +13,9 @@ export default defineConfig({
         trace: 'retain-on-failure',
         video: 'retain-on-failure',
         screenshot: 'only-on-failure',
+        // Block the PWA service worker in tests — its cached /m shell can
+        // clobber authenticated navigations to '/'.
+        serviceWorkers: 'block',
     },
     webServer: {
         command: 'php artisan serve --port=8765',
