@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Integration;
+use App\Support\CurrentHousehold;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Artisan;
 use Livewire\Attributes\Computed;
@@ -8,6 +9,34 @@ use Livewire\Component;
 
 new class extends Component
 {
+    /**
+     * Regex-per-line list of phrases to strip from transaction descriptions
+     * before vendor auto-detection. Persisted on `households.data`.
+     */
+    public string $vendorIgnorePatterns = '';
+
+    public ?string $vendorIgnoreSaved = null;
+
+    public function mount(): void
+    {
+        $h = CurrentHousehold::get();
+        $raw = is_object($h) ? data_get($h->data, 'vendor_ignore_patterns') : null;
+        $this->vendorIgnorePatterns = is_string($raw) ? $raw : '';
+    }
+
+    public function saveVendorIgnorePatterns(): void
+    {
+        $h = CurrentHousehold::get();
+        if (! $h) {
+            return;
+        }
+        $data = is_array($h->data) ? $h->data : [];
+        $data['vendor_ignore_patterns'] = $this->vendorIgnorePatterns;
+        $h->forceFill(['data' => $data])->save();
+
+        $this->vendorIgnoreSaved = __('Saved.');
+    }
+
     /**
      * Household / app-wide integrations only. Per-user mail and calendar
      * connectors render on /profile so each page answers a single question:
@@ -220,6 +249,37 @@ new class extends Component
                 <dd class="mt-0.5 font-mono text-neutral-200">{{ $localAi['model'] ?? '—' }}</dd>
             </div>
         </dl>
+    </section>
+
+    {{-- Vendor auto-detect ignore list ───────────────────────────────── --}}
+    <section aria-labelledby="vendor-ignore-heading" class="rounded-xl border border-neutral-800 bg-neutral-900/40 p-5">
+        <header class="mb-3">
+            <h3 id="vendor-ignore-heading" class="text-sm font-semibold text-neutral-100">{{ __('Vendor auto-detect · ignore list') }}</h3>
+            <p class="mt-1 text-xs text-neutral-500">
+                {{ __('Regex patterns stripped from transaction descriptions before vendor matching. One per line, case-insensitive. Example: "purchase authorized on" turns "Purchase authorized on 07/30 Costco" into just "Costco" for matching and auto-created contact names.') }}
+            </p>
+        </header>
+        <form wire:submit.prevent="saveVendorIgnorePatterns" class="space-y-2">
+            <label for="vendor-ignore" class="sr-only">{{ __('Vendor ignore patterns') }}</label>
+            <textarea wire:model="vendorIgnorePatterns" id="vendor-ignore" rows="6"
+                      placeholder="purchase authorized on&#10;pos purchase&#10;ach transfer (from|to)&#10;recurring payment authorized on"
+                      class="w-full resize-y rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 font-mono text-xs text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300"></textarea>
+            <div class="flex items-center justify-between gap-3">
+                <span class="text-[11px] text-neutral-500">
+                    {{ __('Syntax: PCRE regex body, no delimiters. Broken lines are skipped silently.') }}
+                </span>
+                <div class="flex items-center gap-2">
+                    @if ($vendorIgnoreSaved)
+                        <span role="status" class="text-[11px] text-emerald-300">{{ $vendorIgnoreSaved }}</span>
+                    @endif
+                    <button type="submit"
+                            class="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs text-neutral-200 hover:border-neutral-500 hover:bg-neutral-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                        <span wire:loading.remove wire:target="saveVendorIgnorePatterns">{{ __('Save') }}</span>
+                        <span wire:loading wire:target="saveVendorIgnorePatterns">{{ __('Saving…') }}</span>
+                    </button>
+                </div>
+            </div>
+        </form>
     </section>
 
     {{-- Backups ───────────────────────────────────────────────────────── --}}

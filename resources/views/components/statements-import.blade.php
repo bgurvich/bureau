@@ -4,6 +4,7 @@ use App\Models\Account;
 use App\Models\Contact;
 use App\Models\Media;
 use App\Models\Transaction;
+use App\Support\DescriptionNormalizer;
 use App\Support\Formatting;
 use App\Support\ProjectionMatcher;
 use App\Support\Statements\ParsedStatement;
@@ -828,6 +829,12 @@ class extends Component
 
     private function descriptionFingerprint(string $raw): string
     {
+        // Strip household-configured filler ("Purchase authorized on",
+        // "POS purchase", etc.) before anything else — otherwise the
+        // first two meaningful words come from boilerplate shared
+        // across every transaction, collapsing distinct vendors into
+        // one fingerprint bucket.
+        $raw = DescriptionNormalizer::stripIgnoredPatterns($raw);
         $lower = mb_strtolower($raw);
         // Cut at the first digit / # / * the same way humanizeDescription
         // does so the fingerprint is stable across transaction-specific
@@ -852,6 +859,10 @@ class extends Component
      */
     private function humanizeDescription(string $raw): string
     {
+        // Same filler strip as the fingerprint — otherwise the
+        // auto-created Contact display_name would be titled from
+        // "Purchase authorized on" rather than the real vendor.
+        $raw = DescriptionNormalizer::stripIgnoredPatterns($raw);
         $cleaned = (string) preg_replace('/[\d#*].*$/i', '', $raw);
         $words = preg_split('/\s+/', trim($cleaned)) ?: [];
         $meaningful = array_filter($words, fn ($w) => mb_strlen($w) >= 3);
