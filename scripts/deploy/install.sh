@@ -324,6 +324,18 @@ env_set() {
 # prompted lazily inside the step that needs it so `--only nginx` doesn't ask
 # for the DB password it'll never use.
 prompt APP_DIR "Application directory" "$APP_DIR"
+
+# If .env already exists, pull the domain out of APP_URL as the default so
+# a re-run defaults to what's already live instead of bureau.homes.
+if [[ -z "${DOMAIN_EXPLICITLY_SET:-}" ]] && sudo test -f "${APP_DIR}/.env"; then
+    _app_url="$(env_read APP_URL)"
+    if [[ -n "$_app_url" ]]; then
+        # Strip scheme + any path → just the host.
+        _domain_from_env="${_app_url#http://}"; _domain_from_env="${_domain_from_env#https://}"
+        _domain_from_env="${_domain_from_env%%/*}"
+        [[ -n "$_domain_from_env" ]] && DOMAIN="$_domain_from_env"
+    fi
+fi
 prompt DOMAIN  "Domain"                 "$DOMAIN"
 
 # Lazy prompters — first call prompts, subsequent calls return the cached value
@@ -345,21 +357,34 @@ ensure_mail_config() {
     # $MAIL_PROVIDER can be pre-set in env to bypass the interactive picker.
     [[ -n "${_MAIL_PROMPTED:-}" ]] && return
 
+    # On a re-run, default every prompt from whatever's currently in .env so
+    # the operator can just press Enter through the existing config.
+    local cur_mailer cur_host cur_port cur_user cur_pass cur_enc cur_from cur_pmk
+    cur_mailer="$(env_read MAIL_MAILER)"
+    cur_host="$(env_read MAIL_HOST)"
+    cur_port="$(env_read MAIL_PORT)"
+    cur_user="$(env_read MAIL_USERNAME)"
+    cur_pass="$(env_read MAIL_PASSWORD)"
+    cur_enc="$(env_read MAIL_ENCRYPTION)"
+    cur_from="$(env_read MAIL_FROM_ADDRESS)"
+    cur_pmk="$(env_read POSTMARK_API_KEY)"
+
     if [[ -z "${MAIL_PROVIDER:-}" ]]; then
-        prompt MAIL_PROVIDER "Mail provider [log/postmark/smtp]" "log"
+        prompt MAIL_PROVIDER "Mail provider [log/postmark/smtp]" "${cur_mailer:-log}"
     fi
 
     case "$MAIL_PROVIDER" in
         postmark)
-            prompt POSTMARK_API_KEY "Postmark server API token" "" secret
-            prompt MAIL_FROM_ADDRESS "Outbound From: address" "notifications@${DOMAIN}"
+            prompt POSTMARK_API_KEY  "Postmark server API token"     "$cur_pmk"  secret
+            prompt MAIL_FROM_ADDRESS "Outbound From: address"        "${cur_from:-notifications@${DOMAIN}}"
             ;;
         smtp)
-            prompt MAIL_HOST "SMTP host"                                 "smtp.example.com"
-            prompt MAIL_PORT "SMTP port"                                 "587"
-            prompt MAIL_USER "SMTP username"                             "noreply@${DOMAIN}"
-            prompt MAIL_PASS "SMTP password"                             "" secret
-            prompt MAIL_FROM_ADDRESS "Outbound From: address"            "${MAIL_USER:-noreply@${DOMAIN}}"
+            prompt MAIL_HOST         "SMTP host"                     "${cur_host:-smtp.example.com}"
+            prompt MAIL_PORT         "SMTP port"                     "${cur_port:-587}"
+            prompt MAIL_USER         "SMTP username"                 "${cur_user:-noreply@${DOMAIN}}"
+            prompt MAIL_PASS         "SMTP password"                 "$cur_pass" secret
+            prompt MAIL_ENCRYPTION   "SMTP encryption [tls/ssl]"     "${cur_enc:-tls}"
+            prompt MAIL_FROM_ADDRESS "Outbound From: address"        "${cur_from:-${MAIL_USER:-noreply@${DOMAIN}}}"
             ;;
         log|"")
             MAIL_PROVIDER="log"
@@ -380,7 +405,12 @@ ensure_backup_password() {
 }
 ensure_admin_email() {
     if [[ -z "$ADMIN_EMAIL" ]]; then
-        prompt ADMIN_EMAIL "Admin / Let's Encrypt email" "admin@${DOMAIN}"
+        # Prefer whatever's already the From address — the operator has likely
+        # already proven they control that mailbox. Fall back to admin@DOMAIN.
+        local default
+        default="$(env_read MAIL_FROM_ADDRESS)"
+        default="${default:-admin@${DOMAIN}}"
+        prompt ADMIN_EMAIL "Admin / Let's Encrypt email" "$default"
     fi
 }
 
