@@ -85,22 +85,81 @@ final class WellsFargoCheckingStatementParser implements StatementParser
         // columns from the previous page instead of falling back to
         // sectioned mode, which would ignore column positions.
         $lastBounds = null;
+        $lastCheckBounds = null;
         foreach ($pages as $page) {
             $lines = preg_split('/\r?\n/', $page) ?: [];
             $candidates = $this->gatherCandidateRows($lines);
             $bounds = $this->columnBoundsFromHeader($lines)
                 ?? $this->columnBoundsFromClustering($candidates)
                 ?? $lastBounds;
+            // Optional Check Number column — only WF layouts that print
+            // one will have "Number" (or "Check") sitting between Date
+            // and Description in the header.
+            $checkBounds = $this->detectCheckColumnFromHeader($lines) ?? $lastCheckBounds;
 
             if ($bounds !== null) {
                 $lastBounds = $bounds;
-                array_push($rowsAll, ...$this->extractByColumns($candidates, $bounds, $assumeYear));
+                $lastCheckBounds = $checkBounds;
+                array_push($rowsAll, ...$this->extractByColumns($candidates, $bounds, $assumeYear, $checkBounds));
             } else {
                 array_push($rowsAll, ...$this->extractBySections($lines, $assumeYear));
             }
         }
 
         return $rowsAll;
+    }
+
+    /**
+     * Locate the Check Number column's character range on a page. WF
+     * prints it as a stacked two-word header ("Check" over "Number")
+     * between Date and Description on checking layouts that include
+     * paper-check activity. Returns [start, end] where `end` = first
+     * character of the Description column, so the check token lives in
+     * that horizontal slice of each row.
+     *
+     * @param  array<int, string>  $lines
+     * @return array{0: int, 1: int}|null
+     */
+    private function detectCheckColumnFromHeader(array $lines): ?array
+    {
+        // Description column start — anchor for the right edge of the
+        // Check column. Same "Description" keyword we rely on for the
+        // row regex.
+        $descStart = null;
+        foreach ($lines as $line) {
+            $d = stripos($line, 'Description');
+            if ($d === false) {
+                continue;
+            }
+            // Guard: "Description" on its own appears only in the
+            // Activity Summary header, which also carries Deposits on
+            // the same line (or the next line — tolerate both).
+            $dep = stripos($line, 'Deposits');
+            if ($dep !== false && $dep > $d) {
+                $descStart = $d;
+                break;
+            }
+            // Header split across two lines — keep looking if the next
+            // line has "Deposits".
+            $descStart = $d;
+        }
+        if ($descStart === null) {
+            return null;
+        }
+
+        // Find "Number" or "Check" between the Date column (~0-6) and
+        // Description. "Number" wins when both are present — on
+        // two-line headers it sits directly above the column.
+        foreach ($lines as $line) {
+            foreach (['Number', 'Check'] as $word) {
+                $p = stripos($line, $word);
+                if ($p !== false && $p > 6 && $p < $descStart) {
+                    return [$p, $descStart];
+                }
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -336,14 +395,37 @@ final class WellsFargoCheckingStatementParser implements StatementParser
     /**
      * @param  array<int, array{line: string, tokens: array<int, array{text: string, end: int}>, continuation: array<int, string>}>  $candidates
      * @param  array{0: int, 1: int, 2: int}  $bounds
+     * @param  array{0: int, 1: int}|null  $checkBounds
      * @return array<int, ParsedTransaction>
      */
-    private function extractByColumns(array $candidates, array $bounds, int $assumeYear): array
+    private function extractByColumns(array $candidates, array $bounds, int $assumeYear, ?array $checkBounds = null): array
     {
         [$depHigh, $wdHigh, $balHigh] = $bounds;
         $rows = [];
         foreach ($candidates as $cand) {
             $line = $cand['line'];
+
+            // If the Check Number column is present, carve out whatever
+            // token lives in its horizontal slice BEFORE the description
+            // regex runs — otherwise `.+?\s{2,}` grabs the check token
+            // ("<", a numeric check number) as the whole description
+            // and stops at the wide gap that separates it from the real
+            // description. Blanking the slice lets the regex proceed as
+            // if no check column existed.
+            $checkNumber = null;
+            if ($checkBounds !== null) {
+                [$ckStart, $ckEnd] = $checkBounds;
+                $width = max(0, $ckEnd - $ckStart);
+                if (strlen($line) > $ckStart && $width > 0) {
+                    $slice = substr($line, $ckStart, $width);
+                    $trimmed = trim($slice);
+                    if ($trimmed !== '') {
+                        $checkNumber = $trimmed;
+                    }
+                    $line = substr_replace($line, str_repeat(' ', $width), $ckStart, $width);
+                }
+            }
+
             if (! preg_match('/^\s*(\d{1,2}\/\d{1,2})\s+(.+?)\s{2,}/', $line, $m)) {
                 continue;
             }
@@ -401,7 +483,8 @@ final class WellsFargoCheckingStatementParser implements StatementParser
                 description: $description,
                 amount: $amount,
                 runningBalance: $balanceToken !== null ? self::money($balanceToken['text']) : null,
-                rawRow: trim($line),
+                rawRow: trim($cand['line']),
+                checkNumber: $checkNumber,
             );
         }
 

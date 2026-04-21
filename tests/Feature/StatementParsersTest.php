@@ -177,6 +177,44 @@ TXT;
         ->and($descs[1])->toContain('Period ending 01/25');
 });
 
+it('Wells Fargo checking PDF parser extracts the optional Check Number column into its own field', function () {
+    // Regression: WF checking layouts with a "Check Number" column
+    // between Date and Description used to absorb the check token
+    // ("<" for "Business to Business ACH", a paper-check number, etc.)
+    // as the whole description — the non-greedy description regex
+    // stopped at the wide gap between the check column and the real
+    // description text.
+    $text = <<<'TXT'
+Wells Fargo Bank
+Statement Period 07/01/2026 - 07/31/2026
+Account ending in 1234
+Beginning balance on 7/1  $100.00
+Ending balance on 7/31  $9,479.76
+
+                  Check                                            Deposits/    Withdrawals/    Ending daily
+Date              Number    Description                            Additions    Subtractions    balance
+7/08                        Purchase authorized on 07/08 Costco                        52.14      4,207.61
+7/11              <         Business to Business ACH Debit                             10.00      4,197.61
+7/15              2041      Paper check to landlord                                 2,100.00      2,097.61
+TXT;
+
+    $stmt = (new WellsFargoCheckingStatementParser)->parse($text);
+
+    expect(count($stmt->transactions))->toBe(3);
+
+    $byDay = [];
+    foreach ($stmt->transactions as $t) {
+        $byDay[$t->occurredOn->day] = $t;
+    }
+
+    expect($byDay[8]->checkNumber)->toBeNull()
+        ->and($byDay[8]->description)->toContain('Purchase authorized on 07/08 Costco')
+        ->and($byDay[11]->checkNumber)->toBe('<')
+        ->and($byDay[11]->description)->toBe('Business to Business ACH Debit')
+        ->and($byDay[15]->checkNumber)->toBe('2041')
+        ->and($byDay[15]->description)->toBe('Paper check to landlord');
+});
+
 it('Wells Fargo checking PDF parser stops merging description at the Totals summary row', function () {
     // Regression: the last transaction on a page swallowed the column-
     // totals summary ("Totals $3,661.00 $9,479.76") AND the

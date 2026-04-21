@@ -6,7 +6,7 @@ use App\Mail\HouseholdInvitationMail;
 use App\Models\Household;
 use App\Models\HouseholdInvitation;
 use App\Models\User;
-use Illuminate\Support\Facades\Hash;
+use App\Support\CurrentHousehold;
 use Illuminate\Support\Facades\Mail;
 use Livewire\Livewire;
 
@@ -41,7 +41,7 @@ it('sends an invite email from the settings page and rejects non-owners', functi
     Mail::fake();
     [$household, $owner] = seedHouseholdWithOwner();
     $this->actingAs($owner);
-    \App\Support\CurrentHousehold::set($household);
+    CurrentHousehold::set($household);
 
     Livewire::test('settings-index')
         ->set('inviteEmail', 'friend@example.com')
@@ -74,7 +74,7 @@ it('refuses to invite an email that is already a member', function () {
     Mail::fake();
     [$household, $owner] = seedHouseholdWithOwner();
     $this->actingAs($owner);
-    \App\Support\CurrentHousehold::set($household);
+    CurrentHousehold::set($household);
 
     Livewire::test('settings-index')
         ->set('inviteEmail', $owner->email)
@@ -162,7 +162,7 @@ it('revokes a pending invitation', function () {
     [$household, $owner] = seedHouseholdWithOwner();
     [$invite] = HouseholdInvitation::issue($household, 'drop@example.com', 'member', $owner);
     $this->actingAs($owner);
-    \App\Support\CurrentHousehold::set($household);
+    CurrentHousehold::set($household);
 
     Livewire::test('settings-index')
         ->call('revokeInvite', $invite->id);
@@ -173,7 +173,7 @@ it('revokes a pending invitation', function () {
 it('blocks removal of the last owner', function () {
     [$household, $owner] = seedHouseholdWithOwner();
     $this->actingAs($owner);
-    \App\Support\CurrentHousehold::set($household);
+    CurrentHousehold::set($household);
 
     Livewire::test('settings-index')
         ->call('removeMember', $owner->id);
@@ -200,7 +200,7 @@ it('rotates the token on resend so the previous URL stops working', function () 
     [$household, $owner] = seedHouseholdWithOwner();
     [$invite, $originalPlain] = HouseholdInvitation::issue($household, 'resend@example.com', 'member', $owner);
     $this->actingAs($owner);
-    \App\Support\CurrentHousehold::set($household);
+    CurrentHousehold::set($household);
 
     Livewire::test('settings-index')
         ->call('resendInvite', $invite->id);
@@ -211,5 +211,5 @@ it('rotates the token on resend so the previous URL stops working', function () 
 });
 
 afterEach(function () {
-    \App\Support\CurrentHousehold::set(null);
+    CurrentHousehold::set(null);
 });

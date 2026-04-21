@@ -358,6 +358,7 @@ class extends Component
                 'description' => $t->description,
                 'amount' => $t->amount,
                 'closing_balance' => $t->runningBalance,
+                'check_number' => $t->checkNumber,
             ];
         }
 
@@ -717,6 +718,7 @@ class extends Component
                         'currency' => Account::find($accountId)?->currency ?? 'USD',
                         'closing_balance' => $row['closing_balance'] ?? null,
                         'description' => $row['description'],
+                        'check_number' => $row['check_number'] ?? null,
                         'counterparty_contact_id' => $counterpartyId,
                         'status' => 'cleared',
                         'external_id' => $externalId,
