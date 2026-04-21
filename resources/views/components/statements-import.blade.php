@@ -1093,16 +1093,6 @@ class extends Component
                                            placeholder="{{ $effectiveFileYear ?? __('auto') }}"
                                            wire:change="setYearForFile('{{ $fileId }}', $event.target.value === '' ? null : parseInt($event.target.value))"
                                            class="mt-1 w-20 rounded-md border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-sm tabular-nums text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
-                                    @if ($fileYear === null && $effectiveFileYear !== null)
-                                        <p class="mt-1 text-[11px] text-neutral-500">
-                                            {{ __('Using :y', ['y' => $effectiveFileYear]) }}
-                                            @if ($globalYear !== null && empty($fileYear))
-                                                · {{ __('from global') }}
-                                            @elseif (! empty($state['detected_year']))
-                                                · {{ __('detected from file') }}
-                                            @endif
-                                        </p>
-                                    @endif
                                 </div>
                                 @if ($state['opening'] !== null || $state['closing'] !== null)
                                     <div class="text-[11px] text-neutral-500">
