@@ -155,6 +155,8 @@ Status legend: ✅ in v1 schema · 🏗 v1 wiring (post-schema) · 🧭 deferred
 - 🏗 Full `__()` coverage across radar tiles and time-tracker widget; translations added as locales arrive
 - 🏗 WCAG deep audit — axe-core in Playwright, manual keyboard walkthrough, Lighthouse ≥ 95 on dashboard
 - 🏗 Shrink the PHPStan L6 baseline (fix real type issues, especially `CurrentHousehold::get()` Eloquent-model-vs-Household return type, Formatting nullsafe warnings, seed-helper iterable type)
+- 💡 **Onboarding tasks checklist** — dashboard surface (or /review card) that walks a fresh install through "things to set up so the app actually reflects your life": connect outbound mail, connect PayPal / bank integrations, seed accounts + opening balances, import first statements, verify default categories, invite household members, set vendor ignore patterns, backup destination configured. Each item links to the matching settings section + completes itself when the underlying state flips (integration.status = active, accounts.count > 0, last backup < 7d, etc.). Reuses the existing ChecklistTemplate engine — seeded once per new household by a first-login job. Depends on one-off checklists below.
+- 💡 **One-off checklist recurrence mode** — alongside Daily / Weekdays / Weekends / Custom on the checklist inspector, add "One-off" which emits a single run with an optional due date (expands to `FREQ=DAILY;COUNT=1`). Needed for the onboarding flow plus any project / move-house / welcome-a-pet checklist where a cadence doesn't fit. No schema change — reuses the existing RRULE column; Inspector adds the mode, humanizer labels it nicely.
 
 ---
 

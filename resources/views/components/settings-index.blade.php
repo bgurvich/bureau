@@ -1,10 +1,12 @@
 <?php
 
+use App\Jobs\PayPalBackfillJob;
 use App\Mail\HouseholdInvitationMail;
 use App\Models\HouseholdInvitation;
 use App\Models\Integration;
 use App\Models\User;
 use App\Support\CurrentHousehold;
+use App\Support\PayPal\PayPalSync;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Mail;
@@ -263,6 +265,86 @@ new class extends Component
         unset($this->integrations);
     }
 
+    /** Status message after a sync-now / backfill action, cleared on next render. */
+    public ?string $paypalMessage = null;
+
+    public ?string $paypalError = null;
+
+    /** Backfill modal state. */
+    public ?int $backfillIntegrationId = null;
+
+    public string $backfillFrom = '';
+
+    public function syncPayPalNow(int $integrationId): void
+    {
+        $this->paypalMessage = null;
+        $this->paypalError = null;
+
+        $integration = Integration::where('provider', 'paypal')->find($integrationId);
+        if (! $integration) {
+            $this->paypalError = __('Integration not found.');
+
+            return;
+        }
+
+        try {
+            $created = app(PayPalSync::class)->sync($integration);
+            $this->paypalMessage = __('PayPal sync done — :n new transaction(s).', ['n' => $created]);
+            unset($this->integrations);
+        } catch (\Throwable $e) {
+            $this->paypalError = __('Sync failed: :msg', ['msg' => $e->getMessage()]);
+        }
+    }
+
+    public function openBackfill(int $integrationId): void
+    {
+        $integration = Integration::where('provider', 'paypal')->find($integrationId);
+        if (! $integration) {
+            return;
+        }
+        $this->backfillIntegrationId = (int) $integration->id;
+        // Default to 3 years back — PayPal's Reporting API retention
+        // ceiling. User can narrow the window from there.
+        $this->backfillFrom = CarbonImmutable::now()->subYears(3)->toDateString();
+        $this->paypalMessage = null;
+        $this->paypalError = null;
+    }
+
+    public function closeBackfill(): void
+    {
+        $this->backfillIntegrationId = null;
+        $this->backfillFrom = '';
+    }
+
+    public function startBackfill(): void
+    {
+        if (! $this->backfillIntegrationId) {
+            return;
+        }
+        $this->paypalMessage = null;
+        $this->paypalError = null;
+
+        try {
+            $from = CarbonImmutable::parse($this->backfillFrom)->startOfDay();
+        } catch (\Throwable) {
+            $this->paypalError = __('Invalid date.');
+
+            return;
+        }
+        if ($from->isFuture()) {
+            $this->paypalError = __('Start date must be in the past.');
+
+            return;
+        }
+
+        PayPalBackfillJob::dispatch($this->backfillIntegrationId, $from->toDateString());
+
+        $this->paypalMessage = __('Backfill queued from :from. Progress shows once the worker finishes; new transactions land automatically.', [
+            'from' => $from->toDateString(),
+        ]);
+        $this->closeBackfill();
+    }
+
     public function runBackupNow(): void
     {
         Artisan::call('backup:run', ['--only-db' => true]);
@@ -475,6 +557,17 @@ new class extends Component
                 {{ __('Bank, notification, and other app-wide services. Credentials stored encrypted. Personal mail and calendar accounts belong on :profile.', ['profile' => '/profile']) }}
             </p>
         </header>
+
+        @if ($paypalMessage)
+            <div role="status" class="mb-3 rounded-md border border-emerald-800/40 bg-emerald-900/20 px-3 py-2 text-xs text-emerald-300">
+                {{ $paypalMessage }}
+            </div>
+        @endif
+        @if ($paypalError)
+            <div role="alert" class="mb-3 rounded-md border border-rose-800/50 bg-rose-950/30 px-3 py-2 text-xs text-rose-200">
+                {{ $paypalError }}
+            </div>
+        @endif
         @if ($this->integrations->isEmpty())
             <p class="text-xs text-neutral-500">{{ __('No household integrations connected yet.') }}</p>
         @else
@@ -491,11 +584,25 @@ new class extends Component
                                 @endif
                             </div>
                         </div>
-                        <button type="button" wire:click="disconnectIntegration({{ $int->id }})"
-                                wire:confirm="{{ __('Disconnect :n? This removes stored credentials; you\'ll need to reconnect to resume syncing.', ['n' => $int->label ?: $int->provider]) }}"
-                                class="rounded border border-rose-800/40 bg-rose-900/20 px-2 py-1 text-rose-200 hover:bg-rose-900/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
-                            {{ __('Disconnect') }}
-                        </button>
+                        <div class="flex shrink-0 items-center gap-1.5">
+                            @if ($int->provider === 'paypal' && $int->status === 'active')
+                                <button type="button" wire:click="syncPayPalNow({{ $int->id }})"
+                                        wire:loading.attr="disabled" wire:target="syncPayPalNow"
+                                        class="rounded border border-neutral-700 bg-neutral-900 px-2 py-1 text-neutral-200 hover:border-neutral-500 hover:bg-neutral-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300 disabled:opacity-60">
+                                    <span wire:loading.remove wire:target="syncPayPalNow">{{ __('Sync now') }}</span>
+                                    <span wire:loading wire:target="syncPayPalNow">{{ __('Syncing…') }}</span>
+                                </button>
+                                <button type="button" wire:click="openBackfill({{ $int->id }})"
+                                        class="rounded border border-neutral-700 bg-neutral-900 px-2 py-1 text-neutral-200 hover:border-neutral-500 hover:bg-neutral-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                                    {{ __('Backfill…') }}
+                                </button>
+                            @endif
+                            <button type="button" wire:click="disconnectIntegration({{ $int->id }})"
+                                    wire:confirm="{{ __('Disconnect :n? This removes stored credentials; you\'ll need to reconnect to resume syncing.', ['n' => $int->label ?: $int->provider]) }}"
+                                    class="rounded border border-rose-800/40 bg-rose-900/20 px-2 py-1 text-rose-200 hover:bg-rose-900/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                                {{ __('Disconnect') }}
+                            </button>
+                        </div>
                     </li>
                 @endforeach
             </ul>
@@ -627,4 +734,53 @@ new class extends Component
         {{ __('Looking for name / locale / timezone / theme / currency / notification preferences, Gmail or Fastmail connection, or passkeys?') }}
         <a href="{{ route('profile') }}" class="text-sky-300 underline-offset-2 hover:underline">{{ __('They\'re on /profile.') }}</a>
     </section>
+
+    @if ($backfillIntegrationId)
+        <div x-cloak x-transition.opacity
+             class="fixed inset-0 z-40 bg-black/60"
+             wire:click="closeBackfill"
+             aria-hidden="true"></div>
+
+        <aside x-cloak
+               x-data
+               x-on:keydown.escape.window="$wire.closeBackfill()"
+               role="dialog" aria-modal="true" aria-label="{{ __('Backfill PayPal history') }}"
+               class="fixed left-1/2 top-24 z-50 w-full max-w-md -translate-x-1/2 overflow-hidden rounded-xl border border-neutral-800 bg-neutral-950 shadow-2xl">
+            <header class="flex items-center justify-between border-b border-neutral-800 px-5 py-3">
+                <h2 class="text-sm font-semibold text-neutral-100">{{ __('Backfill PayPal history') }}</h2>
+                <button type="button" wire:click="closeBackfill" aria-label="{{ __('Close') }}"
+                        class="rounded-md p-1 text-neutral-500 hover:bg-neutral-800 hover:text-neutral-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                    <svg class="h-4 w-4" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                        <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                    </svg>
+                </button>
+            </header>
+            <div class="space-y-4 px-5 py-4">
+                <p class="text-xs text-neutral-500">
+                    {{ __('Pull every PayPal transaction since the date below into this household. PayPal\'s Reporting API retains roughly 3 years; older data isn\'t available via the API (use the CSV export for that). Runs in the background — come back later and look at the Ledger.') }}
+                </p>
+
+                <div>
+                    <label for="pp-backfill-from" class="mb-1 block text-xs text-neutral-400">{{ __('Start from') }}</label>
+                    <input wire:model="backfillFrom" id="pp-backfill-from" type="date" required
+                           max="{{ now()->toDateString() }}"
+                           class="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                    <p class="mt-1 text-[11px] text-neutral-500">
+                        {{ __('Default is three years back — PayPal\'s retention ceiling.') }}
+                    </p>
+                </div>
+            </div>
+            <footer class="flex items-center justify-end gap-2 border-t border-neutral-800 bg-neutral-900/50 px-5 py-3">
+                <button type="button" wire:click="closeBackfill"
+                        class="rounded-md px-3 py-1.5 text-xs text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                    {{ __('Cancel') }}
+                </button>
+                <button type="button" wire:click="startBackfill"
+                        class="rounded-md bg-emerald-600 px-4 py-1.5 text-xs font-medium text-emerald-50 hover:bg-emerald-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                    <span wire:loading.remove wire:target="startBackfill">{{ __('Queue backfill') }}</span>
+                    <span wire:loading wire:target="startBackfill">{{ __('Queueing…') }}</span>
+                </button>
+            </footer>
+        </aside>
+    @endif
 </div>

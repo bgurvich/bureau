@@ -768,6 +768,99 @@ class extends Component
      * @param  array<int, array{description: string, amount: float, occurred_on: string}>  $rows
      * @return array<string, int>
      */
+    /**
+     * Preview of how every row in a parsed file will be mapped to a
+     * counterparty Contact on import — shown in the per-file table so
+     * the user can spot misclassifications BEFORE hitting Import.
+     *
+     * Returns [rowIndex => ['status' => existing|new|skip, 'label' => string]]:
+     *   - existing: fingerprint matches a Contact already in the
+     *     database (label is the contact's display_name).
+     *   - new: would auto-create a Contact on import (fingerprint
+     *     repeats ≥ 2 times in this file; label is the humanized name
+     *     we'd seed it with).
+     *   - skip: no existing match and no repeat — the row lands with
+     *     counterparty_contact_id = null, no Contact created.
+     *
+     * Matches buildContactMap()'s logic exactly so the preview can't
+     * drift from the import.
+     *
+     * @return array<int, array{status: string, label: string}>
+     */
+    public function vendorPreviewForFile(string $fileId): array
+    {
+        $rows = (array) ($this->parsed[$fileId]['rows'] ?? []);
+        if ($rows === []) {
+            return [];
+        }
+
+        $counts = [];
+        $fingerprints = [];
+        foreach ($rows as $idx => $row) {
+            $fp = $this->descriptionFingerprint((string) ($row['description'] ?? ''));
+            $fingerprints[$idx] = $fp;
+            if ($fp !== '') {
+                $counts[$fp] = ($counts[$fp] ?? 0) + 1;
+            }
+        }
+
+        $existing = $this->contactFingerprints();
+
+        $out = [];
+        foreach ($rows as $idx => $row) {
+            $fp = $fingerprints[$idx] ?? '';
+            if ($fp === '') {
+                $out[$idx] = ['status' => 'skip', 'label' => '—'];
+
+                continue;
+            }
+            if (isset($existing[$fp])) {
+                $out[$idx] = ['status' => 'existing', 'label' => (string) $existing[$fp]];
+
+                continue;
+            }
+            if (($counts[$fp] ?? 0) >= 2) {
+                $out[$idx] = [
+                    'status' => 'new',
+                    'label' => $this->humanizeDescription((string) ($row['description'] ?? '')),
+                ];
+
+                continue;
+            }
+            $out[$idx] = ['status' => 'skip', 'label' => '—'];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Memoised fingerprint → display_name lookup for every existing
+     * Contact, matching buildContactMap()'s fingerprinting exactly.
+     * Computed once per request so the preview re-renders don't hit
+     * the DB per file.
+     *
+     * @return array<string, string>
+     */
+    #[Computed]
+    public function contactFingerprints(): array
+    {
+        $map = [];
+        $contacts = Contact::query()->get(['id', 'display_name', 'organization']);
+        foreach ($contacts as $c) {
+            foreach ([$c->display_name, $c->organization] as $candidate) {
+                if (! is_string($candidate) || $candidate === '') {
+                    continue;
+                }
+                $fp = $this->descriptionFingerprint($candidate);
+                if ($fp !== '' && ! isset($map[$fp])) {
+                    $map[$fp] = (string) $c->display_name;
+                }
+            }
+        }
+
+        return $map;
+    }
+
     private function buildContactMap(array $rows): array
     {
         $counts = [];
@@ -1155,6 +1248,7 @@ class extends Component
                                 </div>
                             </div>
 
+                            @php($vendorPreview = $this->vendorPreviewForFile($fileId))
                             <div class="overflow-x-auto rounded-md border border-neutral-800 bg-neutral-950/60">
                                 <table class="w-full text-xs">
                                     <thead class="text-neutral-500">
@@ -1162,6 +1256,7 @@ class extends Component
                                             <th class="px-2 py-1.5"></th>
                                             <th class="px-2 py-1.5 text-left">{{ __('Date') }}</th>
                                             <th class="px-2 py-1.5 text-left">{{ __('Description') }}</th>
+                                            <th class="px-2 py-1.5 text-left">{{ __('Vendor') }}</th>
                                             <th class="px-2 py-1.5 text-right">{{ __('Amount') }}</th>
                                             <th class="px-2 py-1.5"></th>
                                         </tr>
@@ -1169,6 +1264,7 @@ class extends Component
                                     <tbody class="divide-y divide-neutral-800/60">
                                         @foreach ($rows as $i => $row)
                                             @php($isDup = $dupForFile[$i] ?? false)
+                                            @php($vp = $vendorPreview[$i] ?? ['status' => 'skip', 'label' => '—'])
                                             <tr class="{{ $isDup ? 'opacity-60' : '' }}">
                                                 <td class="px-2 py-1 align-middle">
                                                     <input type="checkbox"
@@ -1179,6 +1275,15 @@ class extends Component
                                                 </td>
                                                 <td class="px-2 py-1 tabular-nums text-neutral-300">{{ $row['occurred_on'] }}</td>
                                                 <td class="px-2 py-1 text-neutral-100">{{ $row['description'] }}</td>
+                                                <td class="px-2 py-1 text-[11px]">
+                                                    @if ($vp['status'] === 'existing')
+                                                        <span class="text-neutral-300" title="{{ __('Matches an existing contact') }}">{{ $vp['label'] }}</span>
+                                                    @elseif ($vp['status'] === 'new')
+                                                        <span class="text-emerald-300" title="{{ __('Will auto-create — seen :n times in this file', ['n' => 2]) }}">+ {{ $vp['label'] }}</span>
+                                                    @else
+                                                        <span class="text-neutral-600">—</span>
+                                                    @endif
+                                                </td>
                                                 <td class="px-2 py-1 text-right tabular-nums {{ $row['amount'] >= 0 ? 'text-emerald-400' : 'text-neutral-100' }}">
                                                     {{ Formatting::money((float) $row['amount'], $rowCurrency) }}
                                                 </td>
