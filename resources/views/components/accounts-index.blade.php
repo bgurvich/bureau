@@ -176,10 +176,13 @@ class extends Component
                                 @endif
                             </td>
                             <td class="px-4 py-3 text-xs text-neutral-400">
-                                @if ($account->vendor)
-                                    {{ $account->vendor->display_name }}
-                                @elseif ($account->institution)
+                                @if ($account->institution)
                                     {{ $account->institution }}
+                                    @if ($account->vendor)
+                                        <div class="text-[11px] text-neutral-500">{{ $account->vendor->display_name }}</div>
+                                    @endif
+                                @elseif ($account->vendor)
+                                    {{ $account->vendor->display_name }}
                                 @else
                                     —
                                 @endif
