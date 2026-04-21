@@ -527,8 +527,30 @@ document.addEventListener('alpine:init', () => {
     const alpine = window.Alpine;
     if (!alpine) return;
 
+    // Best-effort browser + OS guess from the user agent. Used to pre-fill the
+    // passkey alias field so registered credentials have distinct, recognisable
+    // names out of the box instead of a generic "Security key". User can still
+    // override before submitting.
+    const guessDeviceLabel = (): string => {
+        const ua = typeof navigator !== 'undefined' ? navigator.userAgent || '' : '';
+        const platform =
+            /iPhone/.test(ua) ? 'iPhone' :
+            /iPad/.test(ua) ? 'iPad' :
+            /Android/.test(ua) ? 'Android' :
+            /Mac OS X/.test(ua) ? 'Mac' :
+            /Windows/.test(ua) ? 'Windows' :
+            /Linux/.test(ua) ? 'Linux' : 'device';
+        const browser =
+            /Edg\//.test(ua) ? 'Edge' :
+            /OPR\//.test(ua) ? 'Opera' :
+            /Firefox/.test(ua) ? 'Firefox' :
+            /Chrome/.test(ua) ? 'Chrome' :
+            /Safari/.test(ua) ? 'Safari' : '';
+        return browser ? `${browser} on ${platform}` : platform;
+    };
+
     alpine.data('passkeyManager', (() => ({
-        alias: '',
+        alias: guessDeviceLabel(),
         busy: false,
         error: '',
         notice: '',
@@ -552,7 +574,10 @@ document.addEventListener('alpine:init', () => {
                 const saveRes = await postJson('/webauthn/register', body);
                 if (!saveRes.ok) throw new Error('Server rejected the new passkey.');
                 this.notice = 'Passkey registered.';
-                this.alias = '';
+                // Reset the alias to the guessed label, not empty, so a second
+                // registration on the same machine (e.g. adding a platform key
+                // after a password-manager passkey) has a sensible starting name.
+                this.alias = guessDeviceLabel();
                 window.dispatchEvent(new CustomEvent('passkey-enrolled'));
             } catch (err) {
                 this.error = err instanceof Error ? err.message : 'Passkey registration failed.';
