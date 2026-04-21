@@ -18,6 +18,16 @@
 
     <div class="grid grid-cols-2 gap-3">
         <div>
+            <label for="i-ck-recur" class="mb-1 block text-xs text-neutral-400">{{ __('Recurrence') }}</label>
+            <select wire:model.live="checklist_recurrence_mode" id="i-ck-recur"
+                    class="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                <option value="daily">{{ __('Daily') }}</option>
+                <option value="weekdays">{{ __('Weekdays (Mon–Fri)') }}</option>
+                <option value="weekends">{{ __('Weekends (Sat–Sun)') }}</option>
+                <option value="custom">{{ __('Custom RRULE') }}</option>
+            </select>
+        </div>
+        <div>
             <label for="i-ck-tod" class="mb-1 block text-xs text-neutral-400">{{ __('Time of day') }}</label>
             <select wire:model="checklist_time_of_day" id="i-ck-tod"
                     class="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
@@ -28,34 +38,31 @@
                 <option value="anytime">{{ __('Anytime') }}</option>
             </select>
         </div>
+    </div>
+
+    @if ($checklist_recurrence_mode === 'custom')
+        <div>
+            <label for="i-ck-rrule" class="mb-1 block text-xs text-neutral-400">{{ __('RRULE') }}</label>
+            <input wire:model="checklist_rrule" id="i-ck-rrule" type="text"
+                   placeholder="FREQ=WEEKLY;BYDAY=MO,WE,FR"
+                   class="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 font-mono text-xs text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+            <p class="mt-1 text-[11px] text-neutral-500">{{ __('Subset of RFC-5545: FREQ, INTERVAL, BYDAY, BYMONTHDAY, COUNT, UNTIL.') }}</p>
+        </div>
+    @endif
+
+    <div class="grid grid-cols-2 gap-3">
         <div>
             <label for="i-ck-dtstart" class="mb-1 block text-xs text-neutral-400">{{ __('Starts on') }}</label>
             <input wire:model="checklist_dtstart" id="i-ck-dtstart" type="date"
                    class="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
         </div>
-    </div>
-
-    <fieldset>
-        <legend class="mb-2 text-xs text-neutral-400">{{ __('Recurrence') }}</legend>
-        <div class="space-y-1.5 text-sm">
-            @foreach (['daily' => __('Daily'), 'weekdays' => __('Weekdays (Mon–Fri)'), 'weekends' => __('Weekends (Sat–Sun)'), 'custom' => __('Custom RRULE')] as $key => $label)
-                <label class="flex items-center gap-2 text-neutral-200">
-                    <input type="radio" wire:model.live="checklist_recurrence_mode" value="{{ $key }}"
-                           class="border-neutral-700 bg-neutral-950 text-neutral-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
-                    <span>{{ $label }}</span>
-                </label>
-            @endforeach
+        <div>
+            <label for="i-ck-paused" class="mb-1 block text-xs text-neutral-400">{{ __('Paused until') }}</label>
+            <input wire:model="checklist_paused_until" id="i-ck-paused" type="date"
+                   class="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+            <p class="mt-1 text-[11px] text-neutral-500">{{ __('Optional. Hides from today until this date passes.') }}</p>
         </div>
-        @if ($checklist_recurrence_mode === 'custom')
-            <div class="mt-2">
-                <label for="i-ck-rrule" class="mb-1 block text-xs text-neutral-400">{{ __('RRULE') }}</label>
-                <input wire:model="checklist_rrule" id="i-ck-rrule" type="text"
-                       placeholder="FREQ=WEEKLY;BYDAY=MO,WE,FR"
-                       class="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 font-mono text-xs text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
-                <p class="mt-1 text-[11px] text-neutral-500">{{ __('Subset of RFC-5545: FREQ, INTERVAL, BYDAY, BYMONTHDAY, COUNT, UNTIL.') }}</p>
-            </div>
-        @endif
-    </fieldset>
+    </div>
 
     <fieldset>
         <legend class="mb-2 text-xs text-neutral-400">
@@ -94,19 +101,11 @@
         @error('checklist_items')<div role="alert" class="mt-1 text-xs text-rose-400">{{ $message }}</div>@enderror
     </fieldset>
 
-    <div class="grid grid-cols-2 gap-3">
-        <div>
-            <label for="i-ck-paused" class="mb-1 block text-xs text-neutral-400">{{ __('Paused until') }}</label>
-            <input wire:model="checklist_paused_until" id="i-ck-paused" type="date"
-                   class="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
-            <p class="mt-1 text-[11px] text-neutral-500">{{ __('Optional. Hides from today until this date passes.') }}</p>
-        </div>
-        <div class="flex items-end">
-            <label class="flex items-center gap-2 text-sm text-neutral-200">
-                <input wire:model="checklist_active" type="checkbox" class="rounded border-neutral-700 bg-neutral-950">
-                <span>{{ __('Active') }}</span>
-            </label>
-        </div>
+    <div>
+        <label class="flex items-center gap-2 text-sm text-neutral-200">
+            <input wire:model="checklist_active" type="checkbox" class="rounded border-neutral-700 bg-neutral-950">
+            <span>{{ __('Active') }}</span>
+        </label>
     </div>
 
     @include('partials.inspector.fields.tags')
