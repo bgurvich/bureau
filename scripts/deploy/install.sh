@@ -429,17 +429,35 @@ step_env() {
     env_set DB_USERNAME          "bureau"
     env_set DB_PASSWORD          "$DB_PASSWORD"
 
-    env_set SESSION_DRIVER       "database"
+    # Session / cache / queue all on Redis — step_packages installs
+    # redis-server + php-redis, so there's no extra dependency. RAM cost is
+    # modest (~30 MB default) and every request shaves a DB round-trip vs
+    # the database-backed drivers. Separate logical DBs so a cache flush
+    # doesn't nuke sessions or pending queue jobs.
+    env_set SESSION_DRIVER       "redis"
+    env_set SESSION_CONNECTION   "session"
     env_set SESSION_LIFETIME     "120"
     env_set SESSION_ENCRYPT      "true"
     env_set SESSION_PATH         "/"
     env_set SESSION_DOMAIN       "$DOMAIN"
     env_set SESSION_SECURE_COOKIE "true"
     env_set SESSION_SAME_SITE    "lax"
-    env_set CACHE_STORE          "database"
-    env_set QUEUE_CONNECTION     "database"
+    env_set CACHE_STORE          "redis"
+    env_set QUEUE_CONNECTION     "redis"
     env_set BROADCAST_CONNECTION "log"
     env_set FILESYSTEM_DISK      "local"
+
+    env_set REDIS_CLIENT         "phpredis"
+    env_set REDIS_HOST           "127.0.0.1"
+    env_set REDIS_PORT           "6379"
+    env_set REDIS_PASSWORD       "null"
+    env_set REDIS_DB             "0"
+    env_set REDIS_CACHE_DB       "1"
+    env_set REDIS_QUEUE_DB       "2"
+    env_set REDIS_SESSION_DB     "3"
+    # Point Laravel's queue driver at the dedicated 'queue' Redis connection
+    # (config/database.php) so queued jobs land on REDIS_QUEUE_DB.
+    env_set REDIS_QUEUE_CONNECTION "queue"
 
     env_set MAIL_MAILER          "$mailer"
     env_set MAIL_HOST            "${MAIL_HOST:-127.0.0.1}"
