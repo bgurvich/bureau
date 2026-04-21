@@ -77,9 +77,7 @@
                                 [__('Records'), 'records.index', 'file-text'],
                             ],
                             __('Health') => [
-                                [__('Providers'), 'health.providers', 'stethoscope'],
-                                [__('Prescriptions'), 'health.prescriptions', 'pill'],
-                                [__('Appointments'), 'health.appointments', 'calendar-clock'],
+                                [__('Health'), 'health.index', 'stethoscope'],
                             ],
                         ];
                     @endphp

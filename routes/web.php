@@ -102,6 +102,7 @@ Route::middleware(['auth', 'preferences', 'household'])->group(function () {
     Route::livewire('/vehicles', 'vehicles-index')->name('assets.vehicles');
     Route::livewire('/inventory', 'inventory-index')->name('assets.inventory');
     Route::livewire('/assets', 'assets-hub')->name('assets.index');
+    Route::livewire('/health', 'health-hub')->name('health.index');
     Route::livewire('/health/providers', 'health-providers-index')->name('health.providers');
     Route::livewire('/health/prescriptions', 'prescriptions-index')->name('health.prescriptions');
     Route::livewire('/health/appointments', 'appointments-index')->name('health.appointments');
