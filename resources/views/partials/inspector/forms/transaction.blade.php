@@ -39,8 +39,8 @@
     </div>
     <div>
         <label for="i-txn-desc" class="mb-1 block text-xs text-neutral-400">{{ __('Description') }}</label>
-        <input wire:model="description" id="i-txn-desc" type="text"
-               class="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+        <textarea wire:model="description" id="i-txn-desc" rows="2"
+                  class="w-full resize-y rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300"></textarea>
     </div>
     <div>
         <label for="i-txn-memo" class="mb-1 block text-xs text-neutral-400">{{ __('Bank memo') }}</label>
