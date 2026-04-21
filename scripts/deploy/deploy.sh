@@ -224,42 +224,42 @@ ok "migrations applied"
 # ── Cache & optimisation ─────────────────────────────────
 echo ""
 echo -e "${BOLD}── Cache & optimisation ─────────────────────────────────${RESET}"
+
+# Pin group ownership + setgid on the cache parents BEFORE optimize
+# writes anything. php artisan optimize runs as the deploy user with
+# the deploy user's primary group (e.g. moshe:moshe), and if the
+# parent dir doesn't have the setgid bit, new files inherit *that*
+# group — not www-data — and php-fpm gets "Permission denied" on
+# every request, which fires before Laravel's logger initialises, so
+# laravel.log stays empty while nginx's error.log carries the only
+# stack trace. Doing the chgrp + setgid AFTER optimize would be too
+# late — the files are already owned moshe:moshe by then.
+# We use sudo because the deploy user isn't always a member of
+# www-data (the sudo-prime at the top keeps the credential warm).
+if getent group www-data >/dev/null 2>&1; then
+    sudo chgrp -R www-data storage/framework bootstrap/cache 2>/dev/null || true
+    sudo chmod g+rwxs storage/framework bootstrap/cache 2>/dev/null || true
+    sudo find storage/framework bootstrap/cache -type d -exec chmod g+s {} + 2>/dev/null || true
+    ok "storage/framework + bootstrap/cache → group=www-data, setgid on every dir"
+fi
+
 # Flush every compiled artefact before rebuilding. Without this, a new
 # composer dep (class added since the last cache) or a new Blade view
 # path can silently 500 because the cached bootstrap file still points
-# at the old class map — and the failure happens before Laravel's
-# logger initialises, so nothing lands in storage/logs/laravel.log.
+# at the old class map.
 php artisan optimize:clear
 ok "php artisan optimize:clear (flushed config + route + view + event + cache)"
 php artisan optimize
 ok "php artisan optimize (config + routes + views + events cached)"
 
-# Scope the post-optimize chmod to the two trees `php artisan optimize`
-# actually writes to. `storage/app/` is runtime user data (uploads,
-# backups, livewire-tmp) — those subdirs are created by www-data with
-# perms the deploy user can't traverse, so a blanket `find storage` trips
-# over "Permission denied" before it gets anywhere useful. Filter to
-# files we own too, because chmod requires ownership and runtime-created
-# files under storage/framework belong to www-data.
+# Post-write pass: the fresh files inherited www-data as their group
+# thanks to the setgid above, but we still want consistent perms
+# (group-readable, world-unreadable) so www-data can actually read
+# the cache and nobody else can. `find -user` scopes to files we own
+# since chmod requires ownership — runtime-created files under
+# storage/framework may still belong to www-data.
 find storage/framework bootstrap/cache -user "$(id -un)" -exec chmod ug+rwX,o-rwx {} +
-# Hand the group to www-data AND set the setgid bit on the parent dirs
-# so every future file optimize writes inherits www-data as its group.
-# Without the setgid bit, new files inherit the deploy user's primary
-# group (e.g. moshe:moshe), which www-data can't read through a 660
-# file — every request then 500s with "require(bootstrap/cache/config
-# .php): Permission denied", and the failure lands before Laravel's
-# logger initialises so laravel.log stays empty while nginx's
-# error.log is the only place the stack trace shows up.
-if getent group www-data >/dev/null 2>&1; then
-    find storage/framework bootstrap/cache -user "$(id -un)" -exec chgrp www-data {} + 2>/dev/null || true
-    for d in storage/framework bootstrap/cache; do
-        if [[ -d "$d" && -O "$d" ]]; then
-            chmod g+rwxs "$d" 2>/dev/null || true
-        fi
-    done
-    ok "storage/framework + bootstrap/cache → group=www-data, setgid on parent dirs"
-fi
-ok "storage/framework + bootstrap/cache → ug+rwX,o-rwx (scoped to files we own)"
+ok "storage/framework + bootstrap/cache → ug+rwX,o-rwx"
 
 # ── Restart services ─────────────────────────────────────
 echo ""
