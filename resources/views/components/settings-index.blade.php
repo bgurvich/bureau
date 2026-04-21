@@ -7,7 +7,6 @@ use App\Models\Integration;
 use App\Models\User;
 use App\Support\CurrentHousehold;
 use App\Support\PayPal\PayPalSync;
-use App\Support\VendorReresolver;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Mail;
@@ -17,58 +16,11 @@ use Livewire\Component;
 new class extends Component
 {
     /**
-     * Regex-per-line list of phrases to strip from transaction descriptions
-     * before vendor auto-detection. Persisted on `households.data`.
+     * Vendor ignore patterns + re-resolve live in the reusable
+     * `vendor-ignore-editor` Livewire subcomponent so the same editor
+     * can embed on /reconcile and anywhere else without duplicating
+     * state management.
      */
-    public string $vendorIgnorePatterns = '';
-
-    public ?string $vendorIgnoreSaved = null;
-
-    public function mount(): void
-    {
-        $h = CurrentHousehold::get();
-        $raw = is_object($h) ? data_get($h->data, 'vendor_ignore_patterns') : null;
-        $this->vendorIgnorePatterns = is_string($raw) ? $raw : '';
-    }
-
-    public function saveVendorIgnorePatterns(): void
-    {
-        $h = CurrentHousehold::get();
-        if (! $h) {
-            return;
-        }
-        $data = is_array($h->data) ? $h->data : [];
-        $data['vendor_ignore_patterns'] = $this->vendorIgnorePatterns;
-        $h->forceFill(['data' => $data])->save();
-
-        $this->vendorIgnoreSaved = __('Saved.');
-    }
-
-    public ?string $reresolveMessage = null;
-
-    /**
-     * Walk every imported Transaction and re-run vendor auto-detect
-     * against the current ignore-patterns + contact database. Manual
-     * assignments are preserved via the fingerprint-matches-description
-     * heuristic in VendorReresolver.
-     */
-    public function reresolveVendors(): void
-    {
-        $this->reresolveMessage = null;
-        $summary = VendorReresolver::run();
-
-        $this->reresolveMessage = __(
-            'Re-resolved :touched transaction(s): :matched matched existing vendors, :created new vendors created, :cleared cleared, :skipped left alone (looked manual).',
-            [
-                'touched' => $summary['touched'],
-                'matched' => $summary['matched_existing'],
-                'created' => $summary['created'],
-                'cleared' => $summary['cleared'],
-                'skipped' => $summary['skipped_manual'],
-            ]
-        );
-    }
-
     public string $inviteEmail = '';
 
     public string $inviteRole = 'member';
@@ -705,52 +657,10 @@ new class extends Component
         <header class="mb-3">
             <h3 id="vendor-ignore-heading" class="text-sm font-semibold text-neutral-100">{{ __('Vendor auto-detect · ignore list') }}</h3>
             <p class="mt-1 text-xs text-neutral-500">
-                {{ __('Regex patterns stripped from transaction descriptions before vendor matching. One per line, case-insensitive. Example: "purchase authorized on" turns "Purchase authorized on 07/30 Costco" into just "Costco" for matching and auto-created contact names.') }}
+                {{ __('Regex patterns stripped from transaction descriptions before vendor matching. Example: "purchase authorized on \d+/\d+" turns "Purchase authorized on 07/30 Costco" into just "Costco" for matching and auto-created contact names. Use "Re-resolve now" after editing to apply to already-imported transactions.') }}
             </p>
         </header>
-        <form wire:submit.prevent="saveVendorIgnorePatterns" class="space-y-2">
-            <label for="vendor-ignore" class="sr-only">{{ __('Vendor ignore patterns') }}</label>
-            <textarea wire:model="vendorIgnorePatterns" id="vendor-ignore" rows="6"
-                      placeholder="purchase authorized on&#10;pos purchase&#10;ach transfer (from|to)&#10;recurring payment authorized on"
-                      class="w-full resize-y rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 font-mono text-xs text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300"></textarea>
-            <div class="flex items-center justify-between gap-3">
-                <span class="text-[11px] text-neutral-500">
-                    {{ __('Syntax: PCRE regex body, no delimiters. Broken lines are skipped silently.') }}
-                </span>
-                <div class="flex items-center gap-2">
-                    @if ($vendorIgnoreSaved)
-                        <span role="status" class="text-[11px] text-emerald-300">{{ $vendorIgnoreSaved }}</span>
-                    @endif
-                    <button type="submit"
-                            class="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs text-neutral-200 hover:border-neutral-500 hover:bg-neutral-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
-                        <span wire:loading.remove wire:target="saveVendorIgnorePatterns">{{ __('Save') }}</span>
-                        <span wire:loading wire:target="saveVendorIgnorePatterns">{{ __('Saving…') }}</span>
-                    </button>
-                </div>
-            </div>
-        </form>
-
-        <div class="mt-4 flex flex-wrap items-center gap-3 border-t border-neutral-800 pt-3">
-            <div class="flex-1 min-w-0">
-                <div class="text-xs text-neutral-300">{{ __('Re-resolve existing transactions') }}</div>
-                <p class="mt-0.5 text-[11px] text-neutral-500">
-                    {{ __('Walks every imported transaction and re-runs vendor auto-detect with the patterns above. Manual contact assignments are preserved; auto-set assignments move to the cleaner vendor (or get cleared if nothing matches).') }}
-                </p>
-            </div>
-            <button type="button"
-                    wire:click="reresolveVendors"
-                    wire:confirm="{{ __('Re-resolve vendors on every imported transaction?') }}"
-                    wire:loading.attr="disabled" wire:target="reresolveVendors"
-                    class="shrink-0 rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs text-neutral-200 hover:border-neutral-500 hover:bg-neutral-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300 disabled:opacity-60">
-                <span wire:loading.remove wire:target="reresolveVendors">{{ __('Re-resolve now') }}</span>
-                <span wire:loading wire:target="reresolveVendors">{{ __('Working…') }}</span>
-            </button>
-        </div>
-        @if ($reresolveMessage)
-            <div role="status" class="mt-2 rounded-md border border-emerald-800/40 bg-emerald-900/20 px-3 py-2 text-[11px] text-emerald-200">
-                {{ $reresolveMessage }}
-            </div>
-        @endif
+        <livewire:vendor-ignore-editor />
     </section>
 
     {{-- Backups ───────────────────────────────────────────────────────── --}}

@@ -149,6 +149,21 @@ class extends Component
         </p>
     </header>
 
+    {{-- Inline vendor-ignore editor so filler patterns can be added
+         mid-reconcile (e.g. spotting "Purchase authorized on" pollution
+         in the uncategorised list) without bouncing to /settings. The
+         Re-resolve button inside the editor refreshes existing rows
+         to match the updated rules. --}}
+    <details class="rounded-xl border border-neutral-800 bg-neutral-900/40 p-4 text-xs">
+        <summary class="cursor-pointer text-neutral-300">
+            {{ __('Vendor auto-detect · ignore list') }}
+            <span class="ml-1 text-neutral-600">{{ __('(add patterns without leaving this page)') }}</span>
+        </summary>
+        <div class="mt-3">
+            <livewire:vendor-ignore-editor />
+        </div>
+    </details>
+
     @php($counts = $this->counts)
 
     <dl class="grid grid-cols-2 gap-3 sm:grid-cols-4">
