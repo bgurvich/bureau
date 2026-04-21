@@ -2,8 +2,8 @@ import { test, expect } from '@playwright/test';
 
 test('login page renders', async ({ page }) => {
     await page.goto('/login');
-    await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
-    await expect(page.getByLabel('Email')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Sign in', level: 1 })).toBeVisible();
+    await expect(page.getByLabel('Email', { exact: true })).toBeVisible();
     await expect(page.getByLabel('Password')).toBeVisible();
 });
 
@@ -15,9 +15,9 @@ test('dashboard is behind auth (unauthenticated redirects to login)', async ({ p
 
 test('authenticated user sees the dashboard radars', async ({ page }) => {
     await page.goto('/login');
-    await page.getByLabel('Email').fill('boris@gurvich.me');
+    await page.getByLabel('Email', { exact: true }).fill('boris@gurvich.me');
     await page.getByLabel('Password').fill('change-me');
-    await page.getByRole('button', { name: 'Sign in' }).click();
+    await page.getByRole('button', { name: 'Sign in with password' }).click();
 
     await expect(page).toHaveURL('/');
     await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
@@ -27,9 +27,9 @@ test('authenticated user sees the dashboard radars', async ({ page }) => {
 
 test('user-menu dropdown opens and signs out', async ({ page }) => {
     await page.goto('/login');
-    await page.getByLabel('Email').fill('boris@gurvich.me');
+    await page.getByLabel('Email', { exact: true }).fill('boris@gurvich.me');
     await page.getByLabel('Password').fill('change-me');
-    await page.getByRole('button', { name: 'Sign in' }).click();
+    await page.getByRole('button', { name: 'Sign in with password' }).click();
     await expect(page).toHaveURL('/');
 
     const trigger = page.getByRole('button', { name: 'Open user menu' });
@@ -48,9 +48,9 @@ test('user-menu dropdown opens and signs out', async ({ page }) => {
 
 test('theme toggle flips the rendered palette', async ({ page }) => {
     await page.goto('/login');
-    await page.getByLabel('Email').fill('boris@gurvich.me');
+    await page.getByLabel('Email', { exact: true }).fill('boris@gurvich.me');
     await page.getByLabel('Password').fill('change-me');
-    await page.getByRole('button', { name: 'Sign in' }).click();
+    await page.getByRole('button', { name: 'Sign in with password' }).click();
     await expect(page).toHaveURL('/');
 
     const bodyBg = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);

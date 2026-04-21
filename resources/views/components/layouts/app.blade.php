@@ -20,9 +20,21 @@
         {{ __('Skip to main content') }}
     </a>
 
-    <div class="flex min-h-screen">
-        <aside class="w-60 shrink-0 border-r border-neutral-800 bg-neutral-900/50" aria-label="{{ __('Primary') }}">
-            <div class="sticky top-0 flex h-screen flex-col">
+    <div class="flex min-h-screen"
+         x-data="{ navOpen: false }"
+         x-on:keydown.escape.window="navOpen = false"
+         x-on:resize.window.debounce.100ms="if (window.innerWidth >= 768) navOpen = false">
+        <div x-show="navOpen"
+             x-transition.opacity
+             x-on:click="navOpen = false"
+             class="fixed inset-0 z-30 bg-neutral-950/70 md:hidden"
+             aria-hidden="true"
+             style="display: none"></div>
+        <aside class="fixed inset-y-0 left-0 z-40 w-60 shrink-0 -translate-x-full transform border-r border-neutral-800 bg-neutral-950 transition-transform duration-200 md:static md:translate-x-0 md:bg-neutral-900/50"
+               x-bind:class="navOpen ? 'translate-x-0' : ''"
+               x-bind:aria-hidden="navOpen ? 'false' : undefined"
+               aria-label="{{ __('Primary') }}">
+            <div class="flex h-full flex-col md:sticky md:top-0 md:h-screen">
                 <div class="border-b border-neutral-800 px-5 py-4">
                     <div class="text-base font-semibold tracking-tight">{{ __('Bureau') }}</div>
                     @auth
@@ -112,11 +124,22 @@
         </aside>
 
         <div class="flex min-w-0 flex-1 flex-col">
-            <header class="flex h-14 items-center justify-between border-b border-neutral-800 px-6">
-                <div>
-                    <h1 class="text-sm font-medium text-neutral-300">{{ $title ?? __('Dashboard') }}</h1>
+            <header class="flex h-14 items-center justify-between gap-2 border-b border-neutral-800 px-4 md:px-6">
+                <div class="flex min-w-0 items-center gap-2">
+                    <button type="button"
+                            x-on:click="navOpen = !navOpen"
+                            x-bind:aria-expanded="navOpen"
+                            aria-controls="main-nav"
+                            aria-label="{{ __('Toggle navigation') }}"
+                            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-neutral-800 bg-neutral-900 text-neutral-300 hover:border-neutral-700 hover:bg-neutral-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300 md:hidden">
+                        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true"
+                             stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+                            <path d="M4 6h16M4 12h16M4 18h16"/>
+                        </svg>
+                    </button>
+                    <h1 class="truncate text-sm font-medium text-neutral-300">{{ $title ?? __('Dashboard') }}</h1>
                 </div>
-                <div class="flex items-center gap-3">
+                <div class="flex shrink-0 items-center gap-2 md:gap-3">
                     @auth
                         <livewire:time-tracker />
                     @endauth
@@ -149,7 +172,7 @@
                     @endauth
                 </div>
             </header>
-            <main id="main" tabindex="-1" class="flex-1 p-6">
+            <main id="main" tabindex="-1" class="flex-1 p-4 md:p-6">
                 {{ $slot }}
             </main>
         </div>

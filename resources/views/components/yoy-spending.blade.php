@@ -192,8 +192,8 @@ new class extends Component
     </div>
 
     <h3 class="mt-2 text-xs font-medium uppercase tracking-wider text-neutral-500">{{ __('By month') }}</h3>
-    <div class="overflow-hidden rounded-xl border border-neutral-800 bg-neutral-900/40">
-        <table class="w-full text-sm">
+    <div class="overflow-x-auto rounded-xl border border-neutral-800 bg-neutral-900/40">
+        <table class="w-full min-w-[40rem] text-sm">
             <thead class="border-b border-neutral-800 bg-neutral-900/60 text-[10px] uppercase tracking-wider text-neutral-500">
                 <tr>
                     <th scope="col" class="px-3 py-2 text-left font-medium">{{ __('Month') }}</th>
@@ -236,8 +236,8 @@ new class extends Component
             {{ __('No categorized outflows in either year.') }}
         </x-ui.empty-state>
     @else
-        <div class="overflow-hidden rounded-xl border border-neutral-800 bg-neutral-900/40">
-            <table class="w-full text-sm">
+        <div class="overflow-x-auto rounded-xl border border-neutral-800 bg-neutral-900/40">
+            <table class="w-full min-w-[40rem] text-sm">
                 <thead class="border-b border-neutral-800 bg-neutral-900/60 text-[10px] uppercase tracking-wider text-neutral-500">
                     <tr>
                         <th scope="col" class="px-3 py-2 text-left font-medium">{{ __('Category') }}</th>

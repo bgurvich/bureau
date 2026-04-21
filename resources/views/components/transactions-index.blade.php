@@ -268,7 +268,7 @@ class extends Component
         </div>
     @else
         <div class="overflow-x-auto rounded-xl border border-neutral-800 bg-neutral-900/40">
-            <table class="w-full text-sm">
+            <table class="w-full min-w-[56rem] text-sm">
                 <thead class="border-b border-neutral-800 text-left">
                     <tr>
                         <th scope="col" class="w-10 px-2 py-2"><span class="sr-only">{{ __('Scan') }}</span></th>

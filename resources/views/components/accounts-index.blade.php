@@ -131,8 +131,8 @@ class extends Component
             {{ __('No accounts yet.') }}
         </div>
     @else
-        <div class="overflow-hidden rounded-xl border border-neutral-800 bg-neutral-900/40">
-            <table class="w-full text-sm">
+        <div class="overflow-x-auto rounded-xl border border-neutral-800 bg-neutral-900/40">
+            <table class="w-full min-w-[40rem] text-sm">
                 <caption class="sr-only">{{ __('Your accounts') }}</caption>
                 <thead class="border-b border-neutral-800 text-left">
                     <tr>
