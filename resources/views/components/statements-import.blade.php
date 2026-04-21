@@ -520,11 +520,14 @@ class extends Component
     {
         $totalCreated = 0;
         $totalSkipped = 0;
+        $needAccount = 0;
         foreach (array_keys($this->parsed) as $fileId) {
             if (($this->parsed[$fileId]['status'] ?? null) !== 'ready') {
                 continue;
             }
             if (! ($this->accountFor[$fileId] ?? null)) {
+                $needAccount++;
+
                 continue;
             }
             $created = $this->persistFile($fileId);
@@ -540,9 +543,18 @@ class extends Component
             $pairedTransfers = app(TransferPairing::class)->pair($household);
         }
 
-        $this->bulkMessage = $pairedTransfers > 0
-            ? __(':c transactions created, :s skipped, :p transfer pair(s) linked.', ['c' => $totalCreated, 's' => $totalSkipped, 'p' => $pairedTransfers])
-            : __(':c transactions created, :s skipped.', ['c' => $totalCreated, 's' => $totalSkipped]);
+        $parts = [];
+        $parts[] = __(':c transactions created, :s skipped.', ['c' => $totalCreated, 's' => $totalSkipped]);
+        if ($pairedTransfers > 0) {
+            $parts[] = __(':p transfer pair(s) linked.', ['p' => $pairedTransfers]);
+        }
+        if ($needAccount > 0) {
+            // Surface silent skips — files without an account selection were
+            // previously dropped on the floor. Now the user sees the gap and
+            // can pick an account + re-click Import.
+            $parts[] = __(':n file(s) still need an account — pick one and re-run Import.', ['n' => $needAccount]);
+        }
+        $this->bulkMessage = implode(' ', $parts);
     }
 
     private function persistFile(string $fileId): int
@@ -633,17 +645,31 @@ class extends Component
             }
         }
 
+        // Fingerprint existing contacts once, in PHP. The old LIKE query
+        // required the fingerprint to appear as a contiguous substring of
+        // the contact's display_name — which it often doesn't, because
+        // the fingerprint skips short words (e.g. "home auto") while
+        // humanizeDescription keeps every word ≥3 chars (e.g. "Home Mtg
+        // Auto"). That mismatch made every re-import miss the existing
+        // vendor and create a fresh duplicate.
+        $vendorFingerprints = [];
+        $contacts = Contact::query()->get(['id', 'display_name', 'organization']);
+        foreach ($contacts as $c) {
+            foreach ([$c->display_name, $c->organization] as $candidate) {
+                if (! is_string($candidate) || $candidate === '') {
+                    continue;
+                }
+                $cfp = $this->descriptionFingerprint($candidate);
+                if ($cfp !== '' && ! isset($vendorFingerprints[$cfp])) {
+                    $vendorFingerprints[$cfp] = (int) $c->id;
+                }
+            }
+        }
+
         $map = [];
         foreach ($counts as $fp => $count) {
-            $existing = Contact::query()
-                ->where(function ($q) use ($fp) {
-                    $q->whereRaw('LOWER(display_name) LIKE ?', ['%'.$fp.'%'])
-                        ->orWhereRaw('LOWER(organization) LIKE ?', ['%'.$fp.'%']);
-                })
-                ->value('id');
-
-            if ($existing) {
-                $map[$fp] = (int) $existing;
+            if (isset($vendorFingerprints[$fp])) {
+                $map[$fp] = $vendorFingerprints[$fp];
 
                 continue;
             }
@@ -656,6 +682,10 @@ class extends Component
                     'is_vendor' => true,
                 ]);
                 $map[$fp] = $contact->id;
+                // Seed the lookup so subsequent fingerprints in this same
+                // batch see the brand-new contact instead of creating
+                // another copy of it.
+                $vendorFingerprints[$fp] = $contact->id;
             }
         }
 
@@ -911,14 +941,26 @@ class extends Component
                         <div class="space-y-3 px-4 py-3">
                             <div class="flex flex-wrap items-end gap-3">
                                 <div>
-                                    <label class="block text-[10px] uppercase tracking-wider text-neutral-500">{{ __('Account') }}</label>
+                                    <label class="block text-[10px] uppercase tracking-wider text-neutral-500">
+                                        {{ __('Account') }} <span class="text-rose-400" aria-hidden="true">*</span>
+                                    </label>
                                     <select wire:change="setAccount('{{ $fileId }}', $event.target.value || null)"
-                                            class="mt-1 rounded-md border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-sm text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
-                                        <option value="">—</option>
+                                            aria-required="true"
+                                            @class([
+                                                'mt-1 rounded-md border bg-neutral-950 px-2 py-1.5 text-sm text-neutral-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300',
+                                                'border-rose-700 focus-visible:border-rose-400' => ! $accountId,
+                                                'border-neutral-700 focus-visible:border-neutral-400' => (bool) $accountId,
+                                            ])>
+                                        <option value="">{{ __('— pick an account —') }}</option>
                                         @foreach ($this->accounts as $a)
                                             <option value="{{ $a->id }}" @selected($accountId == $a->id)>{{ $a->name }}</option>
                                         @endforeach
                                     </select>
+                                    @if (! $accountId)
+                                        <p class="mt-1 text-[11px] text-rose-400">
+                                            {{ __('Required. Transactions won\'t import until an account is set.') }}
+                                        </p>
+                                    @endif
                                 </div>
                                 @if ($state['opening'] !== null || $state['closing'] !== null)
                                     <div class="text-[11px] text-neutral-500">

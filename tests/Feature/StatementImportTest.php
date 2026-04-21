@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Account;
+use App\Models\Contact;
 use App\Models\Media;
 use App\Models\Transaction;
 use Illuminate\Http\UploadedFile;
@@ -145,6 +146,100 @@ it('re-imports a statement whose transactions were manually wiped', function () 
 
     expect(Transaction::count())->toBe(3)
         ->and(Media::where('hash', '!=', '')->count())->toBe(1);
+});
+
+it('surfaces "account required" in the bulk message when a file has none assigned', function () {
+    authedInHousehold();
+
+    // One ready file, no account → importAll silently skipped it before;
+    // now the bulk message calls out the gap so the user knows what to do.
+    $parsed = ['f1' => [
+        'name' => 'missing-acct.pdf',
+        'status' => 'ready',
+        'hash' => str_repeat('b', 64),
+        'bank_slug' => 'wellsfargo_checking',
+        'bank_label' => 'Wells Fargo — Checking',
+        'import_source' => 'statement:wellsfargo_checking',
+        'account_last4' => null,
+        'period_start' => null,
+        'period_end' => null,
+        'opening' => null,
+        'closing' => null,
+        'disk_path' => 'statements/fake.pdf',
+        'mime' => 'application/pdf',
+        'size' => 1,
+        'rows' => [
+            ['occurred_on' => '2026-01-22', 'description' => 'Test', 'amount' => -10.00, 'closing_balance' => null],
+        ],
+    ]];
+
+    $c = Livewire::test('statements-import')
+        ->set('parsed', $parsed)
+        ->set('accountFor', [])
+        ->set('selected', ['f1' => [true]])
+        ->call('importAll');
+
+    expect($c->get('bulkMessage'))->toContain('1 file')
+        ->and($c->get('bulkMessage'))->toContain('account');
+    expect(Transaction::count())->toBe(0);
+});
+
+it('reuses the same vendor Contact across statement batches', function () {
+    // Regression: buildContactMap ran a substring LIKE against
+    // display_name — but the fingerprint skips short words while
+    // humanizeDescription keeps them, so the fingerprint never
+    // substring-matched its own auto-created contact on re-import. Every
+    // batch created a fresh duplicate. Fix fingerprints both sides in
+    // PHP and matches on equality.
+    authedInHousehold();
+    $account = Account::create(['type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
+
+    $rowsOne = [
+        ['occurred_on' => '2026-01-05', 'description' => 'WF Home Mtg Auto Pay 012218 0302976428 Boris Gurvich', 'amount' => -907.62, 'closing_balance' => null],
+        ['occurred_on' => '2026-01-22', 'description' => 'WF Home Mtg Auto Pay 012218 0383322369 Boris Gurvich', 'amount' => -907.62, 'closing_balance' => null],
+    ];
+    $rowsTwo = [
+        ['occurred_on' => '2026-02-05', 'description' => 'WF Home Mtg Auto Pay 022518 0302976428 Boris Gurvich', 'amount' => -907.62, 'closing_balance' => null],
+        ['occurred_on' => '2026-02-22', 'description' => 'WF Home Mtg Auto Pay 022518 0383322369 Boris Gurvich', 'amount' => -907.62, 'closing_balance' => null],
+    ];
+    $make = fn (string $id, array $rows) => [$id => [
+        'name' => "stmt-{$id}.pdf",
+        'status' => 'ready',
+        'hash' => str_repeat(substr($id, 0, 1), 64),
+        'bank_slug' => 'wellsfargo_checking',
+        'bank_label' => 'Wells Fargo — Checking',
+        'import_source' => 'statement:wellsfargo_checking',
+        'account_last4' => '1234',
+        'period_start' => null, 'period_end' => null,
+        'opening' => null, 'closing' => null,
+        'disk_path' => 'statements/fake.pdf',
+        'mime' => 'application/pdf',
+        'size' => 1,
+        'rows' => $rows,
+    ]];
+
+    Livewire::test('statements-import')
+        ->set('parsed', $make('f1', $rowsOne))
+        ->set('accountFor', ['f1' => $account->id])
+        ->set('selected', ['f1' => [true, true]])
+        ->call('importFile', 'f1');
+
+    $vendorsAfterOne = Contact::count();
+    expect($vendorsAfterOne)->toBe(1);
+
+    // Second batch, same merchant description. The fingerprint lookup
+    // should find the already-created contact and NOT make a new one.
+    Livewire::test('statements-import')
+        ->set('parsed', $make('f2', $rowsTwo))
+        ->set('accountFor', ['f2' => $account->id])
+        ->set('selected', ['f2' => [true, true]])
+        ->call('importFile', 'f2');
+
+    expect(Contact::count())->toBe(1);
+
+    // And every transaction points at the same contact.
+    $contactIds = Transaction::pluck('counterparty_contact_id')->filter()->unique()->values();
+    expect($contactIds->count())->toBe(1);
 });
 
 it('persists the statement running balance onto each Transaction row', function () {
