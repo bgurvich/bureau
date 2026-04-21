@@ -29,10 +29,11 @@ Four records on `bureau.homes`'s authoritative DNS (Cloudflare, Route 53, your r
 
 | Type | Host | Value | What it proves |
 |---|---|---|---|
-| **SPF** (TXT) | `@` (apex) | `v=spf1 include:spf.mtasv.net ~all` | Postmark's MTAs are authorised to send for this domain. |
 | **DKIM** (TXT) | `20240101pm._domainkey` (example selector) | `k=rsa; p=MIGfMA0GCSqGSIb3…` (Postmark-provided) | Cryptographic signature proves messages were actually sent by Postmark on your behalf, not a spoofer. |
-| **Return-Path** (CNAME) | `pm-bounces` | `pm.mtasv.net` | Bounces route back through Postmark. Aligns `MAIL FROM` with `From:` so DMARC passes. |
+| **Return-Path** (CNAME) | `pm-bounces` | `pm.mtasv.net` | Bounces route back through Postmark. DMARC alignment-via-SPF is inherited from `pm.mtasv.net`'s own SPF record, which is why you no longer need an apex `v=spf1 include:spf.mtasv.net` record. |
 | **DMARC** (TXT) | `_dmarc` | `v=DMARC1; p=none; rua=mailto:dmarc@bureau.homes` | Reporting policy. Start with `p=none`, tighten to `p=quarantine` → `p=reject` after a week of clean reports. |
+
+> **Postmark dropped the SPF requirement** (as of late 2025 — their UI reads "We no longer require SPF DNS records since it's automatically handled for you"). DMARC alignment happens via DKIM instead of SPF on the apex. If you publish multiple senders (e.g. mailgun AND postmark), you still want your own `v=spf1 include:... -all` on the apex — but with a single provider, skip it.
 
 **Plus reverse DNS (PTR)** on the VPS — set via your hosting provider's control panel (Hetzner, DO, Linode, AWS) so `bureau.homes` resolves to the box's IP AND the box's IP resolves back to `bureau.homes`. For transactional-provider sending this is cosmetic (Postmark's MTAs send, not yours), but it's mandatory if you ever flip to self-hosted SMTP.
 
