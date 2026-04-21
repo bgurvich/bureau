@@ -109,6 +109,44 @@ it('imports selected rows and deterministic external_id prevents re-import dupli
     expect(Transaction::count())->toBe(3);
 });
 
+it('re-imports a statement whose transactions were manually wiped', function () {
+    // Regression: after DELETE FROM transactions; the Media row for a
+    // previously imported statement lingered, and file-level dedup
+    // short-circuited the second upload to "already_imported, 0 rows"
+    // with no way to re-ingest. parseBytes now treats an existing Media
+    // with zero surviving transactions as an orphan and drops it so the
+    // normal parse/persist path can run again.
+    authedInHousehold();
+    $account = Account::create(['type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
+
+    $file = UploadedFile::fake()->createWithContent('citi.csv', citiCheckingCsv());
+    $c = Livewire::test('statements-import')->set('files', [$file]);
+    $fileId = array_keys($c->get('parsed'))[0];
+    $c->call('setAccount', $fileId, $account->id)
+        ->call('importAll');
+
+    expect(Transaction::count())->toBe(3)
+        ->and(Media::where('hash', '!=', '')->count())->toBe(1);
+
+    // Simulate the production wipe.
+    Transaction::query()->delete();
+    expect(Transaction::count())->toBe(0);
+
+    // Re-upload the same file bytes. Must parse fresh, not short-circuit.
+    $file2 = UploadedFile::fake()->createWithContent('citi.csv', citiCheckingCsv());
+    $c2 = Livewire::test('statements-import')->set('files', [$file2]);
+    $re = array_values($c2->get('parsed'))[0];
+    expect($re['status'])->toBe('ready')
+        ->and(count($re['rows']))->toBe(3);
+
+    $reId = array_keys($c2->get('parsed'))[0];
+    $c2->call('setAccount', $reId, $account->id)
+        ->call('importAll');
+
+    expect(Transaction::count())->toBe(3)
+        ->and(Media::where('hash', '!=', '')->count())->toBe(1);
+});
+
 it('attaches the uploaded file as Media with role=statement on every created Transaction', function () {
     authedInHousehold();
     $account = Account::create(['type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);

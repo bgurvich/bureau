@@ -258,16 +258,32 @@ class extends Component
         if ($existingMedia) {
             $prevImportedCount = Transaction::whereHas('media', fn ($q) => $q->where('media.id', $existingMedia->id))
                 ->count();
-            $this->parsed[$fileId] = [
-                'name' => $name,
-                'status' => 'already_imported',
-                'hash' => $hash,
-                'media_id' => $existingMedia->id,
-                'prev_imported_count' => $prevImportedCount,
-                'rows' => [],
-            ];
+            if ($prevImportedCount > 0) {
+                // Normal dedup path: file has been imported and the rows
+                // it produced are still in the DB. Nothing to do.
+                $this->parsed[$fileId] = [
+                    'name' => $name,
+                    'status' => 'already_imported',
+                    'hash' => $hash,
+                    'media_id' => $existingMedia->id,
+                    'prev_imported_count' => $prevImportedCount,
+                    'rows' => [],
+                ];
 
-            return;
+                return;
+            }
+            // Orphan: the Media row lingered but every Transaction it was
+            // attached to has since been deleted (manual DB wipe, household
+            // reset). Drop the stale Media + its on-disk file so the normal
+            // parse/persist path below can recreate both cleanly — otherwise
+            // the user is stuck on "already imported, 0 transactions" with
+            // no way to re-ingest the same file.
+            try {
+                Storage::disk((string) $existingMedia->disk)->delete((string) $existingMedia->path);
+            } catch (\Throwable) {
+                // Best-effort — the file may already be gone on disk.
+            }
+            $existingMedia->delete();
         }
 
         $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION)) ?: 'bin';
