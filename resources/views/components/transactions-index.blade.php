@@ -39,6 +39,9 @@ class extends Component
     #[Url(as: 'category')]
     public string $categoryFilter = '';
 
+    #[Url(as: 'counterparty')]
+    public string $counterpartyFilter = '';
+
     #[Url(as: 'sort')]
     public string $sortBy = 'occurred_on';
 
@@ -96,9 +99,19 @@ class extends Component
         $this->resetPage();
     }
 
+    public function updatingCounterpartyFilter(): void
+    {
+        $this->resetPage();
+    }
+
+    public function updatingCategoryFilter(): void
+    {
+        $this->resetPage();
+    }
+
     public function clearFilters(): void
     {
-        $this->reset(['accountId', 'status', 'search']);
+        $this->reset(['accountId', 'status', 'search', 'counterpartyFilter', 'categoryFilter', 'tagFilter']);
         $this->from = now()->subMonths(3)->toDateString();
         $this->to = now()->toDateString();
         $this->resetPage();
@@ -323,6 +336,9 @@ class extends Component
                 ->whereHas('tags', fn ($t) => $t->where('slug', $this->tagFilter))
             )
             ->when($this->categoryFilter !== '', fn ($q) => $q->where('category_id', $this->categoryFilter))
+            ->when($this->counterpartyFilter === 'none', fn ($q) => $q->whereNull('counterparty_contact_id'))
+            ->when($this->counterpartyFilter !== '' && $this->counterpartyFilter !== 'none',
+                fn ($q) => $q->where('counterparty_contact_id', $this->counterpartyFilter))
             ->whereDate('occurred_on', '>=', $this->from)
             ->whereDate('occurred_on', '<=', $this->to)
             ->when($this->search !== '', function ($q) {
@@ -422,6 +438,19 @@ class extends Component
             <label for="f-to" class="block text-[10px] uppercase tracking-wider text-neutral-500">{{ __('To') }}</label>
             <input wire:model.live="to" id="f-to" type="date"
                    class="mt-1 rounded-md border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-sm text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+        </div>
+        <div class="w-56">
+            <label for="f-cp" class="block text-[10px] uppercase tracking-wider text-neutral-500">{{ __('Counterparty') }}</label>
+            <div class="mt-1">
+                <x-ui.searchable-select
+                    id="f-cp"
+                    model="counterpartyFilter"
+                    :options="[
+                        '' => __('Any — clear filter'),
+                        'none' => __('— none (no counterparty) —'),
+                    ] + $this->contactOptions->mapWithKeys(fn ($c) => [(string) $c->id => $c->display_name])->all()"
+                    :placeholder="__('Any')" />
+            </div>
         </div>
         <button type="button" wire:click="clearFilters"
                 class="ml-auto rounded-md border border-neutral-800 px-3 py-1.5 text-xs text-neutral-400 hover:border-neutral-700 hover:text-neutral-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">

@@ -117,6 +117,49 @@ it('toggles a row into and out of selected', function () {
         ->assertSet('selected', []);
 });
 
+it('filters rows by counterparty_contact_id', function () {
+    authedInHousehold();
+    $account = Account::create([
+        'type' => 'checking', 'name' => 'Everyday',
+        'currency' => 'USD', 'opening_balance' => 0,
+    ]);
+    $costco = Contact::create(['kind' => 'org', 'display_name' => 'Costco']);
+    $target = Contact::create(['kind' => 'org', 'display_name' => 'Target']);
+
+    $costcoRow = Transaction::create([
+        'account_id' => $account->id, 'occurred_on' => '2026-07-10',
+        'amount' => -50, 'currency' => 'USD', 'description' => 'costco',
+        'status' => 'cleared', 'counterparty_contact_id' => $costco->id,
+    ]);
+    $targetRow = Transaction::create([
+        'account_id' => $account->id, 'occurred_on' => '2026-07-11',
+        'amount' => -20, 'currency' => 'USD', 'description' => 'target',
+        'status' => 'cleared', 'counterparty_contact_id' => $target->id,
+    ]);
+    $orphanRow = Transaction::create([
+        'account_id' => $account->id, 'occurred_on' => '2026-07-12',
+        'amount' => -10, 'currency' => 'USD', 'description' => 'cash',
+        'status' => 'cleared',
+    ]);
+
+    $component = Livewire::test('transactions-index')
+        ->set('from', '2026-07-01')
+        ->set('to', '2026-07-31');
+
+    // Single specific contact.
+    $component->set('counterpartyFilter', (string) $costco->id);
+    expect($component->instance()->transactions->pluck('id')->all())->toBe([$costcoRow->id]);
+
+    // "none" — rows without a counterparty.
+    $component->set('counterpartyFilter', 'none');
+    expect($component->instance()->transactions->pluck('id')->all())->toBe([$orphanRow->id]);
+
+    // Empty — all rows.
+    $component->set('counterpartyFilter', '');
+    expect($component->instance()->transactions->pluck('id')->sort()->values()->all())
+        ->toEqualCanonicalizing([$costcoRow->id, $targetRow->id, $orphanRow->id]);
+});
+
 it('header checkbox: selectAllVisible adds every visible row; deselectAllVisible drops only those, preserving cross-page picks', function () {
     authedInHousehold();
     [$a, $b, $c] = bulkSeed();
