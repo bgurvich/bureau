@@ -134,6 +134,51 @@ it('refreshes the name field when the user picks a different winner', function (
         ->assertSet('mergeWinnerName', 'Beta');
 });
 
+it('filters to orphaned contacts (no references anywhere)', function () {
+    authedInHousehold();
+    $account = Account::create([
+        'type' => 'checking', 'name' => 'Everyday',
+        'currency' => 'USD', 'opening_balance' => 0,
+    ]);
+
+    $referenced = Contact::create(['kind' => 'org', 'display_name' => 'In use']);
+    $orphanA = Contact::create(['kind' => 'org', 'display_name' => 'Old ghost A']);
+    $orphanB = Contact::create(['kind' => 'person', 'display_name' => 'Old ghost B']);
+
+    // Pin the "referenced" contact to a Transaction so it stops
+    // being an orphan candidate.
+    Transaction::create([
+        'account_id' => $account->id,
+        'occurred_on' => '2026-07-30',
+        'amount' => -10,
+        'currency' => 'USD',
+        'description' => 'test',
+        'status' => 'cleared',
+        'counterparty_contact_id' => $referenced->id,
+    ]);
+
+    $component = Livewire::test('contacts-index')->set('orphanedOnly', true);
+    $ids = $component->instance()->contacts->pluck('id')->sort()->values()->all();
+
+    expect($ids)->toEqualCanonicalizing([$orphanA->id, $orphanB->id])
+        ->and($ids)->not->toContain($referenced->id);
+});
+
+it('bulk-deletes orphaned contacts via the existing deleteSelected action', function () {
+    authedInHousehold();
+
+    $orphanA = Contact::create(['kind' => 'org', 'display_name' => 'Ghost A']);
+    $orphanB = Contact::create(['kind' => 'org', 'display_name' => 'Ghost B']);
+
+    Livewire::test('contacts-index')
+        ->set('orphanedOnly', true)
+        ->set('selected', [$orphanA->id, $orphanB->id])
+        ->call('deleteSelected');
+
+    expect(Contact::find($orphanA->id))->toBeNull()
+        ->and(Contact::find($orphanB->id))->toBeNull();
+});
+
 it('refuses to merge when fewer than two contacts are selected', function () {
     authedInHousehold();
 

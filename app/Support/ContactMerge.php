@@ -73,6 +73,44 @@ final class ContactMerge
         return $winner->fresh() ?? $winner;
     }
 
+    /**
+     * IDs of every Contact referenced anywhere in the schema, across
+     * single-FK columns, pivot rows, and polymorphic morph rows. Used
+     * by the contacts-index "orphaned" filter to find candidates for
+     * bulk cleanup after a vendor re-resolve.
+     *
+     * @return array<int, int>
+     */
+    public static function referencedContactIds(): array
+    {
+        $ids = [];
+        foreach (self::$singleFk as [$table, $column]) {
+            DB::table($table)
+                ->whereNotNull($column)
+                ->pluck($column)
+                ->each(function ($id) use (&$ids) {
+                    $ids[(int) $id] = (int) $id;
+                });
+        }
+        foreach (self::$pivots as [$table, $contactColumn]) {
+            DB::table($table)
+                ->pluck($contactColumn)
+                ->each(function ($id) use (&$ids) {
+                    $ids[(int) $id] = (int) $id;
+                });
+        }
+        foreach (self::$morphs as [$table, $typeColumn, $idColumn]) {
+            DB::table($table)
+                ->where($typeColumn, Contact::class)
+                ->pluck($idColumn)
+                ->each(function ($id) use (&$ids) {
+                    $ids[(int) $id] = (int) $id;
+                });
+        }
+
+        return array_values($ids);
+    }
+
     /** @var array<int, array{0: string, 1: string}> [table, contact_fk_column] */
     private static array $singleFk = [
         ['accounts', 'counterparty_contact_id'],

@@ -19,6 +19,15 @@ class extends Component
     #[Url(as: 'role')]
     public string $roleFilter = '';
 
+    /**
+     * When true, filter down to Contacts that aren't referenced from
+     * any domain table (transactions, accounts, pivots, morphs). A
+     * vendor re-resolve often strands old auto-created contacts —
+     * this filter surfaces them for bulk delete / merge.
+     */
+    #[Url(as: 'orphaned')]
+    public bool $orphanedOnly = false;
+
     #[Url(as: 'q')]
     public string $search = '';
 
@@ -190,6 +199,13 @@ class extends Component
             ->when($this->roleFilter === 'vendor', fn ($q) => $q->where('is_vendor', true))
             ->when($this->roleFilter === 'customer', fn ($q) => $q->where('is_customer', true))
             ->when($this->roleFilter === 'both', fn ($q) => $q->where('is_vendor', true)->where('is_customer', true))
+            ->when($this->orphanedOnly, function ($q) {
+                $referenced = ContactMerge::referencedContactIds();
+
+                return $referenced === []
+                    ? $q
+                    : $q->whereNotIn('id', $referenced);
+            })
             ->when($this->favoritesOnly, fn ($q) => $q->where('favorite', true))
             ->when($this->search !== '', function ($q) {
                 $term = '%'.$this->search.'%';
@@ -262,6 +278,11 @@ class extends Component
                 <option value="both">{{ __('Both') }}</option>
             </select>
         </div>
+        <label class="flex items-center gap-2 text-xs text-neutral-300"
+               title="{{ __('Contacts with no transactions, accounts, contracts, or other references. Safe to bulk-delete after a vendor re-resolve.') }}">
+            <input wire:model.live="orphanedOnly" type="checkbox" class="rounded border-neutral-700 bg-neutral-950">
+            {{ __('Orphaned only') }}
+        </label>
         <label class="flex items-center gap-2 text-xs text-neutral-300">
             <input wire:model.live="favoritesOnly" type="checkbox" class="rounded border-neutral-700 bg-neutral-950">
             {{ __('Favorites only') }}
