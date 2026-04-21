@@ -56,10 +56,8 @@
                                 [__('Ledger'), 'fiscal.ledger', 'wallet'],
                                 [__('Bills & Income'), 'fiscal.recurring', 'receipt'],
                                 [__('Subscriptions'), 'fiscal.subscriptions', 'key'],
-                                [__('Year over year'), 'fiscal.yoy', 'pie'],
-                                [__('Budgets'), 'fiscal.budgets', 'pie'],
+                                [__('Planning'), 'fiscal.planning', 'pie'],
                                 [__('Rules'), 'fiscal.rules', 'note'],
-                                [__('Savings goals'), 'fiscal.savings_goals', 'check-square'],
                             ],
                             __('Life') => [
                                 [__('Schedule'), 'life.schedule', 'calendar'],

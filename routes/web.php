@@ -63,7 +63,7 @@ Route::middleware(['auth', 'preferences', 'household'])->group(function () {
     Route::livewire('/reconcile', 'reconciliation-workbench')->name('reconcile');
     Route::livewire('/profile', 'profile')->name('profile');
     Route::livewire('/settings', 'settings-index')->name('settings');
-    Route::livewire('/finance', 'finance-overview')->name('fiscal.overview');
+    Route::livewire('/finance', 'finance-hub')->name('fiscal.overview');
     Route::livewire('/ledger', 'ledger-hub')->name('fiscal.ledger');
     Route::livewire('/accounts', 'accounts-index')->name('fiscal.accounts');
     Route::livewire('/transactions', 'transactions-index')->name('fiscal.transactions');
@@ -71,6 +71,7 @@ Route::middleware(['auth', 'preferences', 'household'])->group(function () {
     Route::livewire('/subscriptions', 'subscriptions-index')->name('fiscal.subscriptions');
     Route::livewire('/finance/yoy', 'yoy-spending')->name('fiscal.yoy');
     Route::livewire('/budgets', 'budgets-index')->name('fiscal.budgets');
+    Route::livewire('/planning', 'planning-hub')->name('fiscal.planning');
     Route::livewire('/category-rules', 'category-rules-index')->name('fiscal.category_rules');
     Route::livewire('/tag-rules', 'tag-rules-index')->name('fiscal.tag_rules');
     Route::livewire('/rules', 'rules-hub')->name('fiscal.rules');
