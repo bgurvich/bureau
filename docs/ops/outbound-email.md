@@ -70,7 +70,7 @@ If the server name happens to match an actual subdomain you want to send from (e
 
 ### Record syntax notes
 
-- **DKIM selector**: Postmark rotates keys annually; the selector (`20260421pm`) changes on rotation. Keep both old + new selectors in DNS during rotation — Postmark's UI flags when old can be deleted.
+- **DKIM selector**: timestamped per your Postmark domain-verification event (e.g. `20260421075019pm` = 2026-04-21 07:50:19). Postmark also rotates annually. Any time you delete + re-add the domain in Postmark, the selector changes — so does the key — and the old DNS record becomes dead weight. Update DNS to match the current selector; delete stale selectors once Postmark shows verified.
 - **DMARC `rua`**: aggregate reports. Create a throwaway inbox for the address; you'll get daily XML reports that read like firehose logs. `ruf` (per-message forensics) is usually too noisy to enable.
 - **DMARC alignment**: `From:` domain must match SPF's Return-Path domain OR DKIM's signing domain. With Postmark's Return-Path CNAME + DKIM above, alignment passes automatically.
 
