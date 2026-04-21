@@ -62,7 +62,9 @@ If the server name happens to match an actual subdomain you want to send from (e
 
 ### DNS host-field gotchas
 
-- Registrars (Name.com especially) auto-append the zone. Type only the leaf label: `20260421pm._domainkey` — **not** `20260421pm._domainkey.bureau.homes`. If you paste the full FQDN, the record ends up at `20260421pm._domainkey.bureau.homes.bureau.homes` (doubled zone) and Postmark can't find it.
+- Registrars auto-append the zone. Type only the leaf label: `20260421pm._domainkey` — **not** `20260421pm._domainkey.bureau.homes`. If you paste the full FQDN, the record ends up at `20260421pm._domainkey.bureau.homes.bureau.homes` (doubled zone) and Postmark can't find it.
+- Name.com in particular locks the zone to the right of the Host field — you literally can only edit the subdomain part, which prevents the doubled-zone mistake. Leave it blank for apex (`@`) records, type the subdomain label otherwise.
+- After you click Save in Name.com, refresh the page and confirm the record shows up in the zone listing. If it doesn't appear, the save didn't persist (usually a validation issue that swallowed silently — check the value field for unescaped special characters).
 - DKIM values can exceed 255 characters. Most DNS UIs accept a single long string and chunk it automatically; some older ones need you to paste as `"chunk1" "chunk2"` (multi-string TXT). If dig returns multiple quoted chunks, that's fine — RFC 6376 allows it.
 - `_dmarc` is literal, with the underscore. Some UIs reject underscores in "Host" fields — if yours does, paste `_dmarc` anyway; most modern registrars accept it.
 
