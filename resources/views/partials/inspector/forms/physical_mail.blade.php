@@ -29,13 +29,14 @@
 
     <div>
         <label for="i-pm-sender" class="mb-1 block text-xs text-neutral-400">{{ __('Sender') }}</label>
-        <select wire:model="pm_sender_id" id="i-pm-sender"
-                class="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
-            <option value="">—</option>
-            @foreach (\App\Models\Contact::orderBy('display_name')->get(['id', 'display_name']) as $c)
-                <option value="{{ $c->id }}">{{ $c->display_name }}</option>
-            @endforeach
-        </select>
+        <x-ui.searchable-select
+            id="i-pm-sender"
+            model="pm_sender_id"
+            :options="['' => '—'] + $this->contacts->mapWithKeys(fn ($c) => [$c->id => $c->display_name])->all()"
+            placeholder="—"
+            allow-create
+            create-method="createCounterparty" />
+        <p class="mt-1 text-[11px] text-neutral-500">{{ __('Type to search existing contacts; press enter on a new name to create one.') }}</p>
     </div>
 
     <div>

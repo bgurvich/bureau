@@ -62,7 +62,7 @@ class extends Component
                 {{ __('Physical mail received — letters, bills, slips. Snap a photo from the phone, file the details here.') }}
             </p>
         </div>
-        <x-ui.new-record-button type="physical_mail" :label="__('New post')" />
+        <x-ui.new-record-button type="physical_mail" :label="__('New post')" shortcut="P" />
     </header>
 
     <form wire:submit.prevent class="flex flex-wrap items-end gap-3 rounded-lg border border-neutral-800 bg-neutral-900/40 p-4" aria-label="{{ __('Filters') }}">

@@ -20,7 +20,7 @@ class extends Component
 
     public function setTab(string $tab): void
     {
-        if (in_array($tab, ['accounts', 'transactions', 'inbox', 'import', 'reconcile', 'bookkeeper'], true)) {
+        if (in_array($tab, ['accounts', 'transactions', 'months', 'inbox', 'import', 'reconcile', 'bookkeeper'], true)) {
             $this->tab = $tab;
         }
     }
@@ -37,6 +37,7 @@ class extends Component
         $tabs = [
             'accounts' => __('Accounts'),
             'transactions' => __('Transactions'),
+            'months' => __('Months'),
             'reconcile' => __('Reconcile'),
             'inbox' => __('Inbox'),
             'import' => __('Import statements'),
@@ -64,6 +65,9 @@ class extends Component
         @switch($tab)
             @case('transactions')
                 <livewire:transactions-index :key="'ledger-transactions'" />
+                @break
+            @case('months')
+                <livewire:transactions-months :key="'ledger-months'" />
                 @break
             @case('reconcile')
                 <livewire:reconciliation-workbench :key="'ledger-reconcile'" />

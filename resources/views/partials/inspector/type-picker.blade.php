@@ -31,7 +31,7 @@
         __('Records') => [
             ['document', __('Document'), 'D'],
             ['online_account', __('Online account'), 'O'],
-            ['physical_mail', __('Post'), null],
+            ['physical_mail', __('Post'), 'P'],
             [null, __('Media / scan'), null],
         ],
         __('Health') => [
@@ -40,7 +40,7 @@
             [null, __('Prescription'), null],
         ],
         __('Time') => [
-            ['project', __('Project'), 'P'],
+            ['project', __('Project'), null],
             ['time_entry', __('Time entry'), 'L'],
         ],
     ];

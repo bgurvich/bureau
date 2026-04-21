@@ -76,7 +76,7 @@ class extends Component
             <h2 class="text-base font-semibold text-neutral-100">{{ __('Projects') }}</h2>
             <p class="mt-1 text-xs text-neutral-500">{{ __('Timer targets — each entry logs time to one of these.') }}</p>
         </div>
-        <x-ui.new-record-button type="project" :label="__('New project')" shortcut="P" />
+        <x-ui.new-record-button type="project" :label="__('New project')" />
     </header>
 
     <dl class="flex gap-5 text-xs">

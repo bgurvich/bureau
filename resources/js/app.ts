@@ -90,7 +90,7 @@ const TYPE_SHORTCUTS: Record<string, string> = {
     a: 'account',
     d: 'document',
     m: 'meeting',
-    p: 'project',
+    p: 'physical_mail',
     h: 'property',
     v: 'vehicle',
     i: 'inventory',
