@@ -68,29 +68,39 @@ final class WellsFargoCheckingStatementParser implements StatementParser
      */
     private function extractTransactions(string $text, int $assumeYear): array
     {
-        $lines = preg_split('/\r?\n/', $text) ?: [];
+        // WF checking Activity Summary tables can reflow per page — each
+        // page header ("Deposits/Additions | Withdrawals/Subtractions |
+        // Ending") re-anchors slightly different character columns when
+        // pdftotext -layout preserves page-local widths. Anchoring to
+        // page 1's header and reusing those positions on pages 2+ is
+        // what flipped mid-statement withdrawals into deposits. Split
+        // the text on form-feed (pdftotext's page separator) and
+        // process each page independently; fall back to single-page
+        // behaviour if the stream has no form-feeds (older pdftotext
+        // output, or a single-page statement).
+        $pages = preg_split("/\f/", $text) ?: [$text];
+        $rowsAll = [];
+        // Last-known page bounds so a page without a header (e.g. a
+        // continuation page whose header got clipped) can borrow
+        // columns from the previous page instead of falling back to
+        // sectioned mode, which would ignore column positions.
+        $lastBounds = null;
+        foreach ($pages as $page) {
+            $lines = preg_split('/\r?\n/', $page) ?: [];
+            $candidates = $this->gatherCandidateRows($lines);
+            $bounds = $this->columnBoundsFromHeader($lines)
+                ?? $this->columnBoundsFromClustering($candidates)
+                ?? $lastBounds;
 
-        // WF checking statements come in two layouts:
-        //   (a) Sectioned — separate "Deposits and Other Additions" /
-        //       "Withdrawals and Other Subtractions" lists with unsigned
-        //       amounts. Section headers carry the sign.
-        //   (b) Activity Summary — one table with three columns:
-        //       Deposits/Additions | Withdrawals/Subtractions |
-        //       Ending daily balance. pdftotext -layout preserves the
-        //       horizontal positions; we prefer anchoring to the header
-        //       line ("Deposits... Withdrawals... Ending...") because
-        //       it's robust to sparse data, and fall back to clustering
-        //       token end-offsets when the header isn't recognisable.
-        //
-        // We detect (b) first because it's unambiguous when it matches;
-        // (a) is the fallback for simple layouts without aligned columns.
-        $candidates = $this->gatherCandidateRows($lines);
-        $bounds = $this->columnBoundsFromHeader($lines)
-            ?? $this->columnBoundsFromClustering($candidates);
+            if ($bounds !== null) {
+                $lastBounds = $bounds;
+                array_push($rowsAll, ...$this->extractByColumns($candidates, $bounds, $assumeYear));
+            } else {
+                array_push($rowsAll, ...$this->extractBySections($lines, $assumeYear));
+            }
+        }
 
-        return $bounds !== null
-            ? $this->extractByColumns($candidates, $bounds, $assumeYear)
-            : $this->extractBySections($lines, $assumeYear);
+        return $rowsAll;
     }
 
     /**

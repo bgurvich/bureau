@@ -100,6 +100,53 @@ TXT;
         ->and($amounts)->not->toContain(16287.02);
 });
 
+it('Wells Fargo checking PDF parser re-anchors columns per page', function () {
+    // Regression: a multi-page statement shifted its column positions
+    // a few chars from page 2 onwards (pdftotext -layout preserves
+    // each page's widths independently). Anchoring to page 1's
+    // header and reusing it on page 2 flipped the withdrawal column
+    // into the deposit range, so mid-statement withdrawals imported
+    // as positive deposits. Splitting on the form-feed page break
+    // and re-anchoring per page restores the correct sign.
+    //
+    // Page 1 columns: Deposits ≈ col 58, Withdrawals ≈ col 72, Balance ≈ col 86
+    // Page 2 columns: Deposits ≈ col 64, Withdrawals ≈ col 80, Balance ≈ col 96
+    $page1 = <<<'TXT'
+Wells Fargo Bank
+Statement Period 01/01/2026 - 01/31/2026
+
+                                              Deposits/  Withdrawals/  Ending daily
+Date  Description                             Additions  Subtractions  balance
+1/05  Electric Co                                            120.50        4,879.50
+1/06  Water Utility                                           45.00        4,834.50
+TXT;
+    $page2 = <<<'TXT'
+                                                    Deposits/    Withdrawals/    Ending daily
+Date  Description                                   Additions    Subtractions    balance
+2/10  Gas Utility                                                      60.00        4,774.50
+2/15  Refund From Store                               25.00                         4,799.50
+2/20  Electric Co                                                     118.75        4,680.75
+TXT;
+    $text = $page1."\f".$page2;
+
+    $stmt = (new WellsFargoCheckingStatementParser)->parse($text);
+    $amounts = array_map(fn ($t) => $t->amount, $stmt->transactions);
+
+    expect(count($stmt->transactions))->toBe(5)
+        // Page 1 — withdrawals negative.
+        ->and($amounts)->toContain(-120.50)
+        ->and($amounts)->toContain(-45.00)
+        // Page 2 — withdrawals still negative despite the shifted
+        // columns. Before the fix, 60.00 and 118.75 imported as
+        // positive because page 1's column bounds put them inside
+        // the deposit range.
+        ->and($amounts)->toContain(-60.00)
+        ->and($amounts)->toContain(-118.75)
+        ->and($amounts)->toContain(25.00)
+        ->and($amounts)->not->toContain(60.00)
+        ->and($amounts)->not->toContain(118.75);
+});
+
 it('Wells Fargo checking PDF parser merges multi-line transaction descriptions', function () {
     // Regression: long descriptions wrap onto a second row with no date
     // and no money column. The old parser skipped continuation lines
