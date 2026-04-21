@@ -1,41 +1,91 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Bureau — Unified installer
+# Laravel unified installer
 #
-# Runnable by any user with sudo. Handles packages, database, app user, .env,
-# composer, frontend build, artisan, nginx, TLS, queue worker, scheduler.
-# Adapted from ~/nfp/scripts/deploy/install.sh but collapsed into a single
-# entrypoint — install-packages.sh + setup.sh are superseded by this file.
+# Generic installer for a Laravel app: packages → MariaDB → OS user →
+# permissions → .env → composer → frontend build → artisan → nginx → TLS
+# → queue worker → scheduler. Runnable by any user with sudo; escalates
+# only where needed. Bureau uses it as-is; fork for another Laravel app
+# by tweaking the CONFIG block below or setting env vars at the call site.
 #
 # Usage:
 #   bash scripts/deploy/install.sh                        # run all steps
+#   bash scripts/deploy/install.sh --dev                  # local-dev mode
 #   bash scripts/deploy/install.sh --only nginx ssl       # subset
 #   bash scripts/deploy/install.sh --skip firewall        # all except
 #   bash scripts/deploy/install.sh --force nginx          # re-run one step
 #   bash scripts/deploy/install.sh --force all            # re-run everything
 #
-# Available steps (run in this order):
-#   packages      OS packages (PHP, MariaDB, nginx, Redis, Tesseract,
-#                 ImageMagick, Poppler, p7zip, Certbot, Node via NVM).
-#   mariadb       Create `bureau` DB + user.
-#   app-user      Create `bureau` OS user.
-#   permissions   chown repo → bureau:www-data, normalise modes.
-#   env           Write .env with DB / mail / backup creds.
-#   composer      composer install as `bureau`.
-#   frontend      npm ci + npm run build as `bureau`.
-#   artisan       artisan migrate + db:seed (on empty DB).
-#   storage-link  artisan storage:link.
-#   nginx         vhost template → /etc/nginx/sites-available/bureau.conf.
-#   ssl           Let's Encrypt cert + renewal hooks.
-#   queue-worker  bureau-queue.service systemd unit.
-#   scheduler     `* * * * * artisan schedule:run` crontab for `bureau`.
-#   firewall      UFW: allow SSH + Nginx Full. (skipped by default — use --only firewall.)
+# `--only <step>` implies `--force <step>` — explicit-name always runs.
+# `--dev` skips ssl + firewall and flips .env values (APP_ENV=local,
+# APP_DEBUG=true, APP_URL=http://, SESSION_SECURE_COOKIE=false, LOG_LEVEL=debug).
 #
-# Completion markers tracked in /var/lib/bureau-install/. Safe to re-run.
+# Available steps (in order):
+#   packages, mariadb, app-user, permissions, env, composer, frontend,
+#   artisan, storage-link, nginx, ssl, queue-worker, scheduler, firewall.
+#
+# firewall is off unless you pass `--only firewall`. Everything else runs
+# by default.
+#
+# Completion markers in /var/lib/${APP_NAME}-install/. Safe to re-run.
 # =============================================================================
 set -euo pipefail
 umask 077
 export DEBIAN_FRONTEND=noninteractive
+
+# ═════════════════════════════════════════════════════════════════════════════
+# CONFIG — override via env vars at invocation, or edit defaults for a fork.
+# ═════════════════════════════════════════════════════════════════════════════
+
+# App identity. APP_NAME is the slug used for DB, OS user, systemd unit,
+# nginx site, marker dir, and backup archive prefix. DISPLAY_NAME goes into
+# the .env APP_NAME (shown in the UI).
+APP_NAME="${APP_NAME:-bureau}"
+DISPLAY_NAME="${DISPLAY_NAME:-Bureau}"
+
+APP_USER="${APP_USER:-$APP_NAME}"            # OS user that runs queue + scheduler
+DB_NAME="${DB_NAME:-$APP_NAME}"
+DB_USER="${DB_USER:-$APP_NAME}"
+
+# Domain the app is served at. Used by .env APP_URL, nginx template, certbot.
+DOMAIN="${DOMAIN:-${APP_NAME}.homes}"
+
+# Language runtimes.
+PHP_VER="${PHP_VER:-8.3}"
+NODE_VER="${NODE_VER:-22}"
+NVM_DIR="${NVM_DIR:-/opt/nvm}"
+
+# PHP extensions. Each entry becomes `php${PHP_VER}-${mod}`.
+PHP_MODULES_DEFAULT="fpm cli mysql redis mbstring xml curl zip bcmath intl gd opcache"
+PHP_MODULES="${PHP_MODULES:-$PHP_MODULES_DEFAULT}"
+
+# OS packages layered on top of the Laravel base set. Bureau needs OCR +
+# PDF thumbnailing + encrypted-zip backup. A different app might list less
+# or more — set EXTRA_APT_PACKAGES="" to install only the base.
+EXTRA_APT_PACKAGES_DEFAULT="tesseract-ocr tesseract-ocr-eng imagemagick poppler-utils p7zip-full"
+EXTRA_APT_PACKAGES="${EXTRA_APT_PACKAGES-$EXTRA_APT_PACKAGES_DEFAULT}"
+
+# Where the nginx vhost template lives (relative to APP_DIR) and what name
+# to install it under in /etc/nginx/sites-{available,enabled}/.
+NGINX_TEMPLATE="${NGINX_TEMPLATE:-scripts/deploy/nginx-${APP_NAME}.conf}"
+NGINX_SITE="${NGINX_SITE:-${APP_NAME}.conf}"
+
+# Systemd queue-worker unit name (without `.service`).
+QUEUE_UNIT="${QUEUE_UNIT:-${APP_NAME}-queue}"
+
+# Where completion markers live. Root-owned; created via sudo on first run.
+MARK_DIR="${MARK_DIR:-/var/lib/${APP_NAME}-install}"
+
+# Self-signed TLS placeholder location (used when Let's Encrypt hasn't run yet).
+SSL_PLACEHOLDER_DIR="${SSL_PLACEHOLDER_DIR:-/etc/ssl/${APP_NAME}}"
+
+# Validate identifiers that end up in SQL / systemd / nginx paths.
+for _id in "$APP_NAME" "$APP_USER" "$DB_NAME" "$DB_USER" "$QUEUE_UNIT"; do
+    [[ "$_id" =~ ^[A-Za-z0-9_-]+$ ]] \
+        || { echo "[error] Invalid identifier '${_id}' — must match [A-Za-z0-9_-]+" >&2; exit 1; }
+done
+
+# ═════════════════════════════════════════════════════════════════════════════
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
 CYAN='\033[0;36m'; BOLD='\033[1m'; RESET='\033[0m'
@@ -45,6 +95,32 @@ success() { echo -e "${GREEN}[ok]${RESET}    $*"; }
 warn()    { echo -e "${YELLOW}[warn]${RESET}  $*"; }
 die()     { echo -e "${RED}[error]${RESET} $*" >&2; exit 1; }
 step()    { echo -e "\n${BOLD}━━━  $*  ━━━${RESET}"; }
+
+# Early-exit for --help so operators can inspect options without needing
+# sudo cached first. Full flag parsing happens lower — this is a quick peek.
+for _arg in "$@"; do
+    if [[ "$_arg" == "-h" || "$_arg" == "--help" ]]; then
+        awk '/^# ====/{cnt++; if (cnt==2) exit} NR==1{next} /^#/{print} !/^#/{exit}' "$0" | sed 's/^# \{0,1\}//'
+        echo
+        echo "Configurable (env var = default):"
+        echo "  APP_NAME           = bureau"
+        echo "  DISPLAY_NAME       = Bureau"
+        echo "  APP_USER           = \$APP_NAME"
+        echo "  DB_NAME            = \$APP_NAME"
+        echo "  DB_USER            = \$APP_NAME"
+        echo "  DOMAIN             = \${APP_NAME}.homes"
+        echo "  PHP_VER            = 8.3"
+        echo "  NODE_VER           = 22"
+        echo "  PHP_MODULES        = fpm cli mysql redis mbstring xml curl zip bcmath intl gd opcache"
+        echo "  EXTRA_APT_PACKAGES = tesseract-ocr tesseract-ocr-eng imagemagick poppler-utils p7zip-full"
+        echo "  NGINX_TEMPLATE     = scripts/deploy/nginx-\${APP_NAME}.conf"
+        echo "  NGINX_SITE         = \${APP_NAME}.conf"
+        echo "  QUEUE_UNIT         = \${APP_NAME}-queue"
+        echo
+        echo "Example: APP_NAME=myapp DOMAIN=myapp.example.com bash install.sh"
+        exit 0
+    fi
+done
 
 [[ $EUID -eq 0 ]] && die "Run as a normal user with sudo, not as root. The script escalates where needed."
 command -v sudo >/dev/null 2>&1 || die "sudo is required; install sudo (or run as a user with sudo) and re-run."
@@ -59,9 +135,20 @@ trap '[[ -n "${SUDO_KEEPALIVE_PID:-}" ]] && kill "$SUDO_KEEPALIVE_PID" 2>/dev/nu
 ONLY_STEPS=()
 SKIP_STEPS=()
 FORCE_STEPS=()
+DEV_MODE=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --dev)
+            # Local / non-production install. Skips the bits that only make
+            # sense on a public host (TLS cert issuance, firewall) and flips
+            # the .env values that production would lock down (APP_ENV=local,
+            # APP_DEBUG=true, cookies not secure-only, etc.). Everything else
+            # still runs so the app actually works on the dev box.
+            DEV_MODE=true
+            shift
+            continue
+            ;;
         --only|--skip|--force|--redo)
             local_flag="$1"; shift
             while [[ $# -gt 0 && "$1" != --* ]]; do
@@ -74,16 +161,11 @@ while [[ $# -gt 0 ]]; do
             done
             continue
             ;;
-        -h|--help)
-            sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//'
-            exit 0
-            ;;
     esac
     shift
 done
 
 # ── Completion markers ───────────────────────────────────────────────────────
-MARK_DIR="/var/lib/bureau-install"
 sudo mkdir -p "$MARK_DIR"
 sudo chown "$USER":"$USER" "$MARK_DIR"
 
@@ -104,11 +186,18 @@ should_run() {
     [[ " ${SKIP_STEPS[*]} " == *" $name "* ]] && return 1
     [[ " ${SKIP_STEPS[*]} " == *" certbot "* && "$name" == "ssl" ]] && return 1
 
-    # firewall is opt-in: it's only run when explicitly --only firewall (or
-    # when no --only filter and it's not --skip'd — but by default it IS on
-    # the default list; skip gate makes it explicit).
+    # firewall is opt-in: only runs when named via --only firewall.
     if [[ "$name" == "firewall" && ${#ONLY_STEPS[@]} -eq 0 ]]; then
         return 1
+    fi
+
+    # In dev mode, skip public-host-only steps unless the operator
+    # explicitly names them via --only. Keeps `--dev` → no Let's Encrypt
+    # attempt on a box whose DNS doesn't point anywhere.
+    if [[ "$DEV_MODE" == true && ${#ONLY_STEPS[@]} -eq 0 ]]; then
+        case "$name" in
+            ssl|firewall) return 1 ;;
+        esac
     fi
 
     # `--force X Y` (without "all") narrows the run to those steps only.
@@ -233,7 +322,7 @@ ensure_db_password() {
         local default
         default="$(env_read DB_PASSWORD)"
         [[ -n "$default" ]] || default="$(openssl rand -base64 18)"
-        prompt DB_PASSWORD "MariaDB password for 'bureau' user" "$default" secret
+        prompt DB_PASSWORD "MariaDB password for '${DB_USER}' user" "$default" secret
     fi
 }
 ensure_mail_config() {
@@ -287,22 +376,23 @@ step_packages() {
         sudo apt-get update
     fi
 
-    # Laravel stack.
+    # Laravel stack. PHP modules from the $PHP_MODULES config var expand to
+    # `php${PHP_VER}-${mod}` so forks can drop gd/intl/opcache or add pgsql/
+    # soap/etc. without touching the script body.
+    local php_pkgs=()
+    for mod in $PHP_MODULES; do
+        php_pkgs+=("php${PHP_VER}-${mod}")
+    done
     sudo apt-get install -y --no-install-recommends \
         nginx mariadb-server redis-server composer \
-        "php${PHP_VER}-fpm" "php${PHP_VER}-cli" "php${PHP_VER}-mysql" \
-        "php${PHP_VER}-redis" "php${PHP_VER}-mbstring" "php${PHP_VER}-xml" \
-        "php${PHP_VER}-curl" "php${PHP_VER}-zip" "php${PHP_VER}-bcmath" \
-        "php${PHP_VER}-intl" "php${PHP_VER}-gd" "php${PHP_VER}-opcache" \
+        "${php_pkgs[@]}" \
         certbot
 
-    # OCR + media + backup toolchain. ImageMagick's default policy blocks
-    # the PDF coder (ImageTragick mitigation, CVE-2016-3714); PDFs go
-    # through Poppler's pdftotext / pdftoppm instead. p7zip-full unpacks
-    # AES-encrypted backup archives (unzip can't).
-    sudo apt-get install -y --no-install-recommends \
-        tesseract-ocr tesseract-ocr-eng \
-        imagemagick poppler-utils p7zip-full
+    # Extra packages declared in $EXTRA_APT_PACKAGES. Empty string = skip.
+    if [[ -n "$EXTRA_APT_PACKAGES" ]]; then
+        # shellcheck disable=SC2086
+        sudo apt-get install -y --no-install-recommends $EXTRA_APT_PACKAGES
+    fi
 
     # Node via NVM — system-wide at /opt/nvm, symlinked into /usr/local/bin.
     if [[ ! -d "$NVM_DIR" ]]; then
@@ -343,11 +433,13 @@ step_mariadb() {
     # Escape single quotes in DB_PASSWORD (SQL string literal).
     local esc_pw="${DB_PASSWORD//\'/\'\'}"
 
+    # $DB_NAME / $DB_USER are validated against [A-Za-z0-9_]+ at the top of
+    # the script so they can safely interpolate into identifier positions.
     sudo mariadb <<SQL
-CREATE DATABASE IF NOT EXISTS bureau CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER IF NOT EXISTS 'bureau'@'localhost' IDENTIFIED BY '${esc_pw}';
-ALTER USER 'bureau'@'localhost' IDENTIFIED BY '${esc_pw}';
-GRANT ALL PRIVILEGES ON bureau.* TO 'bureau'@'localhost';
+CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER IF NOT EXISTS '${DB_USER}'@'localhost' IDENTIFIED BY '${esc_pw}';
+ALTER USER '${DB_USER}'@'localhost' IDENTIFIED BY '${esc_pw}';
+GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'localhost';
 FLUSH PRIVILEGES;
 SQL
 
@@ -362,7 +454,7 @@ SQL
         env_set DB_PASSWORD   "$DB_PASSWORD"
     fi
 
-    success "MariaDB: database 'bureau' and user 'bureau'@localhost ready."
+    success "MariaDB: database '${DB_NAME}' and user '${DB_USER}'@localhost ready."
 }
 
 step_app_user() {
@@ -445,19 +537,38 @@ step_env() {
     local mailer="smtp"
     [[ -z "$MAIL_HOST" ]] && mailer="log"
 
-    env_set APP_NAME             '"Bureau"'
-    env_set APP_ENV              "production"
-    env_set APP_DEBUG            "false"
-    env_set APP_URL              "https://${DOMAIN}"
+    # Dev mode relaxes the env values that production would lock down.
+    # APP_URL stays http://DOMAIN (no TLS), debug is on, bcrypt rounds
+    # drop for faster seeder iteration. Log level is verbose. Cookies are
+    # not secure-only (would break local http testing).
+    local app_env="production"
+    local app_debug="false"
+    local app_url="https://${DOMAIN}"
+    local bcrypt_rounds="12"
+    local log_level="error"
+    local session_secure="true"
+    if [[ "$DEV_MODE" == true ]]; then
+        app_env="local"
+        app_debug="true"
+        app_url="http://${DOMAIN}"
+        bcrypt_rounds="4"
+        log_level="debug"
+        session_secure="false"
+    fi
+
+    env_set APP_NAME             "\"${DISPLAY_NAME}\""
+    env_set APP_ENV              "$app_env"
+    env_set APP_DEBUG            "$app_debug"
+    env_set APP_URL              "$app_url"
     env_set APP_LOCALE           "en"
     env_set APP_FALLBACK_LOCALE  "en"
-    env_set BCRYPT_ROUNDS        "12"
+    env_set BCRYPT_ROUNDS        "$bcrypt_rounds"
 
     env_set DB_CONNECTION        "mariadb"
     env_set DB_HOST              "127.0.0.1"
     env_set DB_PORT              "3306"
-    env_set DB_DATABASE          "bureau"
-    env_set DB_USERNAME          "bureau"
+    env_set DB_DATABASE          "$DB_NAME"
+    env_set DB_USERNAME          "$DB_USER"
     env_set DB_PASSWORD          "$DB_PASSWORD"
 
     # Session / cache / queue all on Redis — step_packages installs
@@ -471,7 +582,7 @@ step_env() {
     env_set SESSION_ENCRYPT      "true"
     env_set SESSION_PATH         "/"
     env_set SESSION_DOMAIN       "$DOMAIN"
-    env_set SESSION_SECURE_COOKIE "true"
+    env_set SESSION_SECURE_COOKIE "$session_secure"
     env_set SESSION_SAME_SITE    "lax"
     env_set CACHE_STORE          "redis"
     env_set QUEUE_CONNECTION     "redis"
@@ -500,7 +611,7 @@ step_env() {
 
     env_set LOG_CHANNEL          "stack"
     env_set LOG_STACK            "single"
-    env_set LOG_LEVEL            "error"
+    env_set LOG_LEVEL            "$log_level"
 
     env_set BACKUP_ARCHIVE_PASSWORD "$BACKUP_ARCHIVE_PASSWORD"
 
@@ -578,8 +689,8 @@ step_nginx() {
     step "Nginx configuration"
     command -v nginx &>/dev/null || die "nginx not installed — run step 'packages' first."
 
-    local src="${APP_DIR}/scripts/deploy/nginx-bureau.conf"
-    local dest="/etc/nginx/sites-available/bureau.conf"
+    local src="${APP_DIR}/${NGINX_TEMPLATE}"
+    local dest="/etc/nginx/sites-available/${NGINX_SITE}"
     [[ -f "$src" ]] || die "template missing: $src"
 
     sudo sed -e "s|__DOMAIN__|${DOMAIN}|g" \
@@ -595,21 +706,21 @@ step_nginx() {
         sudo sed -i "s|ssl_certificate .*|ssl_certificate     ${le_cert}/fullchain.pem;|" "$dest"
         sudo sed -i "s|ssl_certificate_key .*|ssl_certificate_key ${le_cert}/privkey.pem;|" "$dest"
         info "Pointed vhost at existing Let's Encrypt cert."
-    elif ! sudo test -f "/etc/ssl/bureau/fullchain.pem"; then
+    elif ! sudo test -f "${SSL_PLACEHOLDER_DIR}/fullchain.pem"; then
         # Short-lived self-signed placeholder so nginx boots before step_ssl.
-        sudo mkdir -p /etc/ssl/bureau
+        sudo mkdir -p "$SSL_PLACEHOLDER_DIR"
         sudo openssl req -x509 -nodes -days 1 -newkey rsa:2048 \
-            -keyout /etc/ssl/bureau/privkey.pem \
-            -out    /etc/ssl/bureau/fullchain.pem \
+            -keyout "${SSL_PLACEHOLDER_DIR}/privkey.pem" \
+            -out    "${SSL_PLACEHOLDER_DIR}/fullchain.pem" \
             -subj   "/CN=${DOMAIN}" 2>/dev/null
-        sudo chmod 640 /etc/ssl/bureau/privkey.pem
+        sudo chmod 640 "${SSL_PLACEHOLDER_DIR}/privkey.pem"
         info "Self-signed placeholder cert issued (valid 24h)."
     fi
 
     sudo mkdir -p /var/www/certbot
     sudo chown www-data:www-data /var/www/certbot
 
-    sudo ln -sfn "$dest" /etc/nginx/sites-enabled/bureau.conf
+    sudo ln -sfn "$dest" "/etc/nginx/sites-enabled/${NGINX_SITE}"
     sudo rm -f /etc/nginx/sites-enabled/default
     sudo nginx -t
     sudo systemctl reload nginx
@@ -647,9 +758,9 @@ step_ssl() {
 
     local cert="/etc/letsencrypt/live/${DOMAIN}"
     sudo sed -i "s|ssl_certificate .*|ssl_certificate     ${cert}/fullchain.pem;|" \
-        /etc/nginx/sites-available/bureau.conf
+        "/etc/nginx/sites-available/${NGINX_SITE}"
     sudo sed -i "s|ssl_certificate_key .*|ssl_certificate_key ${cert}/privkey.pem;|" \
-        /etc/nginx/sites-available/bureau.conf
+        "/etc/nginx/sites-available/${NGINX_SITE}"
 
     sudo nginx -t && sudo systemctl reload nginx
 
@@ -668,9 +779,9 @@ step_queue_worker() {
     # Plain `queue:work` — Bureau is single-tenant / low-volume. Horizon
     # forces a Redis dependency and adds dashboard UI we don't need at
     # this scale. Graduate to Horizon if load justifies it.
-    sudo tee /etc/systemd/system/bureau-queue.service > /dev/null <<UNIT
+    sudo tee "/etc/systemd/system/${QUEUE_UNIT}.service" > /dev/null <<UNIT
 [Unit]
-Description=Bureau Laravel queue worker
+Description=${DISPLAY_NAME} Laravel queue worker
 After=network.target mariadb.service
 
 [Service]
@@ -684,16 +795,16 @@ KillSignal=SIGTERM
 TimeoutStopSec=60
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=bureau-queue
+SyslogIdentifier=${QUEUE_UNIT}
 
 [Install]
 WantedBy=multi-user.target
 UNIT
-    sudo chmod 644 /etc/systemd/system/bureau-queue.service
+    sudo chmod 644 "/etc/systemd/system/${QUEUE_UNIT}.service"
     sudo systemctl daemon-reload
-    sudo systemctl enable bureau-queue
-    sudo systemctl restart bureau-queue
-    success "bureau-queue.service enabled and running (journalctl -u bureau-queue -f)."
+    sudo systemctl enable "$QUEUE_UNIT"
+    sudo systemctl restart "$QUEUE_UNIT"
+    success "${QUEUE_UNIT}.service enabled and running (journalctl -u ${QUEUE_UNIT} -f)."
 }
 
 step_scheduler() {
@@ -747,7 +858,7 @@ if [[ ${#ONLY_STEPS[@]} -eq 0 ]]; then
     echo -e "  ${BOLD}Health:${RESET}  https://${DOMAIN}/up"
     echo -e "  ${BOLD}Nginx:${RESET}   /etc/nginx/sites-available/bureau.conf"
     echo -e "  ${BOLD}Cert:${RESET}    /etc/letsencrypt/live/${DOMAIN}/"
-    echo -e "  ${BOLD}Queue:${RESET}   systemctl status bureau-queue  |  journalctl -u bureau-queue -f"
+    echo -e "  ${BOLD}Queue:${RESET}   systemctl status ${QUEUE_UNIT}  |  journalctl -u ${QUEUE_UNIT} -f"
     echo -e "  ${BOLD}Cron:${RESET}    sudo crontab -u ${APP_USER} -l"
     echo
     echo -e "  ${BOLD}${YELLOW}Save these credentials now — they are not stored on disk.${RESET}"
@@ -755,7 +866,7 @@ if [[ ${#ONLY_STEPS[@]} -eq 0 ]]; then
     echo "    Domain:   ${DOMAIN}"
     echo "    App dir:  ${APP_DIR}"
     echo "    App user: ${APP_USER}"
-    echo "    MariaDB:  bureau / bureau / ${DB_PASSWORD}"
+    echo "    MariaDB:  ${DB_NAME} / ${DB_USER} / ${DB_PASSWORD}"
     echo "    Backup:   ${BACKUP_ARCHIVE_PASSWORD}"
     echo "    Mail:     ${MAIL_HOST:-(log driver)}${MAIL_HOST:+:${MAIL_PORT} / ${MAIL_USER}}"
 fi
