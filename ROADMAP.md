@@ -102,6 +102,7 @@ Status legend: ✅ in v1 schema · 🏗 v1 wiring (post-schema) · 🧭 deferred
 - ✅ health_providers (→ contact + specialty)
 - ✅ Prescriptions (subject user, schedule, refills_left)
 - ✅ Appointments (→ provider, subject user)
+- 💡 **Food intake tracking** — `food_entries` (user_id, eaten_at, label, servings, calories, macros {protein_g, carbs_g, fat_g}, source: quick|photo|barcode, notes). Quick capture from `/m/capture` (photo + voice); photo-OCR identifies plates and pulls nutrition via local LLM. Feeds a Health radar tile (today's calories + macro split vs target) and the unified timeline. `food_targets` (user_id, daily_calories, protein_g, carbs_g, fat_g, applied_from) holds evolving goals. Joins the Health hub as a 4th tab when shipped.
 
 ### Ingestion
 - ✅ mail_ingest_inbox (forward-to-address for receipts/bills)
