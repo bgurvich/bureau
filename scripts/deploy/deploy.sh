@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Bureau — Production deploy
+# Laravel — Production deploy
 # Usage: bash scripts/deploy/deploy.sh [--skip-build]
-# Run from the repo root as the web-server user (or via sudo -u www-data).
+# Run from the repo root as the user that owns the checkout (typical after
+# install.sh: whoever ran it — e.g. `moshe` — owns the repo and can pull).
+# Reads APP_URL / DB_* from .env; auto-detects the php-fpm systemd unit.
+# No hardcoded app-specific values, so any Laravel app can use this as-is.
 # =============================================================================
 # Flow:
 #   1. git pull (exit early if no changes)
