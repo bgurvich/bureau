@@ -16,9 +16,18 @@ trait PdfParserHelpers
 {
     protected static function date(string $raw): ?CarbonImmutable
     {
+        // Carbon::parse('') and ::parse(null) silently return TODAY — so a
+        // parser that pipes an empty date column into this helper used to
+        // write today's date into Transaction.occurred_on, making every
+        // import land in the current month. Short-circuit on empty BEFORE
+        // the fallback so we return null (→ row skipped) instead.
+        $raw = trim($raw);
+        if ($raw === '') {
+            return null;
+        }
         foreach (['m/d/Y', 'm/d/y', 'n/j/Y', 'n/j/y'] as $fmt) {
             try {
-                $d = CarbonImmutable::createFromFormat($fmt, trim($raw));
+                $d = CarbonImmutable::createFromFormat($fmt, $raw);
                 if ($d) {
                     return $d;
                 }

@@ -50,10 +50,18 @@ trait CsvParserHelpers
 
     protected function date(?string $raw): ?CarbonImmutable
     {
+        // Carbon::parse('') and ::parse(null) silently return TODAY — so a
+        // parser that pipes an empty date cell into this helper used to
+        // write today's date into Transaction.occurred_on, making every
+        // import land in the current month. Short-circuit on empty BEFORE
+        // the fallback so we return null (→ row skipped) instead.
         if ($raw === null) {
             return null;
         }
         $raw = trim($raw);
+        if ($raw === '') {
+            return null;
+        }
         foreach (['m/d/Y', 'm/d/y', 'n/j/Y', 'n/j/y', 'Y-m-d', 'm-d-Y'] as $fmt) {
             try {
                 $d = CarbonImmutable::createFromFormat($fmt, $raw);
