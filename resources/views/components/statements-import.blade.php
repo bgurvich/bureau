@@ -70,6 +70,18 @@ class extends Component
      */
     public ?int $defaultAccountId = null;
 
+    /**
+     * Global year override — applied to every file that doesn't carry its
+     * own explicit year. Bank PDFs that omit the statement-period header
+     * fall back to the current year by default, which imports January
+     * rows into the wrong calendar year; this input lets the user pin the
+     * right year for the whole batch in one place.
+     */
+    public ?int $globalYear = null;
+
+    /** file_id → year override (takes precedence over globalYear). */
+    public array $yearFor = [];
+
     /** file_id → [rowIndex => bool selected] */
     public array $selected = [];
 
@@ -369,6 +381,16 @@ class extends Component
             return;
         }
 
+        // Year resolution (best-effort, user can override via the year
+        // input on the card or the global input at the top):
+        //   1. statement's own periodEnd year, when the parser caught
+        //      a "Statement Period ..." header — most reliable.
+        //   2. a 4-digit year in the filename, e.g. "Chase-2024-01.pdf".
+        //   3. current calendar year as last resort.
+        $detectedYear = $statement->periodEnd?->year
+            ?? $this->yearFromFilename($name)
+            ?? (int) date('Y');
+
         $this->parsed[$fileId] = [
             'name' => $name,
             'status' => 'ready',
@@ -381,6 +403,7 @@ class extends Component
             'period_end' => $statement->periodEnd?->toDateString(),
             'opening' => $statement->openingBalance,
             'closing' => $statement->closingBalance,
+            'detected_year' => $detectedYear,
             'rows' => $rows,
             'disk_path' => $path,
             'mime' => $mime,
@@ -390,6 +413,11 @@ class extends Component
         // Default all rows selected — dedup computation lands once account picked.
         $this->selected[$fileId] = array_fill(0, count($rows), true);
         $this->duplicates[$fileId] = array_fill(0, count($rows), false);
+
+        // Apply the effective year to the rows immediately so the review
+        // table renders the corrected dates. User edits flow through the
+        // same path via setYearForFile / updatedGlobalYear.
+        $this->applyYearForFile($fileId);
 
         // Pre-apply the session's default account so the user doesn't have to
         // pick it on every card when dropping a batch from the same source.
@@ -404,6 +432,84 @@ class extends Component
     {
         $this->accountFor[$fileId] = $accountId;
         $this->recomputeDuplicates($fileId);
+    }
+
+    /**
+     * Pick up the 4-digit year closest to the end of a filename — when
+     * a user saves a batch as "Chase-2024-01.pdf" / "wf_q3_2024.pdf" the
+     * year is almost always the statement's year. Matches only 20xx to
+     * avoid catching an account number that happens to be 4 digits.
+     */
+    private function yearFromFilename(string $name): ?int
+    {
+        if (preg_match_all('/(20\d{2})/', $name, $m) && ! empty($m[1])) {
+            return (int) end($m[1]);
+        }
+
+        return null;
+    }
+
+    /**
+     * The year used for this file's rows: per-file override beats the
+     * global input beats the detected year.
+     */
+    private function effectiveYear(string $fileId): ?int
+    {
+        if (! empty($this->yearFor[$fileId])) {
+            return (int) $this->yearFor[$fileId];
+        }
+        if ($this->globalYear !== null) {
+            return (int) $this->globalYear;
+        }
+
+        return $this->parsed[$fileId]['detected_year'] ?? null;
+    }
+
+    /**
+     * Rewrite every row's occurred_on to use the effective year. Keeps
+     * month + day from the parser's original date — the bank's month/
+     * day is reliable, only the year is suspect in statements without
+     * a period header.
+     */
+    private function applyYearForFile(string $fileId): void
+    {
+        $year = $this->effectiveYear($fileId);
+        if ($year === null || empty($this->parsed[$fileId]['rows'])) {
+            return;
+        }
+        foreach ($this->parsed[$fileId]['rows'] as $i => $row) {
+            $date = $row['occurred_on'] ?? null;
+            if (! is_string($date) || $date === '') {
+                continue;
+            }
+            try {
+                $carbon = \Carbon\CarbonImmutable::parse($date)->setYear($year);
+                $this->parsed[$fileId]['rows'][$i]['occurred_on'] = $carbon->toDateString();
+            } catch (\Throwable) {
+                // Leave the row alone — bad input upstream, the import
+                // code will refuse to persist it anyway.
+            }
+        }
+        $this->recomputeDuplicates($fileId);
+    }
+
+    public function setYearForFile(string $fileId, ?int $year): void
+    {
+        $this->yearFor[$fileId] = $year;
+        $this->applyYearForFile($fileId);
+    }
+
+    /** Livewire hook — fires when the global year input changes. */
+    public function updatedGlobalYear(mixed $value): void
+    {
+        $this->globalYear = ($value === '' || $value === null) ? null : (int) $value;
+        foreach (array_keys($this->parsed) as $fileId) {
+            // Per-file override wins; only files without one get the
+            // global value propagated.
+            if (empty($this->yearFor[$fileId])) {
+                $this->applyYearForFile($fileId);
+            }
+        }
     }
 
     /**
@@ -780,6 +886,22 @@ class extends Component
         @if ($defaultAccountId)
             <span class="text-[11px] text-neutral-500">{{ __('Pre-applied to each uploaded file; still editable per card.') }}</span>
         @endif
+
+        <span class="mx-2 h-5 w-px bg-neutral-800" aria-hidden="true"></span>
+
+        {{-- Global year override. When a statement's period header is
+             missing, the parser falls back to the current calendar year
+             and a 2024 January statement gets imported as 2026. This
+             input lets the user pin the right year for the whole batch
+             (per-file input below overrides for a specific card). --}}
+        <label for="statements-global-year" class="text-[11px] uppercase tracking-wider text-neutral-500">
+            {{ __('Year (all)') }}
+        </label>
+        <input id="statements-global-year" type="number"
+               min="2000" max="2099" step="1" placeholder="{{ __('auto') }}"
+               wire:model.live.debounce.400ms="globalYear"
+               class="w-20 rounded-md border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-sm tabular-nums text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+        <span class="text-[11px] text-neutral-500">{{ __('Leave blank to use the year detected from each file.') }}</span>
     </div>
 
     {{-- Drag-and-drop zone. The <label> alone handles click-to-upload but the
@@ -959,6 +1081,26 @@ class extends Component
                                     @if (! $accountId)
                                         <p class="mt-1 text-[11px] text-rose-400">
                                             {{ __('Required. Transactions won\'t import until an account is set.') }}
+                                        </p>
+                                    @endif
+                                </div>
+                                @php($fileYear = $yearFor[$fileId] ?? null)
+                                @php($effectiveFileYear = $fileYear ?? $globalYear ?? ($state['detected_year'] ?? null))
+                                <div>
+                                    <label class="block text-[10px] uppercase tracking-wider text-neutral-500">{{ __('Year') }}</label>
+                                    <input type="number" min="2000" max="2099" step="1"
+                                           value="{{ $fileYear }}"
+                                           placeholder="{{ $effectiveFileYear ?? __('auto') }}"
+                                           wire:change="setYearForFile('{{ $fileId }}', $event.target.value === '' ? null : parseInt($event.target.value))"
+                                           class="mt-1 w-20 rounded-md border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-sm tabular-nums text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                                    @if ($fileYear === null && $effectiveFileYear !== null)
+                                        <p class="mt-1 text-[11px] text-neutral-500">
+                                            {{ __('Using :y', ['y' => $effectiveFileYear]) }}
+                                            @if ($globalYear !== null && empty($fileYear))
+                                                · {{ __('from global') }}
+                                            @elseif (! empty($state['detected_year']))
+                                                · {{ __('detected from file') }}
+                                            @endif
                                         </p>
                                     @endif
                                 </div>

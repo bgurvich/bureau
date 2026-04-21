@@ -148,6 +148,58 @@ it('re-imports a statement whose transactions were manually wiped', function () 
         ->and(Media::where('hash', '!=', '')->count())->toBe(1);
 });
 
+it('applies a per-file year override to every row', function () {
+    authedInHousehold();
+
+    $parsed = ['f1' => [
+        'name' => 'wf-statement.pdf',
+        'status' => 'ready',
+        'hash' => str_repeat('y', 64),
+        'bank_slug' => 'wellsfargo_checking',
+        'bank_label' => 'Wells Fargo — Checking',
+        'import_source' => 'statement:wellsfargo_checking',
+        'account_last4' => null,
+        'period_start' => null, 'period_end' => null,
+        'opening' => null, 'closing' => null,
+        'detected_year' => 2026,
+        'disk_path' => 'statements/fake.pdf', 'mime' => 'application/pdf', 'size' => 1,
+        'rows' => [
+            ['occurred_on' => '2026-01-22', 'description' => 'A', 'amount' => -10.00, 'closing_balance' => null],
+            ['occurred_on' => '2026-02-05', 'description' => 'B', 'amount' => -20.00, 'closing_balance' => null],
+        ],
+    ]];
+
+    $c = Livewire::test('statements-import')
+        ->set('parsed', $parsed)
+        ->call('setYearForFile', 'f1', 2024);
+
+    $rows = $c->get('parsed')['f1']['rows'];
+    expect($rows[0]['occurred_on'])->toBe('2024-01-22')
+        ->and($rows[1]['occurred_on'])->toBe('2024-02-05');
+});
+
+it('falls back to the global year when a file has no per-file override', function () {
+    authedInHousehold();
+
+    $parsed = ['f1' => [
+        'name' => 'wf.pdf', 'status' => 'ready', 'hash' => str_repeat('z', 64),
+        'bank_slug' => 'wellsfargo_checking', 'bank_label' => 'WF',
+        'import_source' => 'statement:wellsfargo_checking',
+        'account_last4' => null, 'period_start' => null, 'period_end' => null,
+        'opening' => null, 'closing' => null, 'detected_year' => 2026,
+        'disk_path' => 'x', 'mime' => 'application/pdf', 'size' => 1,
+        'rows' => [
+            ['occurred_on' => '2026-03-15', 'description' => 'X', 'amount' => -5.00, 'closing_balance' => null],
+        ],
+    ]];
+
+    $c = Livewire::test('statements-import')
+        ->set('parsed', $parsed)
+        ->set('globalYear', 2023);
+
+    expect($c->get('parsed')['f1']['rows'][0]['occurred_on'])->toBe('2023-03-15');
+});
+
 it('surfaces "account required" in the bulk message when a file has none assigned', function () {
     authedInHousehold();
 
