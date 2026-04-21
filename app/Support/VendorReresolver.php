@@ -73,12 +73,23 @@ final class VendorReresolver
                             $contactByFingerprint[$fp] = (int) $c->id;
                         }
                     }
+
+                    // Intentionally NO auto-heal here. If the user
+                    // just added ignore patterns and wants the re-
+                    // resolver to move rows off a now-stale auto-
+                    // contact, seeding patterns on that ugly contact
+                    // would anchor rows to it forever. Healing only
+                    // runs on the import flow (patternList()) where
+                    // the goal is "don't re-create existing vendors"
+                    // rather than "migrate to new ones".
+                    $existingPatterns = is_string($c->match_patterns) ? $c->match_patterns : '';
+
                     $contactById[(int) $c->id] = [
                         'display_name' => is_string($c->display_name) ? $c->display_name : '',
                         'organization' => is_string($c->organization) ? $c->organization : '',
-                        'match_patterns' => is_string($c->match_patterns) ? $c->match_patterns : '',
+                        'match_patterns' => $existingPatterns,
                     ];
-                    foreach (self::parsePatterns((string) $c->match_patterns) as $p) {
+                    foreach (self::parsePatterns($existingPatterns) as $p) {
                         $matchPatternList[] = [(int) $c->id, $p];
                     }
                 }
@@ -257,18 +268,28 @@ final class VendorReresolver
     /**
      * Walk every Contact's match_patterns once and return a flat list
      * of (contact_id, pattern) pairs. Insertion order is preserved —
-     * firstPatternMatch() returns the first hit.
+     * firstPatternMatch() returns the first hit. Also self-heals:
+     * contacts with null/empty patterns get their display_name's
+     * fingerprint seeded so future word-order variations across
+     * descriptions don't spawn duplicate auto-contacts.
      *
      * @return array<int, array{0: int, 1: string}>
      */
     public static function patternList(): array
     {
         $out = [];
-        Contact::query()->select(['id', 'match_patterns'])
-            ->whereNotNull('match_patterns')
+        Contact::query()->select(['id', 'display_name', 'match_patterns'])
             ->chunk(500, function ($chunk) use (&$out) {
                 foreach ($chunk as $c) {
-                    foreach (self::parsePatterns((string) $c->match_patterns) as $p) {
+                    $patterns = is_string($c->match_patterns) ? $c->match_patterns : '';
+                    if (trim($patterns) === '') {
+                        $displayFp = is_string($c->display_name) ? self::fingerprint($c->display_name) : '';
+                        if ($displayFp !== '') {
+                            $c->forceFill(['match_patterns' => $displayFp])->save();
+                            $patterns = $displayFp;
+                        }
+                    }
+                    foreach (self::parsePatterns($patterns) as $p) {
                         $out[] = [(int) $c->id, $p];
                     }
                 }

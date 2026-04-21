@@ -131,6 +131,32 @@ it('clears a stale auto-counterparty when the row\'s new fingerprint no longer m
         ->and($summary['cleared'])->toBe(1);
 });
 
+it('patternList() self-heals legacy contacts (null match_patterns) using their display-name fingerprint', function () {
+    authedInHousehold();
+
+    $legacy = Contact::create([
+        'kind' => 'org',
+        'display_name' => 'Pixlr Pte Ltd',
+        'is_vendor' => true,
+        'match_patterns' => null,
+    ]);
+
+    $pairs = VendorReresolver::patternList();
+
+    // Legacy contact's patterns backfilled in-place.
+    expect($legacy->fresh()->match_patterns)->toBe('pixlr')
+        ->and($pairs)->toContain([$legacy->id, 'pixlr']);
+
+    // And patternList now matches descriptions that differ from the
+    // display name's fingerprint, which is the whole point — the
+    // fingerprint fallback alone would miss "Pixlr Pte Ltd Singapore"
+    // vs the legacy contact's "pixlr" fingerprint.
+    expect(VendorReresolver::firstPatternMatch(
+        mb_strtolower('Pixlr Pte Ltd 07/15 Singapore'),
+        $pairs
+    ))->toBe($legacy->id);
+});
+
 it('survives a rename of the auto-created vendor via match_patterns', function () {
     authedInHousehold();
     $account = reresolverAccount();

@@ -926,10 +926,31 @@ class extends Component
             }
         }
 
+        // Explicit match_patterns win over fingerprints. For each
+        // unique fingerprint, test its representative description
+        // against every Contact's patterns — on a hit, reuse that
+        // contact instead of auto-creating. Handles the case where
+        // "Pixlr Pte Ltd 07/15 Singapore" fingerprints to "pixlr
+        // singapore" while the existing Pixlr contact has display-
+        // name fingerprint "pixlr" — match_patterns bridges the gap.
+        $patternList = VendorReresolver::patternList();
+
         $map = [];
         foreach ($counts as $fp => $count) {
             if (isset($vendorFingerprints[$fp])) {
                 $map[$fp] = $vendorFingerprints[$fp];
+
+                continue;
+            }
+
+            // Pattern match against the representative description —
+            // skips duplicate-creation when any existing contact's
+            // patterns match.
+            $descLower = mb_strtolower((string) ($originals[$fp] ?? ''));
+            $patternHit = VendorReresolver::firstPatternMatch($descLower, $patternList);
+            if ($patternHit !== null) {
+                $map[$fp] = $patternHit;
+                $vendorFingerprints[$fp] = $patternHit;
 
                 continue;
             }
