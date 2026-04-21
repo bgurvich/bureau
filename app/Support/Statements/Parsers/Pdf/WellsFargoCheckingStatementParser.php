@@ -205,6 +205,14 @@ final class WellsFargoCheckingStatementParser implements StatementParser
     private function gatherCandidateRows(array $lines): array
     {
         $out = [];
+        // Once a column-totals row or footer marker appears on a page,
+        // every subsequent non-date line is boilerplate — "Totals
+        // $X $Y", "The Ending Daily Balance …", "If you had
+        // insufficient available funds …". Before this flag, those
+        // lines slipped into the previous transaction's description as
+        // continuations (the cap is 3 lines, so the whole disclaimer
+        // paragraph could get swallowed).
+        $terminated = false;
         foreach ($lines as $line) {
             // Transaction-start line — date prefix + at least one money
             // token right-aligned somewhere on the line.
@@ -216,6 +224,11 @@ final class WellsFargoCheckingStatementParser implements StatementParser
                     $tokens[] = ['text' => $hit[0], 'end' => $hit[1] + strlen($hit[0])];
                 }
                 $out[] = ['line' => $line, 'tokens' => $tokens, 'continuation' => []];
+                // A new transaction row resets termination — handles
+                // multi-section statements where "Totals" appears
+                // between Deposits and Withdrawals sub-tables and
+                // further real rows follow.
+                $terminated = false;
 
                 continue;
             }
@@ -229,6 +242,17 @@ final class WellsFargoCheckingStatementParser implements StatementParser
             // "Balance" without a money token — skip them.
             if (preg_match('/Deposits|Withdrawals|Ending|Balance/i', $line)
                 && ! preg_match('/\d{1,2}\/\d{1,2}/', $line)) {
+                continue;
+            }
+            // End-of-transactions markers: the column-sum row
+            // ("Totals $X $Y"). From here to the next dated row,
+            // nothing belongs in a transaction description.
+            if (preg_match('/^\s*Totals?\b/i', $line)) {
+                $terminated = true;
+
+                continue;
+            }
+            if ($terminated) {
                 continue;
             }
             // Line with no date and no money → continuation text for

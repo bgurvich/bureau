@@ -177,6 +177,43 @@ TXT;
         ->and($descs[1])->toContain('Period ending 01/25');
 });
 
+it('Wells Fargo checking PDF parser stops merging description at the Totals summary row', function () {
+    // Regression: the last transaction on a page swallowed the column-
+    // totals summary ("Totals $3,661.00 $9,479.76") AND the
+    // "If you had insufficient available funds…" footer paragraph into
+    // its description, because continuation-line merging treated every
+    // non-date line as text extension of the previous row.
+    $text = <<<'TXT'
+Wells Fargo Bank
+Statement Period 07/01/2026 - 07/31/2026
+Account ending in 1234
+Beginning balance on 7/1  $100.00
+Ending balance on 7/31  $9,479.76
+
+                                                                      Deposits/    Withdrawals/    Ending daily
+Date   Description                                                    Additions    Subtractions    balance
+7/31   Purchase authorized on 07/30 NOW Mobile Xfinity.Com PA                          25.00          4,154.75
+       S305211853533118 Card 1541
+
+Totals                                                                $3,661.00      $9,479.76
+
+The Ending Daily Balance does not reflect any pending withdrawals or holds on deposited funds that may have been outstanding on your account when
+your transactions posted. If you had insufficient available funds when a transaction posted, fees may have been assessed.
+TXT;
+
+    $stmt = (new WellsFargoCheckingStatementParser)->parse($text);
+
+    expect(count($stmt->transactions))->toBe(1);
+    $desc = $stmt->transactions[0]->description;
+    expect($desc)->toContain('Purchase authorized on 07/30 NOW Mobile Xfinity.Com PA')
+        ->and($desc)->toContain('S305211853533118 Card 1541')
+        ->and($desc)->not->toContain('Totals')
+        ->and($desc)->not->toContain('$3,661.00')
+        ->and($desc)->not->toContain('$9,479.76')
+        ->and($desc)->not->toContain('insufficient available funds')
+        ->and($desc)->not->toContain('Ending Daily Balance');
+});
+
 it('Wells Fargo checking PDF parser header-anchors columns so withdrawals stay negative', function () {
     // Regression: cluster-based classification misfired when the
     // deposit column's amount-end happened to sit close to the
