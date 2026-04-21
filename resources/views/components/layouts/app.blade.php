@@ -54,8 +54,7 @@
                             __('Money') => [
                                 [__('Overview'), 'fiscal.overview', 'pie'],
                                 [__('Ledger'), 'fiscal.ledger', 'wallet'],
-                                [__('Bills & Income'), 'fiscal.recurring', 'receipt'],
-                                [__('Subscriptions'), 'fiscal.subscriptions', 'key'],
+                                [__('Recurring'), 'fiscal.recurring', 'receipt'],
                                 [__('Planning'), 'fiscal.planning', 'pie'],
                                 [__('Rules'), 'fiscal.rules', 'note'],
                             ],

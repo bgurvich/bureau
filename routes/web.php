@@ -67,7 +67,12 @@ Route::middleware(['auth', 'preferences', 'household'])->group(function () {
     Route::livewire('/ledger', 'ledger-hub')->name('fiscal.ledger');
     Route::livewire('/accounts', 'accounts-index')->name('fiscal.accounts');
     Route::livewire('/transactions', 'transactions-index')->name('fiscal.transactions');
-    Route::livewire('/bills', 'bills-index')->name('fiscal.recurring');
+    // /recurring is the hub; /bills stays for deep-links. The `fiscal.recurring`
+    // name now points at the hub so mobile/home and alerts-bell keep routing to
+    // the right place — hub defaults to the Bills tab so the user still lands
+    // on the bills list after one click.
+    Route::livewire('/recurring', 'recurring-hub')->name('fiscal.recurring');
+    Route::livewire('/bills', 'bills-index')->name('fiscal.bills');
     Route::livewire('/subscriptions', 'subscriptions-index')->name('fiscal.subscriptions');
     Route::livewire('/finance/yoy', 'yoy-spending')->name('fiscal.yoy');
     Route::livewire('/budgets', 'budgets-index')->name('fiscal.budgets');
