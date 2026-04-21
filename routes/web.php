@@ -147,7 +147,11 @@ Route::middleware(['auth', 'preferences', 'household'])->group(function () {
         Route::livewire('/capture/inventory', 'mobile.capture-inventory')->name('mobile.capture.inventory');
         Route::livewire('/capture/note', 'mobile.capture-note')->name('mobile.capture.note');
         Route::livewire('/capture/photo', 'mobile.capture-photo')->name('mobile.capture.photo');
-        Route::livewire('/capture/post', 'mobile.capture-post')->name('mobile.capture.post');
+        // /capture/post merged into /capture/photo with a kind selector —
+        // the old name stays for any deep links or bookmarks, redirecting
+        // in with ?kind=post so the selector pre-picks the right tab.
+        Route::get('/capture/post', fn () => redirect()->route('mobile.capture.photo', ['kind' => 'post']))
+            ->name('mobile.capture.post');
         Route::livewire('/inbox', 'mobile.inbox')->name('mobile.inbox');
         Route::livewire('/search', 'mobile.search')->name('mobile.search');
         Route::livewire('/me', 'mobile.me')->name('mobile.me');

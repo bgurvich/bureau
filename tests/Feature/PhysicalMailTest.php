@@ -75,7 +75,10 @@ it('attaches a photo and creates a stub physical_mail row from mobile capture', 
 
     $file = UploadedFile::fake()->image('envelope.jpg', 800, 600)->size(50);
 
-    $component = Livewire::test('mobile.capture-post')
+    // Merged flow: /m/capture/photo with kind=post creates the Media
+    // + stub PhysicalMail that the old /m/capture/post used to.
+    $component = Livewire::test('mobile.capture-photo', ['kind' => 'post'])
+        ->assertSet('kind', 'post')
         ->set('photo', $file)
         ->call('save', false);
 
@@ -86,6 +89,13 @@ it('attaches a photo and creates a stub physical_mail row from mobile capture', 
         ->and(Media::first()->source)->toBe('mobile');
 
     $component->assertRedirect(route('mobile.capture'));
+});
+
+it('redirects the old /m/capture/post URL to /m/capture/photo with the post kind preselected', function () {
+    authedInHousehold();
+
+    $this->get(route('mobile.capture.post'))
+        ->assertRedirect(route('mobile.capture.photo', ['kind' => 'post']));
 });
 
 it('resolves the /records hub Post tab and the standalone /post URL', function () {

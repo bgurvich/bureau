@@ -6,6 +6,7 @@ use App\Models\Media;
 use App\Models\Transaction;
 use App\Support\DescriptionNormalizer;
 use App\Support\Formatting;
+use App\Support\MediaFolders;
 use App\Support\ProjectionMatcher;
 use App\Support\Statements\ParsedStatement;
 use App\Support\Statements\ParserRegistry;
@@ -896,6 +897,7 @@ class extends Component
             'hash' => $state['hash'],
             'captured_at' => now(),
             'ocr_status' => 'skip',  // statement bodies aren't OCRed — parsed already
+            'folder_id' => MediaFolders::idFor(MediaFolders::STATEMENTS),
         ]);
     }
 

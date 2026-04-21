@@ -2,12 +2,15 @@
 
 use App\Jobs\OcrMedia;
 use App\Models\Media;
+use App\Models\PhysicalMail;
+use App\Support\MediaFolders;
 use Livewire\Attributes\Layout;
+use Livewire\Attributes\Session;
 use Livewire\Component;
 use Livewire\WithFileUploads;
 
 new
-#[Layout('components.layouts.mobile', ['title' => 'Photo'])]
+#[Layout('components.layouts.mobile', ['title' => 'Capture'])]
 class extends Component
 {
     use WithFileUploads;
@@ -15,6 +18,33 @@ class extends Component
     public $photo = null;
 
     public int $savedCount = 0;
+
+    /**
+     * Sticky kind across the session — a batch of receipts or bills
+     * in one sitting shares the same kind, so don't re-pick per shot.
+     * Valid values map 1:1 to MediaFolders constants.
+     */
+    #[Session(key: 'm-cap-kind')]
+    public string $kind = 'receipt';
+
+    private const KINDS = ['receipt', 'bill', 'document', 'post'];
+
+    public function mount(?string $kind = null): void
+    {
+        // Accept a ?kind= query param so existing /m/capture/post
+        // deep links (and the removed mobile tile shortcut) land on
+        // the merged surface with the right kind preselected.
+        if ($kind !== null && in_array($kind, self::KINDS, true)) {
+            $this->kind = $kind;
+        }
+    }
+
+    public function setKind(string $kind): void
+    {
+        if (in_array($kind, self::KINDS, true)) {
+            $this->kind = $kind;
+        }
+    }
 
     public function save(bool $andContinue = true): void
     {
@@ -25,8 +55,14 @@ class extends Component
         $originalName = $this->photo->getClientOriginalName();
         $mime = $this->photo->getMimeType();
         $size = $this->photo->getSize();
-
         $path = $this->photo->store('photos', 'local');
+
+        $folderSlug = match ($this->kind) {
+            'bill' => MediaFolders::BILLS,
+            'document' => MediaFolders::DOCUMENTS,
+            'post' => MediaFolders::POST,
+            default => MediaFolders::RECEIPTS,
+        };
 
         $media = Media::create([
             'disk' => 'local',
@@ -36,12 +72,26 @@ class extends Component
             'mime' => $mime,
             'size' => $size,
             'captured_at' => now(),
-            // Unlike inventory captures, these are generally textual (receipts,
-            // bills, docs) — queue for Tesseract.
+            // All four kinds are textual — queue Tesseract so the
+            // text is searchable and the Inbox classifier (Tier 2)
+            // can re-route later.
             'ocr_status' => 'pending',
+            'folder_id' => MediaFolders::idFor($folderSlug),
         ]);
 
         OcrMedia::dispatch($media->id);
+
+        // Post gets a stub physical_mail row filed under today's
+        // date so it appears on /records?tab=post for follow-up
+        // from desktop. The photo attaches as its cover.
+        if ($this->kind === 'post') {
+            $mail = PhysicalMail::create([
+                'received_on' => now()->toDateString(),
+                'kind' => 'other',
+                'action_required' => false,
+            ]);
+            $mail->media()->attach($media->id, ['role' => 'photo']);
+        }
 
         $this->savedCount++;
         $this->reset('photo');
@@ -55,9 +105,33 @@ class extends Component
 
 <div class="space-y-5" x-data="{ reshoot() { $refs.photoInput.value = ''; $refs.photoInput.click(); } }">
     <header class="pt-2">
-        <h1 class="text-lg font-semibold text-neutral-100">{{ __('Photo or scan') }}</h1>
-        <p class="mt-1 text-xs text-neutral-500">{{ __('Receipts, bills, documents. Queued for OCR.') }}</p>
+        <h1 class="text-lg font-semibold text-neutral-100">{{ __('Capture') }}</h1>
+        <p class="mt-1 text-xs text-neutral-500">
+            {{ __('Snap and file. OCR runs automatically; review from desktop.') }}
+        </p>
     </header>
+
+    @php
+        $kinds = [
+            'receipt' => __('Receipt'),
+            'bill' => __('Bill'),
+            'document' => __('Document'),
+            'post' => __('Post'),
+        ];
+    @endphp
+
+    <div role="group" aria-label="{{ __('What are you capturing?') }}"
+         class="grid grid-cols-4 gap-1 rounded-full border border-neutral-800 bg-neutral-900/60 p-1 text-xs">
+        @foreach ($kinds as $k => $label)
+            @php($active = $kind === $k)
+            <button type="button"
+                    wire:click="setKind('{{ $k }}')"
+                    aria-pressed="{{ $active ? 'true' : 'false' }}"
+                    class="rounded-full px-2 py-1.5 transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300 {{ $active ? 'bg-neutral-700 text-neutral-100' : 'text-neutral-400 active:bg-neutral-800/60' }}">
+                {{ $label }}
+            </button>
+        @endforeach
+    </div>
 
     @if ($savedCount > 0)
         <div class="rounded-lg border border-emerald-900/60 bg-emerald-900/20 px-3 py-2 text-sm text-emerald-300" role="status" aria-live="polite">
@@ -82,7 +156,7 @@ class extends Component
                     <circle cx="9" cy="10" r="2"/>
                     <path d="m4 18 6-6 4 4 3-3 3 3"/>
                 </svg>
-                <span class="text-sm">{{ __('Tap to capture') }}</span>
+                <span class="text-sm">{{ __('Tap to capture a :kind', ['kind' => mb_strtolower($kinds[$kind] ?? __('photo'))]) }}</span>
             </label>
         @endif
 
@@ -120,6 +194,6 @@ class extends Component
     @endif
 
     <p class="pt-2 text-center text-[11px] text-neutral-600">
-        {{ __('Review and tag captured files in the Media library on desktop.') }}
+        {{ __('Files land in the matching Media folder. Review and tag on desktop.') }}
     </p>
 </div>

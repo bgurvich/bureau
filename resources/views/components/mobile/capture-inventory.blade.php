@@ -3,6 +3,7 @@
 use App\Models\InventoryItem;
 use App\Models\Media;
 use App\Models\Property;
+use App\Support\MediaFolders;
 use Illuminate\Database\Eloquent\Collection;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
@@ -69,6 +70,7 @@ class extends Component
             'size' => $size,
             'captured_at' => now(),
             'ocr_status' => 'skip',
+            'folder_id' => MediaFolders::idFor(MediaFolders::INVENTORY),
         ]);
 
         $item = InventoryItem::create([
