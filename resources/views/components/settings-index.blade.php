@@ -7,6 +7,7 @@ use App\Models\Integration;
 use App\Models\User;
 use App\Support\CurrentHousehold;
 use App\Support\PayPal\PayPalSync;
+use App\Support\VendorReresolver;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Mail;
@@ -41,6 +42,31 @@ new class extends Component
         $h->forceFill(['data' => $data])->save();
 
         $this->vendorIgnoreSaved = __('Saved.');
+    }
+
+    public ?string $reresolveMessage = null;
+
+    /**
+     * Walk every imported Transaction and re-run vendor auto-detect
+     * against the current ignore-patterns + contact database. Manual
+     * assignments are preserved via the fingerprint-matches-description
+     * heuristic in VendorReresolver.
+     */
+    public function reresolveVendors(): void
+    {
+        $this->reresolveMessage = null;
+        $summary = VendorReresolver::run();
+
+        $this->reresolveMessage = __(
+            'Re-resolved :touched transaction(s): :matched matched existing vendors, :created new vendors created, :cleared cleared, :skipped left alone (looked manual).',
+            [
+                'touched' => $summary['touched'],
+                'matched' => $summary['matched_existing'],
+                'created' => $summary['created'],
+                'cleared' => $summary['cleared'],
+                'skipped' => $summary['skipped_manual'],
+            ]
+        );
     }
 
     public string $inviteEmail = '';
@@ -703,6 +729,28 @@ new class extends Component
                 </div>
             </div>
         </form>
+
+        <div class="mt-4 flex flex-wrap items-center gap-3 border-t border-neutral-800 pt-3">
+            <div class="flex-1 min-w-0">
+                <div class="text-xs text-neutral-300">{{ __('Re-resolve existing transactions') }}</div>
+                <p class="mt-0.5 text-[11px] text-neutral-500">
+                    {{ __('Walks every imported transaction and re-runs vendor auto-detect with the patterns above. Manual contact assignments are preserved; auto-set assignments move to the cleaner vendor (or get cleared if nothing matches).') }}
+                </p>
+            </div>
+            <button type="button"
+                    wire:click="reresolveVendors"
+                    wire:confirm="{{ __('Re-resolve vendors on every imported transaction?') }}"
+                    wire:loading.attr="disabled" wire:target="reresolveVendors"
+                    class="shrink-0 rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs text-neutral-200 hover:border-neutral-500 hover:bg-neutral-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300 disabled:opacity-60">
+                <span wire:loading.remove wire:target="reresolveVendors">{{ __('Re-resolve now') }}</span>
+                <span wire:loading wire:target="reresolveVendors">{{ __('Working…') }}</span>
+            </button>
+        </div>
+        @if ($reresolveMessage)
+            <div role="status" class="mt-2 rounded-md border border-emerald-800/40 bg-emerald-900/20 px-3 py-2 text-[11px] text-emerald-200">
+                {{ $reresolveMessage }}
+            </div>
+        @endif
     </section>
 
     {{-- Backups ───────────────────────────────────────────────────────── --}}
