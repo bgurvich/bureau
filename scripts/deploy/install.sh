@@ -122,14 +122,26 @@ should_run() {
         || [[ " ${ONLY_STEPS[*]} " == *" certbot "* && "$name" == "ssl" ]]
 }
 
+# An explicitly-named step with --only implies --force: if you're asking for
+# `--only ssl` after ssl.done exists, the intent is "re-run ssl", not "skip
+# silently." Saves the second flag in the common re-run case.
+is_only_named() {
+    local name="$1"
+    [[ " ${ONLY_STEPS[*]} " == *" $name "* ]] && return 0
+    [[ " ${ONLY_STEPS[*]} " == *" certbot "* && "$name" == "ssl" ]] && return 0
+    return 1
+}
+
 run_step() {
     local name="$1" fn="$2"
     should_run "$name" || return 0
-    if already_done "$name" && ! is_forced "$name"; then
+    if already_done "$name" && ! is_forced "$name" && ! is_only_named "$name"; then
         info "skip ${name} — already completed $(cat "${MARK_DIR}/${name}.done")"
         return 0
     fi
-    is_forced "$name" && mark_clear "$name"
+    if is_forced "$name" || is_only_named "$name"; then
+        mark_clear "$name"
+    fi
     "$fn"
     mark_done "$name"
 }
@@ -580,15 +592,26 @@ step_ssl() {
     sudo mkdir -p /var/www/certbot
     sudo chown www-data:www-data /var/www/certbot
 
-    # Webroot flow so nginx keeps serving traffic during issuance + renewal.
-    if ! sudo certbot certonly --webroot -w /var/www/certbot \
-            -d "${DOMAIN}" -d "www.${DOMAIN}" \
-            --email "$ADMIN_EMAIL" --agree-tos --non-interactive --keep-until-expiring; then
-        warn "Multi-domain cert failed (DNS for www.${DOMAIN} missing?) — trying apex only…"
-        sudo certbot certonly --webroot -w /var/www/certbot \
-            -d "${DOMAIN}" \
-            --email "$ADMIN_EMAIL" --agree-tos --non-interactive --keep-until-expiring
+    # Build the -d list dynamically: include www.DOMAIN only if its DNS
+    # actually resolves, so re-running after the user adds the A record
+    # upgrades the cert without the first attempt failing on a stale
+    # single-domain cert. `keep-until-expiring` is safe — it's a no-op
+    # when the existing cert already covers the requested names.
+    local cert_args=(-d "${DOMAIN}")
+    if getent hosts "www.${DOMAIN}" >/dev/null 2>&1; then
+        cert_args+=(-d "www.${DOMAIN}")
+        info "DNS for www.${DOMAIN} resolves — requesting SAN cert."
+    else
+        warn "DNS for www.${DOMAIN} does not resolve — issuing apex-only cert. Re-run '--only ssl' after adding the A record to upgrade."
     fi
+
+    # Webroot flow so nginx keeps serving traffic during issuance + renewal.
+    # --expand lets a subsequent run add www.DOMAIN to an existing apex-only
+    # cert without rejecting the request.
+    sudo certbot certonly --webroot -w /var/www/certbot \
+        "${cert_args[@]}" \
+        --expand \
+        --email "$ADMIN_EMAIL" --agree-tos --non-interactive --keep-until-expiring
 
     local cert="/etc/letsencrypt/live/${DOMAIN}"
     sudo sed -i "s|ssl_certificate .*|ssl_certificate     ${cert}/fullchain.pem;|" \
