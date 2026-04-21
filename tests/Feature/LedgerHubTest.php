@@ -11,7 +11,9 @@ it('renders the ledger hub with the Accounts tab by default', function () {
         ->assertSet('tab', 'accounts')
         ->assertSee(__('Accounts'))
         ->assertSee(__('Transactions'))
-        ->assertSee(__('Import statements'));
+        ->assertSee(__('Reconcile'))
+        ->assertSee(__('Import statements'))
+        ->assertSee(__('Bookkeeper'));
 });
 
 it('switches the active tab via setTab', function () {
@@ -20,8 +22,14 @@ it('switches the active tab via setTab', function () {
     Livewire::test('ledger-hub')
         ->call('setTab', 'transactions')
         ->assertSet('tab', 'transactions')
+        ->call('setTab', 'reconcile')
+        ->assertSet('tab', 'reconcile')
         ->call('setTab', 'import')
-        ->assertSet('tab', 'import');
+        ->assertSet('tab', 'import')
+        ->call('setTab', 'bookkeeper')
+        ->assertSet('tab', 'bookkeeper')
+        ->call('setTab', 'accounts')
+        ->assertSet('tab', 'accounts');
 });
 
 it('refuses to switch to an unknown tab', function () {

@@ -83,9 +83,11 @@ Route::middleware(['auth', 'preferences', 'household'])->group(function () {
     Route::livewire('/meetings', 'meetings-index')->name('calendar.meetings');
     Route::livewire('/life/checklists', 'checklists-index')->name('life.checklists.index');
     Route::livewire('/life/checklists/today', 'checklists-today')->name('life.checklists.today');
+    Route::livewire('/schedule', 'schedule-hub')->name('life.schedule');
     Route::livewire('/contacts', 'contacts-index')->name('relationships.contacts');
     Route::livewire('/contracts', 'contracts-index')->name('relationships.contracts');
     Route::livewire('/insurance', 'insurance-index')->name('relationships.insurance');
+    Route::livewire('/records', 'records-hub')->name('records.index');
     Route::livewire('/documents', 'documents-index')->name('records.documents');
     Route::livewire('/notes', 'notes-index')->name('records.notes');
     Route::livewire('/time/projects', 'projects-index')->name('time.projects');
