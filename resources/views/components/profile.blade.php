@@ -1,9 +1,11 @@
 <?php
 
+use App\Models\Integration;
 use App\Models\LoginEvent;
 use App\Models\User;
 use App\Models\UserNotificationPreference;
 use App\Support\CurrentHousehold;
+use Livewire\Attributes\Computed;
 use Livewire\Attributes\Validate;
 use Livewire\Component;
 
@@ -98,6 +100,31 @@ new class extends Component
                 }
             }
         }
+    }
+
+    /**
+     * Integrations whose credentials are tied to the user's own accounts
+     * (their mailbox, calendars). App-wide integrations like PayPal or
+     * Postmark live on /settings instead — scoping keeps each surface
+     * answering a single question: "what's connected to *me*?" here,
+     * "what's connected to the *app*?" there.
+     *
+     * @return \Illuminate\Support\Collection<int, Integration>
+     */
+    #[Computed]
+    public function personalIntegrations(): \Illuminate\Support\Collection
+    {
+        return Integration::whereIn('kind', ['mail', 'calendar'])
+            ->orderBy('kind')->orderBy('provider')->orderBy('label')
+            ->get();
+    }
+
+    public function disconnectIntegration(int $integrationId): void
+    {
+        Integration::whereIn('kind', ['mail', 'calendar'])
+            ->where('id', $integrationId)
+            ->delete();
+        unset($this->personalIntegrations);
     }
 
     public function togglePreference(string $kind, string $channel): void
@@ -323,6 +350,60 @@ new class extends Component
                 @endforeach
             </tbody>
         </table>
+    </section>
+
+    <section class="mt-8 rounded-xl border border-neutral-800 bg-neutral-900/40 p-6"
+             aria-labelledby="personal-integrations-heading">
+        <header class="mb-4 flex flex-wrap items-baseline justify-between gap-2">
+            <div>
+                <h3 id="personal-integrations-heading" class="text-sm font-semibold text-neutral-100">{{ __('Personal integrations') }}</h3>
+                <p class="mt-1 text-xs text-neutral-500">
+                    {{ __('Mail and calendar accounts linked to you. Credentials are encrypted at rest; disconnect any time.') }}
+                </p>
+            </div>
+            <a href="{{ route('integrations.gmail.connect') }}"
+               class="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs text-neutral-200 hover:border-neutral-500 hover:bg-neutral-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                {{ __('Connect Gmail') }}
+            </a>
+        </header>
+
+        @if ($this->personalIntegrations->isEmpty())
+            <p class="text-xs text-neutral-500">{{ __('No personal mail or calendar accounts linked yet.') }}</p>
+        @else
+            <ul class="divide-y divide-neutral-800 rounded-md border border-neutral-800">
+                @foreach ($this->personalIntegrations as $int)
+                    <li class="flex items-center justify-between gap-3 px-3 py-2 text-xs" wire:key="personal-integration-{{ $int->id }}">
+                        <div class="min-w-0">
+                            <div class="text-neutral-100">{{ $int->label ?: $int->provider }}</div>
+                            <div class="text-[11px] text-neutral-500">
+                                {{ $int->provider }} · {{ $int->kind }} ·
+                                <x-ui.row-badge :state="$int->status === 'active' ? 'active' : 'paused'">{{ $int->status }}</x-ui.row-badge>
+                                @if ($int->last_synced_at)
+                                    · {{ __('synced :when', ['when' => $int->last_synced_at->diffForHumans()]) }}
+                                @endif
+                            </div>
+                        </div>
+                        <button type="button" wire:click="disconnectIntegration({{ $int->id }})"
+                                wire:confirm="{{ __('Disconnect :n? This removes stored credentials; you\'ll need to reconnect to resume syncing.', ['n' => $int->label ?: $int->provider]) }}"
+                                class="rounded border border-rose-800/40 bg-rose-900/20 px-2 py-1 text-rose-200 hover:bg-rose-900/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                            {{ __('Disconnect') }}
+                        </button>
+                    </li>
+                @endforeach
+            </ul>
+        @endif
+
+        <details class="mt-4 rounded-md border border-neutral-800 bg-neutral-950/40 p-3 text-xs text-neutral-400">
+            <summary class="cursor-pointer text-neutral-300">{{ __('How to connect') }}</summary>
+            <div class="mt-3 space-y-2">
+                <p><strong class="text-neutral-200">{{ __('Gmail') }}</strong> —
+                   {{ __('Click Connect Gmail above. Google will ask you to sign in and grant read access to your mailbox; tokens are stored encrypted and can be revoked any time.') }}</p>
+                <p><strong class="text-neutral-200">{{ __('Fastmail (JMAP)') }}</strong> —
+                   {{ __('Fastmail is provisioned from the command line: set FASTMAIL_API_TOKEN then run php artisan integrations:connect-fastmail.') }}</p>
+                <p><strong class="text-neutral-200">{{ __('Calendar feeds') }}</strong> —
+                   {{ __('Calendar sync is on the roadmap; no connector ships yet.') }}</p>
+            </div>
+        </details>
     </section>
 
     <section class="mt-8 rounded-xl border border-neutral-800 bg-neutral-900/40 p-6"

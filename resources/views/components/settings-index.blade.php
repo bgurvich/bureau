@@ -8,15 +8,25 @@ use Livewire\Component;
 
 new class extends Component
 {
+    /**
+     * Household / app-wide integrations only. Per-user mail and calendar
+     * connectors render on /profile so each page answers a single question:
+     * here, "what does the *app* talk to?" (PayPal, Slack, Twilio, …);
+     * there, "what does *this user* have linked?" (their Gmail, Fastmail).
+     */
     #[Computed]
     public function integrations()
     {
-        return Integration::orderBy('provider')->orderBy('label')->get();
+        return Integration::whereNotIn('kind', ['mail', 'calendar'])
+            ->orderBy('provider')->orderBy('label')
+            ->get();
     }
 
     public function disconnectIntegration(int $integrationId): void
     {
-        Integration::where('id', $integrationId)->delete();
+        Integration::whereNotIn('kind', ['mail', 'calendar'])
+            ->where('id', $integrationId)
+            ->delete();
         unset($this->integrations);
     }
 
@@ -31,6 +41,49 @@ new class extends Component
     {
         return [
             'backupLastRun' => $this->backupLastRun(),
+            'outboundMail' => $this->outboundMail(),
+            'localAi' => $this->localAi(),
+        ];
+    }
+
+    /**
+     * Read-only snapshot of outbound-mail config. We never expose secrets —
+     * just enough to tell the user "yes, something is wired up" and point
+     * them at the ops doc if they need to rotate or rewire.
+     *
+     * @return array{driver: string, from: ?string, host: ?string, configured: bool}
+     */
+    private function outboundMail(): array
+    {
+        $driver = (string) config('mail.default', 'log');
+        $from = config('mail.from.address');
+        $host = match ($driver) {
+            'postmark' => 'api.postmarkapp.com',
+            'smtp'     => (string) config('mail.mailers.smtp.host', ''),
+            default    => null,
+        };
+
+        return [
+            'driver' => $driver,
+            'from' => is_string($from) && $from !== '' ? $from : null,
+            'host' => $host !== '' ? $host : null,
+            'configured' => $driver !== 'log' && $driver !== 'array',
+        ];
+    }
+
+    /**
+     * @return array{base_url: ?string, model: ?string, enabled: bool}
+     */
+    private function localAi(): array
+    {
+        $base = (string) config('services.lm_studio.base_url', '');
+        $model = (string) config('services.lm_studio.model', '');
+        $enabled = (bool) config('services.lm_studio.enabled', false);
+
+        return [
+            'base_url' => $base !== '' ? $base : null,
+            'model' => $model !== '' ? $model : null,
+            'enabled' => $enabled && $base !== '',
         ];
     }
 
@@ -59,7 +112,7 @@ new class extends Component
 <div class="space-y-5">
     <x-ui.page-header
         :title="__('Settings')"
-        :description="__('App-level preferences: integrations and backups. Per-user profile (name, locale, theme, currency, notifications) lives on /profile.')">
+        :description="__('App-wide plumbing: household integrations, outbound mail, AI stack, backups. Your personal mail and calendar connectors live on /profile.')">
     </x-ui.page-header>
 
     @if (session('backup_ran'))
@@ -69,26 +122,20 @@ new class extends Component
         </div>
     @endif
 
-    {{-- Integrations ──────────────────────────────────────────────────── --}}
+    {{-- Integrations (household / app-wide) ──────────────────────────── --}}
     <section aria-labelledby="integrations-heading" class="rounded-xl border border-neutral-800 bg-neutral-900/40 p-5">
-        <header class="mb-4 flex items-baseline justify-between">
-            <div>
-                <h3 id="integrations-heading" class="text-sm font-semibold text-neutral-100">{{ __('Integrations') }}</h3>
-                <p class="mt-1 text-xs text-neutral-500">
-                    {{ __('Connected external services. Credentials stored encrypted.') }}
-                </p>
-            </div>
-            <a href="{{ route('integrations.gmail.connect') }}"
-               class="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs text-neutral-200 hover:border-neutral-500 hover:bg-neutral-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
-                {{ __('Connect Gmail') }}
-            </a>
+        <header class="mb-4">
+            <h3 id="integrations-heading" class="text-sm font-semibold text-neutral-100">{{ __('Household integrations') }}</h3>
+            <p class="mt-1 text-xs text-neutral-500">
+                {{ __('Bank, notification, and other app-wide services. Credentials stored encrypted. Personal mail and calendar accounts belong on :profile.', ['profile' => '/profile']) }}
+            </p>
         </header>
         @if ($this->integrations->isEmpty())
-            <p class="text-xs text-neutral-500">{{ __('No integrations connected.') }}</p>
+            <p class="text-xs text-neutral-500">{{ __('No household integrations connected yet.') }}</p>
         @else
             <ul class="divide-y divide-neutral-800 rounded-md border border-neutral-800">
                 @foreach ($this->integrations as $int)
-                    <li class="flex items-center justify-between gap-3 px-3 py-2 text-xs">
+                    <li class="flex items-center justify-between gap-3 px-3 py-2 text-xs" wire:key="household-integration-{{ $int->id }}">
                         <div class="min-w-0">
                             <div class="text-neutral-100">{{ $int->label ?: $int->provider }}</div>
                             <div class="text-[11px] text-neutral-500">
@@ -108,6 +155,71 @@ new class extends Component
                 @endforeach
             </ul>
         @endif
+        <details class="mt-4 rounded-md border border-neutral-800 bg-neutral-950/40 p-3 text-xs text-neutral-400">
+            <summary class="cursor-pointer text-neutral-300">{{ __('How to connect') }}</summary>
+            <div class="mt-3 space-y-2">
+                <p><strong class="text-neutral-200">{{ __('PayPal') }}</strong> —
+                   {{ __('Provisioned from the CLI: php artisan integrations:connect-paypal. Credentials are encrypted and paired with a webhook id for signature verification.') }}</p>
+                <p><strong class="text-neutral-200">{{ __('Plaid (US banks)') }}</strong> —
+                   {{ __('On the roadmap. Bureau targets Plaid as its single bank-sync provider; no connector ships yet.') }}</p>
+                <p><strong class="text-neutral-200">{{ __('Slack / Telegram / Twilio') }}</strong> —
+                   {{ __('Notification channels listed on /profile are placeholders — the delivery adapters are still to be built.') }}</p>
+            </div>
+        </details>
+    </section>
+
+    {{-- Outbound mail (Postmark / SMTP / log) ──────────────────────────── --}}
+    <section aria-labelledby="outbound-mail-heading" class="rounded-xl border border-neutral-800 bg-neutral-900/40 p-5">
+        <header class="mb-3 flex items-baseline justify-between gap-4">
+            <div>
+                <h3 id="outbound-mail-heading" class="text-sm font-semibold text-neutral-100">{{ __('Outbound mail') }}</h3>
+                <p class="mt-1 text-xs text-neutral-500">
+                    {{ __('How Bureau sends reminders, magic-link sign-ins, and alerts. Configured in .env; see docs/ops/outbound-email.md for provider + DNS setup.') }}
+                </p>
+            </div>
+            <x-ui.row-badge :state="$outboundMail['configured'] ? 'active' : 'paused'">
+                {{ $outboundMail['configured'] ? __('configured') : __('log only') }}
+            </x-ui.row-badge>
+        </header>
+        <dl class="grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
+            <div>
+                <dt class="text-[10px] uppercase tracking-wider text-neutral-500">{{ __('Driver') }}</dt>
+                <dd class="mt-0.5 font-mono text-neutral-200">{{ $outboundMail['driver'] }}</dd>
+            </div>
+            <div>
+                <dt class="text-[10px] uppercase tracking-wider text-neutral-500">{{ __('From address') }}</dt>
+                <dd class="mt-0.5 font-mono text-neutral-200">{{ $outboundMail['from'] ?? '—' }}</dd>
+            </div>
+            <div>
+                <dt class="text-[10px] uppercase tracking-wider text-neutral-500">{{ __('Host') }}</dt>
+                <dd class="mt-0.5 font-mono text-neutral-200">{{ $outboundMail['host'] ?? '—' }}</dd>
+            </div>
+        </dl>
+    </section>
+
+    {{-- Local AI (LM Studio) ────────────────────────────────────────────── --}}
+    <section aria-labelledby="local-ai-heading" class="rounded-xl border border-neutral-800 bg-neutral-900/40 p-5">
+        <header class="mb-3 flex items-baseline justify-between gap-4">
+            <div>
+                <h3 id="local-ai-heading" class="text-sm font-semibold text-neutral-100">{{ __('Local AI (LM Studio)') }}</h3>
+                <p class="mt-1 text-xs text-neutral-500">
+                    {{ __('OCR extraction and other inference run against a local LM Studio server. Configure LM_STUDIO_ENABLED, LM_STUDIO_BASE_URL, and LM_STUDIO_MODEL in .env.') }}
+                </p>
+            </div>
+            <x-ui.row-badge :state="$localAi['enabled'] ? 'active' : 'paused'">
+                {{ $localAi['enabled'] ? __('enabled') : __('disabled') }}
+            </x-ui.row-badge>
+        </header>
+        <dl class="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
+            <div>
+                <dt class="text-[10px] uppercase tracking-wider text-neutral-500">{{ __('Base URL') }}</dt>
+                <dd class="mt-0.5 font-mono text-neutral-200">{{ $localAi['base_url'] ?? '—' }}</dd>
+            </div>
+            <div>
+                <dt class="text-[10px] uppercase tracking-wider text-neutral-500">{{ __('Model') }}</dt>
+                <dd class="mt-0.5 font-mono text-neutral-200">{{ $localAi['model'] ?? '—' }}</dd>
+            </div>
+        </dl>
     </section>
 
     {{-- Backups ───────────────────────────────────────────────────────── --}}
@@ -136,7 +248,7 @@ new class extends Component
 
     {{-- Profile link — keep settings from duplicating per-user preferences. --}}
     <section class="rounded-xl border border-neutral-800 bg-neutral-900/40 p-5 text-xs text-neutral-500">
-        {{ __('Looking for name / locale / timezone / theme / currency / notification preferences?') }}
+        {{ __('Looking for name / locale / timezone / theme / currency / notification preferences, Gmail or Fastmail connection, or passkeys?') }}
         <a href="{{ route('profile') }}" class="text-sky-300 underline-offset-2 hover:underline">{{ __('They\'re on /profile.') }}</a>
     </section>
 </div>

@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Integration;
 use App\Models\UserNotificationPreference;
 use Livewire\Livewire;
 
@@ -81,4 +82,64 @@ it('toggling a notification preference persists an opt-out', function () {
 
     $comp->call('togglePreference', 'task_reminder', 'email');
     expect((bool) $row->fresh()->enabled)->toBeTrue();
+});
+
+it('shows personal mail / calendar integrations on the profile page', function () {
+    authedInHousehold();
+    Integration::forceCreate([
+        'provider' => 'gmail', 'kind' => 'mail',
+        'label' => 'me@example.com',
+        'credentials' => ['refresh_token' => 'x'],
+        'settings' => [],
+        'status' => 'active',
+    ]);
+
+    $this->get('/profile')
+        ->assertOk()
+        ->assertSee(__('Personal integrations'))
+        ->assertSee('me@example.com')
+        ->assertSee(__('Connect Gmail'));
+});
+
+it('omits household-level integrations from the profile page', function () {
+    authedInHousehold();
+    Integration::forceCreate([
+        'provider' => 'paypal', 'kind' => 'bank',
+        'label' => 'Household PayPal',
+        'credentials' => ['client_id' => 'x'],
+        'settings' => [],
+        'status' => 'active',
+    ]);
+
+    $this->get('/profile')
+        ->assertOk()
+        ->assertDontSee('Household PayPal');
+});
+
+it('disconnects a personal mail integration from the profile controller', function () {
+    authedInHousehold();
+    $int = Integration::forceCreate([
+        'provider' => 'gmail', 'kind' => 'mail',
+        'label' => 'me@example.com',
+        'credentials' => ['refresh_token' => 'x'],
+        'settings' => [],
+        'status' => 'active',
+    ]);
+
+    Livewire::test('profile')->call('disconnectIntegration', $int->id);
+    expect(Integration::where('id', $int->id)->exists())->toBeFalse();
+});
+
+it('refuses to disconnect a household integration from the profile controller', function () {
+    authedInHousehold();
+    $int = Integration::forceCreate([
+        'provider' => 'paypal', 'kind' => 'bank',
+        'label' => 'Household PayPal',
+        'credentials' => ['client_id' => 'x'],
+        'settings' => [],
+        'status' => 'active',
+    ]);
+
+    Livewire::test('profile')->call('disconnectIntegration', $int->id);
+    expect(Integration::where('id', $int->id)->exists())->toBeTrue();
 });
