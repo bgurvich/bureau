@@ -38,6 +38,19 @@ Four records on `bureau.homes`'s authoritative DNS (Cloudflare, Route 53, your r
 
 Wait ~15 min for propagation, then in Postmark click **Verify DNS**. Four green checks.
 
+### Postmark UI quirk — the server name leaks into record labels
+
+Postmark appends the *server* name (e.g. `boris`) to every record it shows. If your server is called `boris` and your domain is `bureau.homes`, Postmark displays:
+
+```
+20260421071852pm._domainkey.boris
+pm-bounces.boris
+```
+
+Strip the `.boris` before pasting into DNS. The real host is `20260421071852pm._domainkey` and `pm-bounces` respectively; your DNS zone auto-appends `.bureau.homes`. Postmark's **Verify** step queries the domain-scoped hostname (not the server-scoped one), so the records match after you strip.
+
+If the server is named the same as a subdomain you actually want to send from (e.g. `boris.bureau.homes`), then keep the suffix — but it has to be consistent: SPF on the subdomain apex, `MAIL_FROM_ADDRESS=...@boris.bureau.homes`, etc.
+
 ### Record syntax notes
 
 - **SPF**: one `v=spf1` record per domain, max 10 DNS lookups. `~all` = soft-fail (recommended during rollout). Tighten to `-all` after a week.
