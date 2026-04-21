@@ -3,13 +3,16 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToHousehold;
+use App\Models\Concerns\HasLinkedNotes;
+use App\Models\Concerns\HasLinkedTasks;
+use App\Models\Concerns\HasLinkedTransactions;
 use App\Models\Concerns\HasTags;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class OnlineAccount extends Model
 {
-    use BelongsToHousehold, HasTags;
+    use BelongsToHousehold, HasLinkedNotes, HasLinkedTasks, HasLinkedTransactions, HasTags;
 
     protected $guarded = [];
 

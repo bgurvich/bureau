@@ -19,6 +19,7 @@ class StreamEvent extends Model
         'payload' => 'array',
     ];
 
+    /** @return MorphTo<Model, $this> */
     public function source(): MorphTo
     {
         return $this->morphTo();

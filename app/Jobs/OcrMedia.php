@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\Media;
 use App\Support\CurrentHousehold;
 use App\Support\Ocr;
+use App\Support\Pdf;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Storage;
@@ -29,8 +30,10 @@ class OcrMedia implements ShouldQueue
             CurrentHousehold::set($household);
         }
 
-        // Only images today. PDFs need pdftotext/poppler — out of scope for v1.
-        if (! str_starts_with((string) $m->mime, 'image/')) {
+        $mime = (string) $m->mime;
+        $isImage = str_starts_with($mime, 'image/');
+        $isPdf = $mime === 'application/pdf';
+        if (! $isImage && ! $isPdf) {
             $m->forceFill(['ocr_status' => 'skip'])->save();
 
             return;
@@ -39,16 +42,24 @@ class OcrMedia implements ShouldQueue
         $absolutePath = Storage::disk($m->disk ?: 'local')->path($m->path);
 
         try {
-            $text = Ocr::extract($absolutePath);
-            if ($text === null) {
+            $text = $isPdf ? Pdf::extractText($absolutePath) : Ocr::extract($absolutePath);
+            if ($text === null || trim((string) $text) === '') {
                 $m->forceFill(['ocr_status' => 'failed'])->save();
 
                 return;
             }
-            $m->forceFill([
+            $fields = [
                 'ocr_status' => 'done',
                 'ocr_text' => $text,
-            ])->save();
+            ];
+            if (config('services.lm_studio.enabled')) {
+                $fields['extraction_status'] = 'pending';
+            }
+            $m->forceFill($fields)->save();
+
+            if (config('services.lm_studio.enabled')) {
+                ExtractOcrStructure::dispatch($m->id);
+            }
         } catch (\Throwable $e) {
             $meta = $m->meta ?? [];
             $meta['ocr_error'] = $e->getMessage();

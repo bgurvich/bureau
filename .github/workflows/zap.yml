@@ -1,0 +1,96 @@
+name: ZAP baseline
+
+# Passive security scan. Runs on every PR + weekly against main. The baseline
+# scan is read-only (no attack payloads), so this is safe to run against a
+# freshly-seeded ephemeral instance. For active scans see docs/security/zap.md.
+on:
+  pull_request:
+    paths:
+      - 'app/**'
+      - 'config/**'
+      - 'routes/**'
+      - 'resources/views/**'
+      - 'composer.json'
+      - 'composer.lock'
+      - '.github/workflows/zap.yml'
+  schedule:
+    - cron: '0 6 * * 1'   # Mondays 06:00 UTC
+  workflow_dispatch: {}
+
+jobs:
+  baseline:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    services:
+      mariadb:
+        image: mariadb:11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: bureau
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mariadb-admin ping -h127.0.0.1 -uroot -proot"
+          --health-interval=5s --health-timeout=3s --health-retries=20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, intl, pdo_mysql, zip, gd, bcmath
+
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+
+      - name: Install PHP deps
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: Install JS deps + build assets
+        run: |
+          npm ci --ignore-scripts
+          npm run build
+
+      - name: Seed environment
+        run: |
+          cp .env.example .env
+          echo "DB_CONNECTION=mariadb" >> .env
+          echo "DB_HOST=127.0.0.1"     >> .env
+          echo "DB_PORT=3306"          >> .env
+          echo "DB_DATABASE=bureau"    >> .env
+          echo "DB_USERNAME=root"      >> .env
+          echo "DB_PASSWORD=root"      >> .env
+          php artisan key:generate
+          php artisan migrate --force
+
+      - name: Start Bureau
+        run: |
+          php artisan serve --host=0.0.0.0 --port=8090 --no-reload >/tmp/serve.log 2>&1 &
+          echo $! > /tmp/serve.pid
+          for i in {1..40}; do
+            curl -sSf -o /dev/null http://127.0.0.1:8090/up && break
+            sleep 0.5
+          done
+          curl -sSf -o /dev/null http://127.0.0.1:8090/up
+
+      - name: Run ZAP baseline scan
+        uses: zaproxy/action-baseline@v0.14.0
+        with:
+          target: 'http://127.0.0.1:8090'
+          # -I so the scan still reports and passes on warnings. Failures
+          # only surface for hard errors (connectivity, config). Rules file
+          # lives next to this workflow and lets you downgrade known-false-
+          # positive rules without editing CI each time.
+          cmd_options: '-I -s'
+          rules_file_name: '.github/zap-rules.tsv'
+          fail_action: false
+          allow_issue_writing: false
+          artifact_name: 'zap-baseline-report'
+
+      - name: Stop Bureau
+        if: always()
+        run: |
+          kill "$(cat /tmp/serve.pid)" || true
+          tail -n 100 /tmp/serve.log || true

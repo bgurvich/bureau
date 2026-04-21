@@ -17,63 +17,69 @@
         @endif
     </h4>
 
-    <div x-data="{
-            open: null,
-            dragFrom: null,
-            order: @js($photos->pluck('id')->all()),
-            dragStart(id) { this.dragFrom = id; },
-            dragOver(e) { e.preventDefault(); },
-            drop(targetId) {
-                if (this.dragFrom === null || this.dragFrom === targetId) { this.dragFrom = null; return; }
-                const from = this.order.indexOf(this.dragFrom);
-                const to = this.order.indexOf(targetId);
-                if (from === -1 || to === -1) { this.dragFrom = null; return; }
-                this.order.splice(to, 0, this.order.splice(from, 1)[0]);
-                this.$wire.reorderPhotos(this.order);
-                this.dragFrom = null;
+    <div x-data="{ open: null, over: false }"
+         x-on:dragover.prevent="over = true"
+         x-on:dragleave.prevent="over = false"
+         x-on:drop.prevent="
+            over = false;
+            if (!$event.dataTransfer?.files?.length) return;
+            const dt = new DataTransfer();
+            for (const f of $event.dataTransfer.files) {
+                if (f.type.startsWith('image/')) dt.items.add(f);
             }
-         }"
-         class="flex flex-wrap gap-2">
-        @foreach ($photos as $photo)
-            <div wire:key="insp-photo-{{ $photo->id }}"
-                 draggable="true"
-                 x-on:dragstart="dragStart({{ $photo->id }})"
-                 x-on:dragover="dragOver($event)"
-                 x-on:drop="drop({{ $photo->id }})"
-                 x-bind:class="dragFrom === {{ $photo->id }} ? 'opacity-40' : ''"
-                 class="group relative">
-                <button type="button"
-                        x-on:click.stop="open = {{ $photo->id }}"
-                        class="h-16 w-16 cursor-grab overflow-hidden rounded-md border border-neutral-800 bg-neutral-950 active:cursor-grabbing focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300"
-                        aria-label="{{ __('View photo :name', ['name' => $photo->original_name ?: __('Photo')]) }}">
-                    <img src="{{ route('media.file', $photo) }}" alt="" class="h-full w-full object-cover" loading="lazy" />
-                </button>
-                @if ($loop->first)
-                    <span aria-hidden="true"
-                          class="pointer-events-none absolute left-1 top-1 rounded bg-emerald-600/90 px-1 text-[9px] font-medium uppercase tracking-wider text-white">
-                        {{ __('cover') }}
-                    </span>
-                @endif
-                <button type="button"
-                        wire:click="deletePhoto({{ $photo->id }})"
-                        wire:confirm="{{ __('Delete this photo?') }}"
-                        aria-label="{{ __('Delete photo') }}"
-                        class="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-neutral-900 text-neutral-300 opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
-                    <svg class="h-3 w-3" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                        <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                    </svg>
-                </button>
-            </div>
-        @endforeach
+            if (!dt.files.length) return;
+            $refs.photoUpload.files = dt.files;
+            $refs.photoUpload.dispatchEvent(new Event('change', { bubbles: true }));
+         "
+         :class="over ? 'rounded-lg ring-2 ring-emerald-500/60 ring-offset-2 ring-offset-neutral-950' : ''"
+         class="transition">
+        {{-- Thumbnails + the Add tile live in ONE flex-wrap row so the Add
+             tile sits next to the last thumbnail when there's space and wraps
+             to the next row only when the list overflows. The bare <li> at
+             the end has no data-item-key so Alpine's sortable ignores it.
+             The whole wrapper is a drop target — drop images anywhere in the
+             thumbnails area and they upload without needing to hit the Add
+             tile exactly. --}}
+        <x-ui.sortable-list reorder-method="reorderPhotos" class="flex flex-wrap gap-2">
+            @foreach ($photos as $photo)
+                <x-ui.sortable-row :item-key="$photo->id" :no-handle="true"
+                                   class="group relative">
+                    <button type="button"
+                            x-on:click.stop="open = {{ $photo->id }}"
+                            class="h-16 w-16 cursor-grab overflow-hidden rounded-md border border-neutral-800 bg-neutral-950 active:cursor-grabbing focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300"
+                            aria-label="{{ __('View photo :name', ['name' => $photo->original_name ?: __('Photo')]) }}">
+                        <img src="{{ route('media.file', $photo) }}" alt="" class="h-full w-full object-cover" loading="lazy" />
+                    </button>
+                    @if ($loop->first)
+                        <span aria-hidden="true"
+                              class="pointer-events-none absolute left-1 top-1 rounded bg-emerald-600/90 px-1 text-[9px] font-medium uppercase tracking-wider text-white">
+                            {{ __('cover') }}
+                        </span>
+                    @endif
+                    <button type="button"
+                            wire:click="deletePhoto({{ $photo->id }})"
+                            wire:confirm="{{ __('Delete this photo?') }}"
+                            aria-label="{{ __('Delete photo') }}"
+                            class="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-neutral-900 text-neutral-300 opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                        <svg class="h-3 w-3" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                            <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </button>
+                </x-ui.sortable-row>
+            @endforeach
 
-        <label class="flex h-16 w-16 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-md border border-dashed border-neutral-700 text-neutral-500 hover:border-neutral-500 hover:text-neutral-300 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-neutral-300"
-               for="insp-photo-upload">
-            <svg class="h-4 w-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-                <path d="M8 3v10M3 8h10" stroke-linecap="round"/>
-            </svg>
-            <span class="text-[10px]">{{ __('Add') }}</span>
-        </label>
-        <input id="insp-photo-upload" type="file" wire:model="photoUpload" accept="image/*" multiple class="sr-only" />
+            <li>
+                <label :class="over ? 'border-emerald-500 text-emerald-300' : 'border-neutral-700 text-neutral-500'"
+                       class="flex h-16 w-16 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-md border-2 border-dashed transition-colors hover:border-neutral-500 hover:text-neutral-300 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-neutral-300"
+                       for="insp-photo-upload">
+                    <svg class="h-4 w-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                        <path d="M8 3v10M3 8h10" stroke-linecap="round"/>
+                    </svg>
+                    <span x-text="over ? @js(__('Drop')) : @js(__('Add'))" class="text-[10px]">{{ __('Add') }}</span>
+                </label>
+                <input x-ref="photoUpload" id="insp-photo-upload" type="file" wire:model="photoUpload" accept="image/*" multiple class="sr-only" />
+            </li>
+        </x-ui.sortable-list>
 
         <template x-teleport="body">
             <div x-show="open !== null" x-cloak x-transition.opacity

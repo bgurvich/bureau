@@ -1,0 +1,69 @@
+# OWASP ZAP Automation Framework config for Bureau Dashboard.
+# Run with: ./scripts/run-zap.sh [baseline|full|auth]
+#
+# Target: http://localhost:8000 (local dev or staging)
+# Auth: boris@gurvich.me / password (dev seed users)
+#
+# NOTE: Disable mandatory 2FA in the test environment before running.
+
+env:
+  contexts:
+    - name: "Bureau"
+      urls:
+        - "http://localhost:8000"
+      includePaths:
+        - "http://localhost:8000.*"
+      excludePaths:
+        - "http://localhost:8000/logout"
+        - "http://localhost:8000/_debugbar/.*"
+        - "http://localhost:8000/up"
+        - "http://localhost:8000/health"
+        - "http://localhost:8000/livewire/livewire.*"
+      authentication:
+        method: "browser"
+        parameters:
+          loginPageUrl: "http://localhost:8000/login"
+          browserId: "firefox-headless"
+        verification:
+          method: "response"
+          loggedInRegex: "\\Qdashboard\\E"
+          loggedOutRegex: "\\Qlogin\\E"
+      sessionManagement:
+        method: "cookie"
+      users:
+        - name: "admin"
+          credentials:
+            username: "boris@gurvich.me"
+            password: "change-me"
+
+jobs:
+  - type: spider
+    parameters:
+      context: "Bureau"
+      user: "admin"
+      maxDuration: 5
+      maxDepth: 5
+  - type: spiderAjax
+    parameters:
+      context: "Bureau"
+      user: "admin"
+      maxDuration: 5
+  - type: passiveScan-wait
+    parameters:
+      maxDuration: 5
+  - type: activeScan
+    parameters:
+      context: "Bureau"
+      user: "admin"
+      maxRuleDurationInMins: 5
+      maxScanDurationInMins: 30
+  - type: report
+    parameters:
+      template: "traditional-html"
+      reportDir: "/zap/wrk"
+      reportFile: "zap-auth-report"
+    risks:
+      - high
+      - medium
+      - low
+      - info

@@ -10,13 +10,15 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Laragear\WebAuthn\Contracts\WebAuthnAuthenticatable;
+use Laragear\WebAuthn\WebAuthnAuthentication;
 
 #[Fillable(['name', 'email', 'password', 'default_household_id', 'locale', 'timezone', 'date_format', 'time_format', 'week_starts_on', 'theme'])]
 #[Hidden(['password', 'remember_token'])]
-class User extends Authenticatable
+class User extends Authenticatable implements WebAuthnAuthenticatable
 {
     /** @use HasFactory<UserFactory> */
-    use HasFactory, Notifiable;
+    use HasFactory, Notifiable, WebAuthnAuthentication;
 
     protected $attributes = [
         'locale' => 'en',
@@ -36,6 +38,7 @@ class User extends Authenticatable
         ];
     }
 
+    /** @return BelongsToMany<Household, $this> */
     public function households(): BelongsToMany
     {
         return $this->belongsToMany(Household::class, 'household_user')
@@ -43,6 +46,7 @@ class User extends Authenticatable
             ->withTimestamps();
     }
 
+    /** @return BelongsTo<Household, $this> */
     public function defaultHousehold(): BelongsTo
     {
         return $this->belongsTo(Household::class, 'default_household_id');

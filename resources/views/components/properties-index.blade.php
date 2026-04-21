@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Property;
+use App\Support\CurrentHousehold;
 use App\Support\Formatting;
 use Illuminate\Database\Eloquent\Collection;
 use Livewire\Attributes\Computed;
@@ -40,6 +41,12 @@ class extends Component
             ->map(fn (Property $p) => (float) ($p->latestValuation?->value ?? $p->purchase_price ?? 0))
             ->sum();
     }
+
+    #[Computed]
+    public function currency(): string
+    {
+        return CurrentHousehold::get()?->default_currency ?? 'USD';
+    }
 };
 ?>
 
@@ -55,7 +62,7 @@ class extends Component
     <dl class="flex gap-5 text-xs">
             <div>
                 <dt class="text-[10px] uppercase tracking-wider text-neutral-500">{{ __('Estimated value') }}</dt>
-                <dd class="mt-0.5 tabular-nums text-neutral-200">{{ number_format($this->totalValue, 0) }}</dd>
+                <dd class="mt-0.5 tabular-nums text-neutral-200">{{ Formatting::money($this->totalValue, $this->currency) }}</dd>
             </div>
             <div>
                 <dt class="text-[10px] uppercase tracking-wider text-neutral-500">{{ __('On file') }}</dt>
@@ -124,11 +131,11 @@ class extends Component
                         <div class="shrink-0 text-right">
                             @if ($currentValue !== null)
                                 <div class="text-sm tabular-nums text-neutral-100">
-                                    {{ number_format((float) $currentValue, 0) }} {{ $latest?->currency ?? $p->purchase_currency }}
+                                    {{ Formatting::money((float) $currentValue, $latest?->currency ?? $p->purchase_currency ?? $this->currency) }}
                                 </div>
                                 @if ($delta !== null)
                                     <div class="text-[10px] tabular-nums {{ $delta >= 0 ? 'text-emerald-400' : 'text-rose-400' }}">
-                                        {{ $delta >= 0 ? '+' : '' }}{{ number_format($delta, 0) }}
+                                        {{ $delta >= 0 ? '+' : '' }}{{ Formatting::money($delta, $latest?->currency ?? $p->purchase_currency ?? $this->currency) }}
                                     </div>
                                 @elseif ($latest)
                                     <div class="text-[10px] text-neutral-500">{{ __('as of') }} {{ Formatting::date($latest->as_of) }}</div>

@@ -20,11 +20,13 @@ class Appointment extends Model
         'ends_at' => 'datetime',
     ];
 
+    /** @return BelongsTo<HealthProvider, $this> */
     public function provider(): BelongsTo
     {
         return $this->belongsTo(HealthProvider::class, 'provider_id');
     }
 
+    /** @return MorphTo<Model, $this> */
     public function subject(): MorphTo
     {
         return $this->morphTo();

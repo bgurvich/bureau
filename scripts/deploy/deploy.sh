@@ -60,13 +60,31 @@ ERRORS=0
 echo ""
 echo -e "${BOLD}── Security checks ──────────────────────────────────────${RESET}"
 
+# Parse a value from .env, handling optional quotes and inline comments.
+# Returns empty string when the key is absent.
+env_value() {
+    local key="$1"
+    awk -F= -v k="$key" '
+        $0 ~ "^"k"=" {
+            # Strip the key and the first =
+            sub("^"k"=", "", $0)
+            # Strip trailing inline comment
+            sub(/ +#.*$/, "", $0)
+            # Strip matching surrounding quotes
+            gsub(/^"|"$|^'\''|'\''$/, "", $0)
+            print
+            exit
+        }
+    ' .env
+}
+
 if [ ! -f .env ]; then
     fail ".env file not found — copy .env.example and fill it in"
 else
     ok ".env exists"
-    APP_ENV=$(grep -E '^APP_ENV=' .env | cut -d= -f2 | tr -d '"' | tr -d "'")
-    APP_DEBUG=$(grep -E '^APP_DEBUG=' .env | cut -d= -f2 | tr -d '"' | tr -d "'")
-    APP_KEY=$(grep -E '^APP_KEY=' .env | cut -d= -f2 | tr -d '"' | tr -d "'")
+    APP_ENV=$(env_value APP_ENV)
+    APP_DEBUG=$(env_value APP_DEBUG)
+    APP_KEY=$(env_value APP_KEY)
 
     [ "$APP_ENV" = "production" ] && ok "APP_ENV=production" \
         || fail "APP_ENV must be 'production' (currently: '${APP_ENV:-<empty>}')"
@@ -74,18 +92,43 @@ else
         || fail "APP_DEBUG must be 'false' (currently: '${APP_DEBUG:-<empty>}')"
     [ -n "$APP_KEY" ] && ok "APP_KEY is set" \
         || fail "APP_KEY is empty — run: php artisan key:generate"
+    # Catch stale checkouts where APP_KEY is still the .env.example placeholder.
+    [ "$APP_KEY" = "base64:generate-me" ] && fail "APP_KEY is the example placeholder — regenerate with: php artisan key:generate" || true
 fi
 
 [ -w "storage" ]           && ok "storage/ is writable"          || fail "storage/ is not writable"
 [ -w "bootstrap/cache" ]   && ok "bootstrap/cache/ is writable"  || fail "bootstrap/cache/ is not writable"
 grep -rq 'phpinfo()' public/ 2>/dev/null && fail "phpinfo() found in public/" || true
 
-ENV_PERMS=$(stat -c "%a" .env 2>/dev/null || stat -f "%Lp" .env 2>/dev/null)
-if [ "${ENV_PERMS: -1}" = "0" ]; then
-    ok ".env is not world-readable (${ENV_PERMS})"
+# public/storage must be a symlink pointing at storage/app/public. A regular
+# directory there typically means someone ran `storage:link` on a Windows
+# filesystem and then copied files, or a previous deploy failed mid-link —
+# either way, continuing would serve the wrong content.
+if [ -e public/storage ] && [ ! -L public/storage ]; then
+    fail "public/storage exists but is not a symlink — rm it and re-run storage:link"
 else
-    warn ".env permissions are ${ENV_PERMS} — consider: chmod 640 .env"
+    ok "public/storage is a symlink (or absent)"
 fi
+
+# `.env` must not be tracked. A committed .env leaks APP_KEY/DB creds on push.
+if git ls-files --error-unmatch .env >/dev/null 2>&1; then
+    fail ".env is tracked by git — remove with: git rm --cached .env && git commit"
+else
+    ok ".env is not tracked by git"
+fi
+
+ENV_PERMS=$(stat -c "%a" .env 2>/dev/null || stat -f "%Lp" .env 2>/dev/null)
+# Fail (not warn) on world/group-readable perms in production — this file
+# carries DB creds, APP_KEY, OAuth secrets. Accept 600 (owner only) or 640
+# (owner rw, group r — the common www-data pattern).
+case "$ENV_PERMS" in
+    600|640)
+        ok ".env permissions OK (${ENV_PERMS})"
+        ;;
+    *)
+        fail ".env permissions are ${ENV_PERMS} — run: chmod 640 .env"
+        ;;
+esac
 
 if [ "$ERRORS" -gt 0 ]; then
     echo ""
@@ -123,16 +166,32 @@ fi
 # ── Database backup ──────────────────────────────────────
 echo ""
 echo -e "${BOLD}── Database backup ──────────────────────────────────────${RESET}"
-DB_NAME=$(grep -E '^DB_DATABASE=' .env | cut -d= -f2 | tr -d '"' | tr -d "'" | xargs 2>/dev/null || true)
-DB_USER=$(grep -E '^DB_USERNAME=' .env | cut -d= -f2 | tr -d '"' | tr -d "'" | xargs 2>/dev/null || true)
-DB_PASS=$(grep -E '^DB_PASSWORD=' .env | cut -d= -f2 | tr -d '"' | tr -d "'" | xargs 2>/dev/null || true)
+DB_NAME=$(env_value DB_DATABASE)
+DB_USER=$(env_value DB_USERNAME)
+DB_PASS=$(env_value DB_PASSWORD)
 
 if [[ -n "$DB_NAME" && -n "$DB_USER" ]]; then
+    # Lock the backup dir before writing the dump — SQL backups contain every
+    # row the app holds (including encrypted credentials) and must not be
+    # readable by other OS users. Enforce before the file lands.
     mkdir -p storage/backups
+    chmod 700 storage/backups
     BACKUP="storage/backups/pre-migrate-$(date +%Y%m%d%H%M%S).sql.gz"
-    MYSQL_PWD="$DB_PASS" mysqldump -u"$DB_USER" "$DB_NAME" 2>/dev/null | gzip > "$BACKUP" \
-        && ok "DB backup: $BACKUP" \
-        || warn "DB backup failed — proceeding anyway"
+    # set -o pipefail is already active so mysqldump failures exit this pipe
+    # non-zero even when gzip succeeds on a partial stream.
+    if MYSQL_PWD="$DB_PASS" mysqldump --single-transaction --quick -u"$DB_USER" "$DB_NAME" 2>/dev/null | gzip > "$BACKUP"; then
+        chmod 600 "$BACKUP"
+        # Sanity check the gzip stream so we don't ship forward with a truncated archive.
+        if gzip -t "$BACKUP" 2>/dev/null; then
+            ok "DB backup: $BACKUP (gzip verified)"
+        else
+            rm -f "$BACKUP"
+            fail "DB backup gzip-test failed — refusing to proceed"
+        fi
+    else
+        rm -f "$BACKUP"
+        fail "DB backup failed — refusing to proceed (fix mysqldump before retrying)"
+    fi
 else
     warn "DB credentials not found in .env — skipping backup"
 fi
@@ -149,8 +208,8 @@ echo -e "${BOLD}── Cache & optimisation ────────────
 php artisan optimize
 ok "php artisan optimize (config + routes + views + events cached)"
 
-chmod -R ug+rw storage bootstrap/cache
-ok "storage/ + bootstrap/cache/ → ug+rw"
+chmod -R ug+rwX,o-rwx storage bootstrap/cache
+ok "storage/ + bootstrap/cache/ → ug+rwX,o-rwx (world-unreadable)"
 
 # ── Restart services ─────────────────────────────────────
 echo ""
@@ -186,7 +245,7 @@ ok "Maintenance mode disabled"
 
 echo ""
 echo -e "${BOLD}── Health check ─────────────────────────────────────────${RESET}"
-APP_URL=$(grep -E '^APP_URL=' .env | cut -d= -f2 | tr -d '"' | tr -d "'" | xargs 2>/dev/null || true)
+APP_URL=$(env_value APP_URL)
 if [[ -n "$APP_URL" ]]; then
     if curl -fsS --max-time 10 "${APP_URL}/up" > /dev/null 2>&1; then
         ok "App is up at ${APP_URL}/up"

@@ -52,6 +52,8 @@
                 id="i-bill-cat"
                 model="category_id"
                 :options="['' => '—'] + $this->categories->mapWithKeys(fn ($c) => [$c->id => ucfirst($c->kind).' · '.$c->name])->all()"
+                :allow-create="true"
+                create-method="createCategoryInline"
                 placeholder="—" />
         </div>
         <div>

@@ -14,6 +14,7 @@ class FxRate extends Model
         'rate' => 'decimal:8',
     ];
 
+    /** @return BelongsTo<Household, $this> */
     public function household(): BelongsTo
     {
         return $this->belongsTo(Household::class);

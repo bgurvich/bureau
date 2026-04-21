@@ -43,9 +43,14 @@ if [ ! -f .env ]; then
     cp .env.example .env
     ok "Copied .env.example → .env"
     warn "Review .env for DB credentials, APP_URL, mail settings"
+    warn "Production: run 'sudo bash scripts/deploy/install.sh' next (env + nginx + certbot)"
 else
     ok ".env exists"
 fi
+# Lock .env to the owner only. It carries APP_KEY, DB creds, OAuth secrets —
+# world-readability on a shared server is a credential leak.
+chmod 600 .env
+ok ".env → 0600 (owner-only)"
 
 # Generate APP_KEY if empty
 if ! grep -qE '^APP_KEY=.+$' .env || grep -qE '^APP_KEY=$' .env; then
@@ -68,8 +73,10 @@ ok "npm run build"
 
 # ── Permissions ──────────────────────────────────────────
 mkdir -p storage/framework/{cache,sessions,testing,views} storage/logs bootstrap/cache
-chmod -R ug+rw storage bootstrap/cache
-ok "storage/ + bootstrap/cache/ → ug+rw"
+# ug+rw adds the bits we need; o-rwx revokes world-access so session files,
+# cached views, and any stray backup aren't readable by other OS users.
+chmod -R ug+rwX,o-rwx storage bootstrap/cache
+ok "storage/ + bootstrap/cache/ → ug+rwX,o-rwx (world-unreadable)"
 
 # ── Storage link ─────────────────────────────────────────
 if [ ! -L public/storage ]; then
@@ -83,11 +90,14 @@ fi
 php artisan migrate --force
 ok "migrations applied"
 
-# Seed only if no users yet (idempotent — skips on repeat runs with existing data)
+# Seed the default household + owner user + starter/system categories on a
+# fresh DB. Demo rows (accounts, transactions, etc.) are opt-in via a
+# separate seeder — run `php artisan db:seed --class=DemoDataSeeder` in dev
+# if you want them.
 USER_COUNT=$(php artisan tinker --execute="echo \App\Models\User::count();" 2>/dev/null | tail -1 | tr -d '[:space:]')
 if [[ "${USER_COUNT:-0}" == "0" ]]; then
     php artisan db:seed --force
-    ok "database seeded (user + demo data)"
+    ok "database seeded (household + owner user + starter categories)"
 else
     ok "database has $USER_COUNT user(s) — skipping seed"
 fi

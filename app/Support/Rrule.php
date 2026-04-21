@@ -83,7 +83,22 @@ class Rrule
         $cursor = $start;
         $iterations = 0;
 
-        while ($cursor->lte($effectiveUntil) && $iterations < self::ITERATION_CAP) {
+        // Terminate when the cursor's *period* is past the horizon, not when
+        // the cursor's raw date is. For WEEKLY with a mid-week DTSTART, the
+        // cursor lands inside the next period after one hop (e.g. Wed → next
+        // Wed), which skipped the containing week whenever the horizon fell
+        // on that week's Mon/Tue. Same fix covers MONTHLY BYMONTHDAY=1 when
+        // horizon lands on the 1st.
+        $periodStart = static function (CarbonImmutable $c) use ($freq): CarbonImmutable {
+            return match ($freq) {
+                'DAILY' => $c,
+                'WEEKLY' => $c->startOfWeek(CarbonInterface::MONDAY),
+                'MONTHLY' => $c->startOfMonth(),
+                'YEARLY' => $c->startOfYear(),
+            };
+        };
+
+        while ($periodStart($cursor)->lte($effectiveUntil) && $iterations < self::ITERATION_CAP) {
             $iterations++;
 
             foreach (self::expandPeriod($cursor, $freq, $byMonthday, $byDay) as $candidate) {

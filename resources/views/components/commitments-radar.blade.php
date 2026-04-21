@@ -5,6 +5,7 @@ use App\Models\Category;
 use App\Models\Contract;
 use App\Models\Transaction;
 use App\Models\Transfer;
+use App\Support\Formatting;
 use Livewire\Attributes\Computed;
 use Livewire\Component;
 
@@ -129,7 +130,7 @@ new class extends Component
             <div>
                 <div class="text-xs text-neutral-500">Monthly burn</div>
                 <div class="mt-1 text-sm tabular-nums text-neutral-300">
-                    {{ $this->currency }} {{ number_format($this->monthlyCost, 2) }}
+                    {{ Formatting::money($this->monthlyCost, $this->currency) }}
                 </div>
             </div>
         </div>
@@ -161,7 +162,7 @@ new class extends Component
                     <div class="text-right">
                         <div class="text-xs text-neutral-500">{{ __('Interest (12mo)') }}</div>
                         <div class="tabular-nums text-rose-400">
-                            {{ $this->currency }} {{ number_format($this->creditRates['annual_interest'], 2) }}
+                            {{ Formatting::money($this->creditRates['annual_interest'], $this->currency) }}
                         </div>
                     </div>
                 </div>

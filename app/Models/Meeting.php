@@ -21,11 +21,13 @@ class Meeting extends Model
         'all_day' => 'boolean',
     ];
 
+    /** @return BelongsTo<CalendarFeed, $this> */
     public function calendarFeed(): BelongsTo
     {
         return $this->belongsTo(CalendarFeed::class);
     }
 
+    /** @return BelongsToMany<Contact, $this> */
     public function contacts(): BelongsToMany
     {
         return $this->belongsToMany(Contact::class, 'meeting_contact')

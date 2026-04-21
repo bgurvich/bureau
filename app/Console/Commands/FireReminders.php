@@ -105,6 +105,8 @@ class FireReminders extends Command
             return;
         }
 
-        Mail::to($to)->send(new ReminderMail($reminder));
+        // Pass the user so ReminderMail can embed a MagicLink that auto-
+        // authenticates the recipient when they tap "Open Bureau" on mobile.
+        Mail::to($to)->send(new ReminderMail($reminder, $user));
     }
 }

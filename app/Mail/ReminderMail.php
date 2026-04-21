@@ -3,6 +3,8 @@
 namespace App\Mail;
 
 use App\Models\Reminder;
+use App\Models\User;
+use App\Support\MagicLink;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
@@ -13,7 +15,16 @@ class ReminderMail extends Mailable
 {
     use Queueable, SerializesModels;
 
-    public function __construct(public Reminder $reminder) {}
+    /**
+     * The recipient User is captured so we can embed a MagicLink that
+     * auto-authenticates the recipient when they tap the "Open Bureau"
+     * button on their phone. Nullable for legacy callers / tests that
+     * just render the body without delivering.
+     */
+    public function __construct(
+        public Reminder $reminder,
+        public ?User $user = null,
+    ) {}
 
     public function envelope(): Envelope
     {
@@ -24,10 +35,15 @@ class ReminderMail extends Mailable
 
     public function content(): Content
     {
+        $url = $this->user
+            ? MagicLink::to($this->user, 'dashboard')
+            : config('app.url');
+
         return new Content(
             markdown: 'emails.reminder',
             with: [
                 'reminder' => $this->reminder,
+                'url' => $url,
             ],
         );
     }

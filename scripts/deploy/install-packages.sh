@@ -9,6 +9,8 @@
 #   - OCR pipeline: tesseract-ocr + language pack
 #   - Media toolchain: imagemagick (PNG generation from SVG, thumbnailing),
 #     poppler-utils (pdftotext fallback for PDFs — future OCR tier)
+#   - Backup verification: p7zip-full (AES-encrypted spatie/laravel-backup archives
+#     can't be extracted by Info-ZIP's `unzip`; snapshots:verify-restore needs 7z)
 # Safe to re-run: apt will skip already-installed packages.
 # =============================================================================
 set -euo pipefail
@@ -50,17 +52,17 @@ apt-get install -y --no-install-recommends \
     "php${PHP_VER}-intl" "php${PHP_VER}-gd" "php${PHP_VER}-opcache"
 
 # OCR + media
+# PDFs go through Poppler's pdftotext (poppler-utils), never ImageMagick, so
+# ImageMagick's default policy of denying the PDF coder stays in place —
+# that policy mitigates historical CVEs like ImageTragick (CVE-2016-3714).
+# Do NOT relax /etc/ImageMagick-6/policy.xml unless a real pdftoppm pipeline
+# lands in the codebase; until then an unrestricted PDF coder is pure
+# attack surface.
 apt-get install -y --no-install-recommends \
     tesseract-ocr tesseract-ocr-eng \
     imagemagick \
-    poppler-utils
-
-# ImageMagick policy defaults block PDF rasterization for security. Enable it
-# if we want pdftoppm → tesseract later; harmless otherwise.
-POLICY=/etc/ImageMagick-6/policy.xml
-if [ -f "$POLICY" ]; then
-    sed -i 's|<policy domain="coder" rights="none" pattern="PDF"|<policy domain="coder" rights="read\|write" pattern="PDF"|' "$POLICY" || true
-fi
+    poppler-utils \
+    p7zip-full
 
 # Node via NVM — system-wide at /opt/nvm, symlinked into /usr/local/bin
 if [ ! -d "$NVM_DIR" ]; then

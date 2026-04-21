@@ -3,6 +3,9 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToHousehold;
+use App\Models\Concerns\HasLinkedNotes;
+use App\Models\Concerns\HasLinkedTasks;
+use App\Models\Concerns\HasLinkedTransactions;
 use App\Models\Concerns\HasMedia;
 use App\Models\Concerns\HasTags;
 use Illuminate\Database\Eloquent\Model;
@@ -11,7 +14,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Contract extends Model
 {
-    use BelongsToHousehold, HasMedia, HasTags;
+    use BelongsToHousehold, HasLinkedNotes, HasLinkedTasks, HasLinkedTransactions, HasMedia, HasTags;
 
     protected $guarded = [];
 
@@ -23,11 +26,13 @@ class Contract extends Model
         'monthly_cost_amount' => 'decimal:4',
     ];
 
+    /** @return BelongsToMany<Contact, $this> */
     public function contacts(): BelongsToMany
     {
         return $this->belongsToMany(Contact::class)->withPivot('party_role')->withTimestamps();
     }
 
+    /** @return HasOne<InsurancePolicy, $this> */
     public function insurancePolicy(): HasOne
     {
         return $this->hasOne(InsurancePolicy::class);

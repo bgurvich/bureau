@@ -24,6 +24,8 @@ use App\Models\User;
 use App\Models\Vehicle;
 use App\Support\CurrentHousehold;
 use App\Support\Enums;
+use App\Support\Formatting;
+use App\Support\ProjectionMatchResult;
 use App\Support\ProjectionMatcher;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
@@ -98,6 +100,110 @@ new class extends Component
 
     public bool $appointment_self_subject = true;
 
+    // reminder
+    public string $reminder_title = '';
+
+    public string $reminder_remind_at = '';
+
+    public string $reminder_channel = 'in_app';
+
+    public string $reminder_state = 'pending';
+
+    public string $reminder_notes = '';
+
+    // savings goal
+    public string $savings_name = '';
+
+    public string $savings_target_amount = '';
+
+    public string $savings_target_date = '';
+
+    public string $savings_starting_amount = '0';
+
+    public string $savings_saved_amount = '0';
+
+    public string $savings_currency = 'USD';
+
+    public string $savings_state = 'active';
+
+    public ?int $savings_account_id = null;
+
+    // time entry (manual / backlog)
+    public string $te_activity_date = '';
+
+    public string $te_hours = '';
+
+    public ?int $te_project_id = null;
+
+    public ?int $te_task_id = null;
+
+    public string $te_description = '';
+
+    public bool $te_billable = false;
+
+    // transfer (manual — creates two mirror transactions + a Transfer row,
+    // OR links one/two existing unpaired transactions to avoid duplicates)
+    public string $transfer_occurred_on = '';
+
+    public ?int $transfer_from_account_id = null;
+
+    public ?int $transfer_to_account_id = null;
+
+    public string $transfer_amount = '';
+
+    public string $transfer_currency = 'USD';
+
+    public string $transfer_description = '';
+
+    public ?int $transfer_from_transaction_id = null;
+
+    public ?int $transfer_to_transaction_id = null;
+
+    // checklist template (recurring ritual with per-day run tracking)
+    public string $checklist_name = '';
+
+    public string $checklist_description = '';
+
+    public string $checklist_time_of_day = 'anytime';
+
+    /** One of: daily | weekdays | weekends | custom */
+    public string $checklist_recurrence_mode = 'daily';
+
+    public string $checklist_rrule = '';
+
+    public string $checklist_dtstart = '';
+
+    public string $checklist_paused_until = '';
+
+    public bool $checklist_active = true;
+
+    /**
+     * Repeater rows for the items editor. Each row:
+     *   ['key' => string, 'id' => ?int, 'label' => string, 'active' => bool]
+     * `key` keeps wire:key stable across reorders; `id` is set for rows that
+     * already persisted so save-time can update in place.
+     *
+     * @var array<int, array<string, mixed>>
+     */
+    public array $checklist_items = [];
+
+    // subscription (first-class — wraps a RecurringRule + optional Contract)
+    public string $subscription_name = '';
+
+    public ?int $subscription_counterparty_id = null;
+
+    public ?int $subscription_recurring_rule_id = null;
+
+    public ?int $subscription_contract_id = null;
+
+    public string $subscription_state = 'active';
+
+    public string $subscription_paused_until = '';
+
+    public string $subscription_currency = 'USD';
+
+    public string $subscription_notes = '';
+
     // Admin-section meta (read-only display, loaded from the record on edit).
     public ?int $admin_owner_id = null;
 
@@ -113,6 +219,19 @@ new class extends Component
     public int $priority = 3;
 
     public string $state = 'open';
+
+    /**
+     * Polymorphic subjects for tasks/notes, in user-facing order. Each ref
+     * is "{kind}:{id}" — kind is a short alias, id is the subject's PK.
+     * Rendered as an ordered chip list + a search-driven add dropdown;
+     * persisted to task_subjects / note_subjects.
+     *
+     * @var array<int, string>
+     */
+    public array $subject_refs = [];
+
+    /** Free-text search input for the subjects add-dropdown. */
+    public string $subject_search = '';
 
     // transaction
     public ?int $account_id = null;
@@ -159,6 +278,17 @@ new class extends Component
     public string $email = '';
 
     public string $phone = '';
+
+    /** Free-form primary address for a contact — populated from Nominatim autocomplete or manual entry. */
+    public string $contact_address_line = '';
+
+    public string $contact_address_city = '';
+
+    public string $contact_address_region = '';
+
+    public string $contact_address_postcode = '';
+
+    public string $contact_address_country = '';
 
     // note
     public bool $pinned = false;
@@ -249,6 +379,10 @@ new class extends Component
     public ?int $contract_counterparty_id = null;
 
     public ?int $contract_renewal_notice_days = null;
+
+    public string $contract_cancellation_url = '';
+
+    public string $contract_cancellation_email = '';
 
     // property
     public string $property_kind = 'home';
@@ -427,8 +561,22 @@ new class extends Component
 
     public ?string $errorMessage = null;
 
+    /** Source Media row used to prefill a new bill/transaction form via OCR extraction. */
+    public ?int $source_media_id = null;
+
+    /**
+     * Set when a Transaction save finds 2+ candidate projections to link to.
+     * The drawer stays open and renders a picker so the user can pick which
+     * bill this paid (or skip the link). Cleared on pick/skip/close.
+     *
+     * @var array<int, array{id:int, title:string, due_on:string, amount:string}>
+     */
+    public array $ambiguousCandidates = [];
+
+    public ?int $ambiguousTransactionId = null;
+
     #[On('inspector-open')]
-    public function openInspector(string $type = '', ?int $id = null): void
+    public function openInspector(string $type = '', ?int $id = null, ?int $mediaId = null): void
     {
         $this->resetExcept(['open']);
         $this->type = $type;
@@ -442,9 +590,444 @@ new class extends Component
             $this->loadTagList();
         } else {
             $this->seedDefaults();
+            if ($mediaId) {
+                $this->source_media_id = $mediaId;
+                $this->prefillFromMedia($mediaId);
+            }
         }
 
         $this->dispatch('inspector-body-shown');
+    }
+
+    /**
+     * Apply extracted OCR fields from a Media row onto the new-record form for
+     * bill/transaction types. Reads `Media::ocr_extracted` (written by the
+     * ExtractOcrStructure job) and maps vendor / amount / dates / category
+     * hint onto the matching form state. Leaves untouched fields at their
+     * seeded defaults so the user can override anything.
+     */
+    private function prefillFromMedia(int $mediaId): void
+    {
+        $media = Media::find($mediaId);
+        if (! $media) {
+            return;
+        }
+        $data = $media->ocr_extracted;
+        if (! is_array($data) || $data === []) {
+            return;
+        }
+
+        $vendor = is_string($data['vendor'] ?? null) ? trim((string) $data['vendor']) : '';
+        $amount = is_numeric($data['amount'] ?? null) ? (float) $data['amount'] : null;
+        $taxAmount = is_numeric($data['tax_amount'] ?? null) ? (float) $data['tax_amount'] : null;
+        $issuedOn = is_string($data['issued_on'] ?? null) ? $data['issued_on'] : null;
+        $dueOn = is_string($data['due_on'] ?? null) ? $data['due_on'] : null;
+        $categoryHint = is_string($data['category_suggestion'] ?? null) ? trim((string) $data['category_suggestion']) : '';
+        $currency = is_string($data['currency'] ?? null) && preg_match('/^[A-Z]{3}$/', strtoupper((string) $data['currency']))
+            ? strtoupper((string) $data['currency'])
+            : null;
+
+        if ($this->type === 'bill') {
+            if ($vendor !== '') {
+                $this->bill_title = $vendor;
+            }
+            if ($amount !== null) {
+                // Bills are an expense direction — store a positive magnitude;
+                // the ledger represents the outflow elsewhere.
+                $this->amount = number_format(abs($amount), 2, '.', '');
+            }
+            if ($issuedOn) {
+                $this->issued_on = $issuedOn;
+            }
+            if ($dueOn) {
+                $this->due_on = $dueOn;
+            } elseif ($issuedOn) {
+                // No due date on doc — default to issue date so the projection is sane.
+                $this->due_on = $issuedOn;
+            }
+        } elseif ($this->type === 'transaction') {
+            if ($vendor !== '') {
+                $this->description = $vendor;
+            }
+            if ($amount !== null) {
+                // Transaction amounts are signed; receipts/bills are outflows → negative.
+                $this->amount = number_format(-abs($amount), 2, '.', '');
+            }
+            if ($issuedOn) {
+                $this->occurred_on = $issuedOn;
+            }
+            if ($taxAmount !== null) {
+                $this->tax_amount = number_format($taxAmount, 2, '.', '');
+            }
+        } else {
+            return;
+        }
+
+        if ($currency) {
+            $this->currency = $currency;
+        }
+
+        $contactId = $vendor !== '' ? $this->resolveCounterpartyContact($vendor) : null;
+        if ($contactId !== null) {
+            $this->counterparty_contact_id = $contactId;
+        }
+
+        if ($categoryHint !== '') {
+            $categoryId = $this->resolveCategoryBySuggestion($categoryHint, $this->type === 'transaction' ? 'expense' : null);
+            if ($categoryId !== null) {
+                $this->category_id = $categoryId;
+            }
+        }
+    }
+
+    private function resolveCounterpartyContact(string $vendor): ?int
+    {
+        $vendor = trim($vendor);
+        if ($vendor === '') {
+            return null;
+        }
+
+        // Exact case-insensitive match on display_name or organization wins;
+        // fall back to a LIKE on display_name so "Pacific Gas & Electric" finds "PG&E"-style entries only if
+        // the user explicitly aliased them. Keep the match conservative — wrong counterparty is worse than empty.
+        $exact = Contact::query()
+            ->where(function ($q) use ($vendor) {
+                $q->whereRaw('LOWER(display_name) = ?', [mb_strtolower($vendor)])
+                    ->orWhereRaw('LOWER(organization) = ?', [mb_strtolower($vendor)]);
+            })
+            ->value('id');
+        if ($exact) {
+            return (int) $exact;
+        }
+
+        return null;
+    }
+
+    private function resolveCategoryBySuggestion(string $suggestion, ?string $kind): ?int
+    {
+        $suggestion = mb_strtolower(trim($suggestion));
+        if ($suggestion === '') {
+            return null;
+        }
+
+        $q = Category::query();
+        if ($kind) {
+            $q->where('kind', $kind);
+        }
+
+        return $q->where(function ($sub) use ($suggestion) {
+            $sub->whereRaw('LOWER(slug) = ?', [$suggestion])
+                ->orWhereRaw('LOWER(name) = ?', [$suggestion])
+                ->orWhereRaw('LOWER(slug) LIKE ?', ['%'.$suggestion.'%'])
+                ->orWhereRaw('LOWER(name) LIKE ?', ['%'.$suggestion.'%']);
+        })->value('id');
+    }
+
+    /**
+     * Attach the OCR-source Media row to a freshly created Bill/Transaction so
+     * the scan lives on the record going forward. Called from saveBill /
+     * saveTransaction after the create path completes.
+     */
+    /**
+     * Map of short kind aliases (used in subject_refs strings and UI groups)
+     * to the fully-qualified model class. Single source of truth for which
+     * entities can be linked as subjects. Extend here when adding types.
+     *
+     * @var array<string, class-string>
+     */
+    public const SUBJECT_KIND_MAP = [
+        'vehicle' => Vehicle::class,
+        'property' => Property::class,
+        'contact' => Contact::class,
+        'contract' => Contract::class,
+        'inventory' => InventoryItem::class,
+        'account' => Account::class,
+        'project' => Project::class,
+        'document' => Document::class,
+        'health_provider' => HealthProvider::class,
+        'online_account' => OnlineAccount::class,
+        'recurring_rule' => RecurringRule::class,
+    ];
+
+    /**
+     * Search-on-type matches across every subjectable domain. Only fires
+     * when the user has typed at least 2 characters to avoid scanning
+     * the entire household inventory on every keystroke. Returns up to 20
+     * hits total, spread across kinds (≤ 5 per kind to keep one domain
+     * from swamping the list).
+     *
+     * @return array<int, array{ref: string, label: string, kind_label: string, name: string}>
+     */
+    #[Computed]
+    public function subjectSearchResults(): array
+    {
+        $q = trim($this->subject_search);
+        if (mb_strlen($q) < 2) {
+            return [];
+        }
+
+        $term = '%'.$q.'%';
+        $already = array_flip($this->subject_refs);
+        $out = [];
+
+        foreach (self::SUBJECT_KIND_MAP as $kind => $class) {
+            $kindLabel = $this->subjectKindLabel($kind);
+            $nameCol = $this->subjectNameColumn($class);
+
+            /** @var \Illuminate\Database\Eloquent\Collection<int, \Illuminate\Database\Eloquent\Model> $rows */
+            $rows = $class::query()
+                ->where($nameCol, 'like', $term)
+                ->orderBy($nameCol)
+                ->limit(5)
+                ->get();
+
+            foreach ($rows as $row) {
+                $ref = $kind.':'.$row->id;
+                if (isset($already[$ref])) {
+                    continue;
+                }
+                $name = (string) ($row->{$nameCol} ?? '#'.$row->id);
+                $out[] = [
+                    'ref' => $ref,
+                    'label' => $kindLabel.' · '.$name,
+                    'kind_label' => $kindLabel,
+                    'name' => $name,
+                ];
+                if (count($out) >= 20) {
+                    return $out;
+                }
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Display metadata for the currently-selected subjects, keyed by ref.
+     * Used by the chip list renderer. Batches the per-kind queries so the
+     * render cost scales with distinct kinds selected, not individual items.
+     *
+     * @return array<string, array{label: string, kind_label: string}>
+     */
+    #[Computed]
+    public function selectedSubjectsMeta(): array
+    {
+        if ($this->subject_refs === []) {
+            return [];
+        }
+
+        $byKind = [];
+        foreach ($this->subject_refs as $ref) {
+            if (! is_string($ref) || ! str_contains($ref, ':')) {
+                continue;
+            }
+            [$kind, $id] = explode(':', $ref, 2);
+            if (! isset(self::SUBJECT_KIND_MAP[$kind]) || ! is_numeric($id)) {
+                continue;
+            }
+            $byKind[$kind][] = (int) $id;
+        }
+
+        $out = [];
+        foreach ($byKind as $kind => $ids) {
+            $class = self::SUBJECT_KIND_MAP[$kind];
+            $nameCol = $this->subjectNameColumn($class);
+            $kindLabel = $this->subjectKindLabel($kind);
+
+            /** @var \Illuminate\Database\Eloquent\Collection<int, \Illuminate\Database\Eloquent\Model> $rows */
+            $rows = $class::query()->whereIn('id', $ids)->get()->keyBy('id');
+            foreach ($ids as $id) {
+                $row = $rows->get($id);
+                $name = $row ? (string) ($row->{$nameCol} ?? '#'.$id) : __('(deleted)');
+                $out[$kind.':'.$id] = [
+                    'label' => $kindLabel.' · '.$name,
+                    'kind_label' => $kindLabel,
+                ];
+            }
+        }
+
+        return $out;
+    }
+
+    public function addSubject(string $ref): void
+    {
+        if (! is_string($ref) || ! str_contains($ref, ':')) {
+            return;
+        }
+        if (in_array($ref, $this->subject_refs, true)) {
+            return;
+        }
+        [$kind] = explode(':', $ref, 2);
+        if (! isset(self::SUBJECT_KIND_MAP[$kind])) {
+            return;
+        }
+        $this->subject_refs[] = $ref;
+        $this->subject_search = '';
+    }
+
+    public function removeSubject(string $ref): void
+    {
+        $this->subject_refs = array_values(array_diff($this->subject_refs, [$ref]));
+    }
+
+    /**
+     * Drop-target mover used by the drag-and-drop chip list. Repositions
+     * `$ref` to land at index `$newIndex` in the ordered list — the shift
+     * happens after the source is removed, so $newIndex is the final slot,
+     * not the pre-remove slot.
+     */
+    public function moveSubjectTo(string $ref, int $newIndex): void
+    {
+        $idx = array_search($ref, $this->subject_refs, true);
+        if ($idx === false) {
+            return;
+        }
+        $item = $this->subject_refs[$idx];
+        array_splice($this->subject_refs, $idx, 1);
+        $newIndex = max(0, min($newIndex, count($this->subject_refs)));
+        array_splice($this->subject_refs, $newIndex, 0, [$item]);
+        $this->subject_refs = array_values($this->subject_refs);
+    }
+
+    /**
+     * Drop-target setter used by the live-reorder sortable list: receives
+     * the final DOM-order refs and rebuilds `subject_refs` to match.
+     * Unknown refs are ignored; existing refs not in the payload stay at
+     * the tail (defensive — the DOM shouldn't diverge, but if it did we'd
+     * rather keep a ref than silently drop it).
+     *
+     * @param  array<int, string>  $orderedRefs
+     */
+    public function reorderSubjects(array $orderedRefs): void
+    {
+        if ($this->subject_refs === []) {
+            return;
+        }
+
+        $existing = array_flip($this->subject_refs);
+        $next = [];
+        foreach ($orderedRefs as $ref) {
+            $r = (string) $ref;
+            if (isset($existing[$r])) {
+                $next[] = $r;
+                unset($existing[$r]);
+            }
+        }
+        foreach (array_keys($existing) as $leftover) {
+            $next[] = $leftover;
+        }
+
+        $this->subject_refs = $next;
+    }
+
+    private function subjectKindLabel(string $kind): string
+    {
+        return match ($kind) {
+            'vehicle' => __('Vehicle'),
+            'property' => __('Property'),
+            'contact' => __('Contact'),
+            'contract' => __('Contract'),
+            'inventory' => __('Inventory'),
+            'account' => __('Account'),
+            'project' => __('Project'),
+            'document' => __('Document'),
+            'health_provider' => __('Health provider'),
+            'online_account' => __('Online account'),
+            'recurring_rule' => __('Bill'),
+            default => ucfirst($kind),
+        };
+    }
+
+    /**
+     * @param  class-string  $class
+     */
+    private function subjectNameColumn(string $class): string
+    {
+        return match ($class) {
+            Vehicle::class => 'model',
+            Property::class => 'name',
+            Contact::class => 'display_name',
+            Contract::class => 'title',
+            InventoryItem::class => 'name',
+            Account::class => 'name',
+            Project::class => 'name',
+            Document::class => 'label',
+            HealthProvider::class => 'name',
+            OnlineAccount::class => 'service_name',
+            RecurringRule::class => 'title',
+            default => 'name',
+        };
+    }
+
+    /**
+     * Turn stored pivot rows back into the "{kind}:{id}" string form the
+     * <select multiple> field uses.
+     *
+     * @return array<int, string>
+     */
+    private function subjectRefsFrom(\Illuminate\Database\Eloquent\Model $model): array
+    {
+        if (! method_exists($model, 'subjects')) {
+            return [];
+        }
+        $classToKind = array_flip(self::SUBJECT_KIND_MAP);
+        $refs = [];
+        foreach ($model->subjects() as $row) {
+            $kind = $classToKind[get_class($row)] ?? null;
+            if ($kind === null) {
+                continue;
+            }
+            $refs[] = $kind.':'.$row->getKey();
+        }
+
+        return $refs;
+    }
+
+    /**
+     * @param  array<int, string>  $refs
+     * @return array<int, array{type: string, id: int}>
+     */
+    private function parseSubjectRefs(array $refs): array
+    {
+        $out = [];
+        foreach ($refs as $r) {
+            if (! is_string($r) || ! str_contains($r, ':')) {
+                continue;
+            }
+            [$kind, $id] = explode(':', $r, 2);
+            $class = self::SUBJECT_KIND_MAP[$kind] ?? null;
+            if ($class === null || ! is_numeric($id)) {
+                continue;
+            }
+            $out[] = ['type' => $class, 'id' => (int) $id];
+        }
+
+        return $out;
+    }
+
+    private function attachSourceMediaTo(\Illuminate\Database\Eloquent\Model $record, string $role = 'receipt'): void
+    {
+        if (! $this->source_media_id) {
+            return;
+        }
+        if (! method_exists($record, 'media')) {
+            return;
+        }
+        $media = Media::find($this->source_media_id);
+        if (! $media) {
+            return;
+        }
+        /** @var \Illuminate\Database\Eloquent\Relations\MorphToMany $rel */
+        $rel = $record->media();
+        if (! $rel->where('media.id', $this->source_media_id)->exists()) {
+            $rel->attach($this->source_media_id, ['role' => $role]);
+        }
+        // Auto-mark processed: user has turned the scan into a record, so it
+        // no longer belongs in the "Unprocessed" inbox.
+        if ($media->processed_at === null) {
+            $media->forceFill(['processed_at' => now()])->save();
+            \App\Models\MailMessage::cascadeProcessedFromMedia($media->id);
+        }
     }
 
     /**
@@ -470,6 +1053,7 @@ new class extends Component
             'note' => [Note::class, 'user_id'],
             'project' => [Project::class, 'user_id'],
             'online_account' => [OnlineAccount::class, 'user_id'],
+            'checklist_template' => [\App\Models\ChecklistTemplate::class, 'user_id'],
             'transaction' => [Transaction::class, null],
             'bill' => [RecurringRule::class, null],
             'appointment' => [Appointment::class, null],
@@ -746,11 +1330,134 @@ new class extends Component
         $this->insurance_deductible_currency = $currency;
         $this->account_currency = $currency;
         $this->sale_currency = $currency;
+        $this->budget_currency = $currency;
+        $this->savings_currency = $currency;
+        $this->subscription_currency = $currency;
         $this->issued_on = now()->toDateString();
         $this->due_on = now()->addDays(14)->toDateString();
         $this->doc_issued_on = now()->toDateString();
         $this->starts_at = now()->addDay()->startOfHour()->format('Y-m-d\TH:i');
         $this->ends_at = now()->addDay()->startOfHour()->addMinutes(30)->format('Y-m-d\TH:i');
+        $this->te_activity_date = now()->toDateString();
+        $this->transfer_occurred_on = now()->toDateString();
+        $this->transfer_currency = $currency;
+
+        // Checklist defaults — daily routine starting today, two empty rows
+        // so the user sees the repeater shape without having to hit "Add
+        // item". Stored as a key-keyed map; insertion order = visual order.
+        $this->checklist_dtstart = now()->toDateString();
+        $this->checklist_recurrence_mode = 'daily';
+        $this->checklist_time_of_day = 'anytime';
+        $this->checklist_active = true;
+        $this->checklist_items = [];
+        for ($i = 0; $i < 2; $i++) {
+            $key = Str::uuid()->toString();
+            $this->checklist_items[$key] = [
+                'key' => $key, 'id' => null, 'label' => '', 'active' => true,
+            ];
+        }
+    }
+
+    /**
+     * Shared options list for every Inspector form that picks a Category,
+     * sorted by name. Computed so the searchable-select component can read
+     * it directly and so inline creation (see createCategoryInline) can
+     * trigger a re-render by unsetting this computed.
+     *
+     * @return array<int, string>
+     */
+    #[Computed]
+    public function categoryPickerOptions(): array
+    {
+        return \App\Models\Category::orderBy('name')->pluck('name', 'id')->all();
+    }
+
+    /**
+     * Create a new expense Category on the fly from the searchable-select's
+     * "+ Create 'X'" option. Dispatches `ss-option-added` so the Alpine
+     * widget pre-selects the new row.
+     */
+    /**
+     * Counterparty (Contact) options keyed by id → display name, sorted.
+     * Shared by bill / contract / subscription / transaction inspectors.
+     *
+     * @return array<int, string>
+     */
+    #[Computed]
+    public function counterpartyPickerOptions(): array
+    {
+        return \App\Models\Contact::orderBy('display_name')->pluck('display_name', 'id')->all();
+    }
+
+    /**
+     * Active outflow recurring rules for the subscription inspector's
+     * money-side picker. Label includes amount so duplicates (same title,
+     * different amount) remain distinguishable.
+     *
+     * @return array<int, string>
+     */
+    #[Computed]
+    public function recurringOutflowRulePickerOptions(): array
+    {
+        return \App\Models\RecurringRule::where('active', true)
+            ->where('amount', '<=', 0)
+            ->orderBy('title')
+            ->get(['id', 'title', 'amount', 'currency'])
+            ->mapWithKeys(fn ($r) => [
+                $r->id => $r->title.' · '.Formatting::money(abs((float) $r->amount), $r->currency ?? 'USD'),
+            ])
+            ->all();
+    }
+
+    /**
+     * Non-ended contracts for the subscription inspector's contract picker.
+     *
+     * @return array<int, string>
+     */
+    #[Computed]
+    public function openContractPickerOptions(): array
+    {
+        return \App\Models\Contract::whereNotIn('state', ['ended', 'cancelled'])
+            ->orderBy('title')
+            ->pluck('title', 'id')
+            ->all();
+    }
+
+    public function createCategoryInline(string $name, ?string $modelKey = null): void
+    {
+        $name = trim($name);
+        if ($name === '') {
+            return;
+        }
+        $slug = \Illuminate\Support\Str::slug($name);
+        $base = $slug === '' ? 'cat-'.bin2hex(random_bytes(3)) : $slug;
+        $suffix = 0;
+        while (\App\Models\Category::where('slug', $suffix ? "{$base}-{$suffix}" : $base)->exists()) {
+            $suffix++;
+        }
+        $category = \App\Models\Category::create([
+            'name' => $name,
+            'slug' => $suffix ? "{$base}-{$suffix}" : $base,
+            'kind' => 'expense',
+        ]);
+
+        unset($this->categoryPickerOptions);
+
+        // Dispatch `ss-option-added` to the specific picker that triggered
+        // the inline create. If the client didn't pass a model (older
+        // bundles), fall back to notifying every known category picker so
+        // at least one of them updates.
+        $label = ucfirst($category->kind).' · '.$category->name;
+        $targets = $modelKey && property_exists($this, $modelKey)
+            ? [$modelKey]
+            : ['budget_category_id', 'rule_category_id', 'category_id'];
+        foreach ($targets as $model) {
+            $this->dispatch('ss-option-added', model: $model, id: $category->id, label: $label);
+        }
+
+        if (count($targets) === 1) {
+            $this->{$targets[0]} = $category->id;
+        }
     }
 
     private function householdCurrency(): string
@@ -777,6 +1484,14 @@ new class extends Component
             'vehicle' => $this->loadVehicle(),
             'inventory' => $this->loadInventory(),
             'appointment' => $this->loadAppointment(),
+            'reminder' => $this->loadReminder(),
+            'savings_goal' => $this->loadSavingsGoal(),
+            'budget_cap' => $this->loadBudgetCap(),
+            'category_rule' => $this->loadCategoryRule(),
+            'tag_rule' => $this->loadTagRule(),
+            'subscription' => $this->loadSubscription(),
+            'checklist_template' => $this->loadChecklistTemplate(),
+            'time_entry' => $this->loadTimeEntry(),
             default => null,
         };
     }
@@ -789,6 +1504,7 @@ new class extends Component
         $this->due_at = $t->due_at ? $t->due_at->format('Y-m-d\TH:i') : '';
         $this->priority = (int) $t->priority;
         $this->state = $t->state;
+        $this->subject_refs = $this->subjectRefsFrom($t);
     }
 
     private function loadTransaction(): void
@@ -806,6 +1522,7 @@ new class extends Component
         $this->tax_amount = $t->tax_amount !== null ? (string) $t->tax_amount : '';
         $this->tax_code = $t->tax_code ?? '';
         $this->memo = $t->memo ?? '';
+        $this->subject_refs = $this->subjectRefsFrom($t);
     }
 
     private function loadContact(): void
@@ -825,6 +1542,17 @@ new class extends Component
         $phones = $c->phones ?? [];
         $this->phone = is_array($phones) ? implode(', ', $phones) : (string) $phones;
         $this->notes = $c->notes ?? '';
+
+        // Addresses is a JSON array of address objects on Contact; surface the
+        // first one into the five structured fields the form edits. Saving
+        // collapses them back into a single-entry array.
+        $addresses = is_array($c->addresses) ? $c->addresses : [];
+        $first = is_array($addresses[0] ?? null) ? $addresses[0] : [];
+        $this->contact_address_line = (string) ($first['line'] ?? '');
+        $this->contact_address_city = (string) ($first['city'] ?? '');
+        $this->contact_address_region = (string) ($first['region'] ?? '');
+        $this->contact_address_postcode = (string) ($first['postcode'] ?? '');
+        $this->contact_address_country = (string) ($first['country'] ?? '');
     }
 
     private function loadNote(): void
@@ -834,6 +1562,7 @@ new class extends Component
         $this->body = $n->body;
         $this->pinned = (bool) $n->pinned;
         $this->private = (bool) $n->private;
+        $this->subject_refs = $this->subjectRefsFrom($n);
     }
 
     private function loadBill(): void
@@ -913,6 +1642,8 @@ new class extends Component
         $this->contract_state = $c->state;
         $this->contract_counterparty_id = $c->contacts()->first()?->id;
         $this->contract_renewal_notice_days = $c->renewal_notice_days !== null ? (int) $c->renewal_notice_days : null;
+        $this->contract_cancellation_url = (string) ($c->cancellation_url ?? '');
+        $this->contract_cancellation_email = (string) ($c->cancellation_email ?? '');
         $this->notes = $c->notes ?? '';
     }
 
@@ -1083,6 +1814,15 @@ new class extends Component
                 'vehicle' => $this->saveVehicle(),
                 'inventory' => $this->saveInventory(),
                 'appointment' => $this->saveAppointment(),
+                'reminder' => $this->saveReminder(),
+                'savings_goal' => $this->saveSavingsGoal(),
+                'budget_cap' => $this->saveBudgetCap(),
+                'category_rule' => $this->saveCategoryRule(),
+                'tag_rule' => $this->saveTagRule(),
+                'subscription' => $this->saveSubscription(),
+                'checklist_template' => $this->saveChecklistTemplate(),
+                'time_entry' => $this->saveTimeEntry(),
+                'transfer' => $this->saveTransfer(),
                 default => null,
             };
         } catch (\App\Exceptions\PeriodLockedException $e) {
@@ -1093,6 +1833,15 @@ new class extends Component
 
         $this->persistAdminOwner();
         $this->persistTagList();
+
+        // When a Transaction save produced multiple candidate projections,
+        // saveTransaction() has stashed them in $ambiguousCandidates. Keep
+        // the drawer open so the picker renders instead of silently closing
+        // after an un-linked save. linkProjection/skipProjectionLink close
+        // the drawer once the user decides.
+        if ($this->ambiguousCandidates !== []) {
+            return;
+        }
 
         $this->dispatch('inspector-saved', type: $this->type);
         $this->close();
@@ -1149,11 +1898,14 @@ new class extends Component
         }
 
         if ($this->id) {
-            Task::findOrFail($this->id)->update($data);
+            $task = Task::findOrFail($this->id);
+            $task->update($data);
         } else {
             $data['assigned_user_id'] = auth()->id();
-            $this->id = Task::create($data)->id;
+            $task = Task::create($data);
+            $this->id = $task->id;
         }
+        $task->syncSubjects($this->parseSubjectRefs($this->subject_refs));
     }
 
     private function saveTransaction(): void
@@ -1186,12 +1938,67 @@ new class extends Component
         );
 
         if ($this->id) {
-            Transaction::findOrFail($this->id)->update($data);
+            $transaction = tap(Transaction::findOrFail($this->id))->update($data);
         } else {
             $transaction = Transaction::create($data);
             $this->id = $transaction->id;
-            ProjectionMatcher::attempt($transaction);
+            // resolve() (vs attempt()) surfaces the ambiguous-match case so we
+            // can pause the drawer close + show a picker. Single-hit and miss
+            // cases flow straight through (linked via side effect inside).
+            $matchResult = ProjectionMatcher::resolve($transaction);
+            $this->attachSourceMediaTo($transaction);
+            if ($matchResult->isAmbiguous()) {
+                $this->ambiguousTransactionId = $transaction->id;
+                $this->ambiguousCandidates = array_map(
+                    fn (\App\Models\RecurringProjection $p) => [
+                        'id' => (int) $p->id,
+                        'title' => (string) ($p->rule?->title ?? __('Bill')),
+                        'due_on' => $p->due_on?->toDateString() ?? '—',
+                        'amount' => (string) $p->amount,
+                    ],
+                    $matchResult->candidates,
+                );
+            }
         }
+        $transaction->syncSubjects($this->parseSubjectRefs($this->subject_refs));
+    }
+
+    /**
+     * Resolve multi-hit ambiguity: link the chosen projection to the just-
+     * saved transaction and clear the picker state.
+     */
+    public function linkProjection(int $projectionId): void
+    {
+        if (! $this->ambiguousTransactionId) {
+            return;
+        }
+        // Only link projections the matcher proposed — defense against a
+        // race where $ambiguousCandidates is stale but the component still
+        // receives a click.
+        $allowed = array_column($this->ambiguousCandidates, 'id');
+        if (! in_array($projectionId, $allowed, true)) {
+            return;
+        }
+        \App\Models\RecurringProjection::where('id', $projectionId)
+            ->update([
+                'status' => 'matched',
+                'matched_transaction_id' => $this->ambiguousTransactionId,
+                'matched_at' => now(),
+                'unmatched_at' => null,
+            ]);
+        $this->ambiguousCandidates = [];
+        $this->ambiguousTransactionId = null;
+        $this->dispatch('inspector-saved');
+        $this->close();
+    }
+
+    /** Skip the picker — save the transaction without linking to any projection. */
+    public function skipProjectionLink(): void
+    {
+        $this->ambiguousCandidates = [];
+        $this->ambiguousTransactionId = null;
+        $this->dispatch('inspector-saved');
+        $this->close();
     }
 
     /**
@@ -1252,8 +2059,22 @@ new class extends Component
             'tax_id' => 'nullable|string|max:64',
             'email' => 'nullable|string|max:500',
             'phone' => 'nullable|string|max:200',
+            'contact_address_line' => 'nullable|string|max:255',
+            'contact_address_city' => 'nullable|string|max:100',
+            'contact_address_region' => 'nullable|string|max:100',
+            'contact_address_postcode' => 'nullable|string|max:32',
+            'contact_address_country' => 'nullable|string|max:100',
             'notes' => 'nullable|string|max:5000',
         ]);
+
+        $addressParts = array_filter([
+            'line' => trim((string) ($data['contact_address_line'] ?? '')) ?: null,
+            'city' => trim((string) ($data['contact_address_city'] ?? '')) ?: null,
+            'region' => trim((string) ($data['contact_address_region'] ?? '')) ?: null,
+            'postcode' => trim((string) ($data['contact_address_postcode'] ?? '')) ?: null,
+            'country' => trim((string) ($data['contact_address_country'] ?? '')) ?: null,
+        ], fn ($v) => $v !== null);
+        $addresses = $addressParts !== [] ? [$addressParts] : null;
 
         $payload = array_filter([
             'kind' => $data['kind'],
@@ -1267,6 +2088,7 @@ new class extends Component
             'tax_id' => $data['tax_id'] ?: null,
             'emails' => $this->splitList($data['email']),
             'phones' => $this->splitList($data['phone']),
+            'addresses' => $addresses,
             'notes' => $data['notes'] ?: null,
         ], fn ($v) => $v !== null);
 
@@ -1341,6 +2163,7 @@ new class extends Component
             $rule = RecurringRule::create($payload);
             $this->id = $rule->id;
             $this->materializeInitialProjection($rule);
+            $this->attachSourceMediaTo($rule);
         }
     }
 
@@ -1379,11 +2202,14 @@ new class extends Component
         ];
 
         if ($this->id) {
-            Note::findOrFail($this->id)->update($payload);
+            $note = Note::findOrFail($this->id);
+            $note->update($payload);
         } else {
             $payload['user_id'] = auth()->id();
-            $this->id = Note::create($payload)->id;
+            $note = Note::create($payload);
+            $this->id = $note->id;
         }
+        $note->syncSubjects($this->parseSubjectRefs($this->subject_refs));
     }
 
     private function saveDocument(): void
@@ -1498,6 +2324,8 @@ new class extends Component
             'contract_state' => ['required', Rule::in(array_keys(Enums::contractStates()))],
             'contract_counterparty_id' => 'nullable|integer|exists:contacts,id',
             'contract_renewal_notice_days' => 'nullable|integer|min:0|max:365',
+            'contract_cancellation_url' => 'nullable|string|max:512|url',
+            'contract_cancellation_email' => 'nullable|string|max:255|email',
             'notes' => 'nullable|string|max:5000',
         ]);
 
@@ -1512,6 +2340,8 @@ new class extends Component
             'monthly_cost_currency' => $data['contract_monthly_cost_currency'] ?: null,
             'state' => $data['contract_state'],
             'renewal_notice_days' => $data['contract_renewal_notice_days'] !== null && $data['contract_renewal_notice_days'] !== '' ? (int) $data['contract_renewal_notice_days'] : null,
+            'cancellation_url' => trim((string) $data['contract_cancellation_url']) ?: null,
+            'cancellation_email' => trim((string) $data['contract_cancellation_email']) ?: null,
             'notes' => $data['notes'] ?: null,
         ];
 
@@ -1967,6 +2797,760 @@ new class extends Component
         }
     }
 
+    // ── Reminder ─────────────────────────────────────────────────────────
+    private function loadReminder(): void
+    {
+        $r = \App\Models\Reminder::findOrFail($this->id);
+        $this->reminder_title = $r->title ?? '';
+        $this->reminder_remind_at = $r->remind_at?->format('Y-m-d\TH:i') ?? '';
+        $this->reminder_channel = $r->channel ?? 'in_app';
+        $this->reminder_state = $r->state ?? 'pending';
+        $this->reminder_notes = $r->notes ?? '';
+    }
+
+    private function saveReminder(): void
+    {
+        $data = $this->validate([
+            'reminder_title' => 'required|string|max:255',
+            'reminder_remind_at' => 'required|date',
+            'reminder_channel' => ['required', \Illuminate\Validation\Rule::in(['in_app', 'email', 'slack', 'sms', 'telegram', 'push'])],
+            'reminder_state' => ['required', \Illuminate\Validation\Rule::in(['pending', 'fired', 'acknowledged', 'cancelled'])],
+            'reminder_notes' => 'nullable|string|max:5000',
+        ]);
+        $payload = [
+            'title' => $data['reminder_title'],
+            'remind_at' => $data['reminder_remind_at'],
+            'channel' => $data['reminder_channel'],
+            'state' => $data['reminder_state'],
+            'notes' => $data['reminder_notes'] ?: null,
+        ];
+
+        if ($this->id) {
+            \App\Models\Reminder::findOrFail($this->id)->update($payload);
+        } else {
+            $payload['user_id'] = auth()->id();
+            $this->id = \App\Models\Reminder::create($payload)->id;
+        }
+    }
+
+    // ── Savings goal ─────────────────────────────────────────────────────
+    private function loadSavingsGoal(): void
+    {
+        $g = \App\Models\SavingsGoal::findOrFail($this->id);
+        $this->savings_name = $g->name;
+        $this->savings_target_amount = (string) $g->target_amount;
+        $this->savings_target_date = $g->target_date?->toDateString() ?? '';
+        $this->savings_starting_amount = (string) $g->starting_amount;
+        $this->savings_saved_amount = (string) $g->saved_amount;
+        $this->savings_currency = $g->currency;
+        $this->savings_state = $g->state;
+        $this->savings_account_id = $g->account_id;
+    }
+
+    private function saveSavingsGoal(): void
+    {
+        $data = $this->validate([
+            'savings_name' => 'required|string|max:120',
+            'savings_target_amount' => 'required|numeric|min:0',
+            'savings_target_date' => 'nullable|date',
+            'savings_starting_amount' => 'nullable|numeric|min:0',
+            'savings_saved_amount' => 'nullable|numeric|min:0',
+            'savings_currency' => 'required|string|size:3|alpha',
+            'savings_state' => ['required', \Illuminate\Validation\Rule::in(['active', 'paused', 'achieved', 'abandoned'])],
+            'savings_account_id' => 'nullable|integer|exists:accounts,id',
+        ]);
+        $payload = [
+            'name' => $data['savings_name'],
+            'target_amount' => (float) $data['savings_target_amount'],
+            'target_date' => $data['savings_target_date'] ?: null,
+            'starting_amount' => (float) ($data['savings_starting_amount'] ?? 0),
+            'saved_amount' => (float) ($data['savings_saved_amount'] ?? 0),
+            'currency' => strtoupper($data['savings_currency']),
+            'state' => $data['savings_state'],
+            'account_id' => $data['savings_account_id'] ?: null,
+        ];
+
+        if ($this->id) {
+            \App\Models\SavingsGoal::findOrFail($this->id)->forceFill($payload)->save();
+        } else {
+            $this->id = \App\Models\SavingsGoal::forceCreate($payload)->id;
+        }
+    }
+
+    // ── Budget cap ───────────────────────────────────────────────────────
+    public ?int $budget_category_id = null;
+
+    public string $budget_monthly_cap = '';
+
+    public string $budget_currency = 'USD';
+
+    public bool $budget_active = true;
+
+    private function loadBudgetCap(): void
+    {
+        $c = \App\Models\BudgetCap::findOrFail($this->id);
+        $this->budget_category_id = $c->category_id;
+        $this->budget_monthly_cap = (string) $c->monthly_cap;
+        $this->budget_currency = $c->currency;
+        $this->budget_active = (bool) $c->active;
+    }
+
+    private function saveBudgetCap(): void
+    {
+        $data = $this->validate([
+            'budget_category_id' => 'required|integer|exists:categories,id',
+            'budget_monthly_cap' => 'required|numeric|min:0',
+            'budget_currency' => 'required|string|size:3|alpha',
+            'budget_active' => 'boolean',
+        ]);
+        $payload = [
+            'category_id' => $data['budget_category_id'],
+            'monthly_cap' => (float) $data['budget_monthly_cap'],
+            'currency' => strtoupper($data['budget_currency']),
+            'active' => $data['budget_active'],
+        ];
+
+        if ($this->id) {
+            \App\Models\BudgetCap::findOrFail($this->id)->forceFill($payload)->save();
+        } else {
+            $this->id = \App\Models\BudgetCap::forceCreate($payload)->id;
+        }
+    }
+
+    // ── Category rule ────────────────────────────────────────────────────
+    public ?int $rule_category_id = null;
+
+    public string $rule_pattern_type = 'contains';
+
+    public string $rule_pattern = '';
+
+    public int $rule_priority = 100;
+
+    public bool $rule_active = true;
+
+    // ── Tag rule ─────────────────────────────────────────────────────────
+    public ?int $tag_rule_tag_id = null;
+
+    public string $tag_rule_pattern_type = 'contains';
+
+    public string $tag_rule_pattern = '';
+
+    public int $tag_rule_priority = 100;
+
+    public bool $tag_rule_active = true;
+
+    private function loadCategoryRule(): void
+    {
+        $r = \App\Models\CategoryRule::findOrFail($this->id);
+        $this->rule_category_id = $r->category_id;
+        $this->rule_pattern_type = $r->pattern_type;
+        $this->rule_pattern = $r->pattern;
+        $this->rule_priority = (int) $r->priority;
+        $this->rule_active = (bool) $r->active;
+    }
+
+    private function saveCategoryRule(): void
+    {
+        $data = $this->validate([
+            'rule_category_id' => 'required|integer|exists:categories,id',
+            'rule_pattern_type' => ['required', \Illuminate\Validation\Rule::in(['contains', 'regex'])],
+            'rule_pattern' => 'required|string|max:500',
+            'rule_priority' => 'integer|min:0|max:1000',
+            'rule_active' => 'boolean',
+        ]);
+        $payload = [
+            'category_id' => $data['rule_category_id'],
+            'pattern_type' => $data['rule_pattern_type'],
+            'pattern' => $data['rule_pattern'],
+            'priority' => (int) ($data['rule_priority'] ?? 100),
+            'active' => $data['rule_active'],
+        ];
+
+        if ($this->id) {
+            \App\Models\CategoryRule::findOrFail($this->id)->forceFill($payload)->save();
+        } else {
+            $this->id = \App\Models\CategoryRule::forceCreate($payload)->id;
+        }
+    }
+
+    private function loadTagRule(): void
+    {
+        $r = \App\Models\TagRule::findOrFail($this->id);
+        $this->tag_rule_tag_id = $r->tag_id;
+        $this->tag_rule_pattern_type = $r->pattern_type;
+        $this->tag_rule_pattern = $r->pattern;
+        $this->tag_rule_priority = (int) $r->priority;
+        $this->tag_rule_active = (bool) $r->active;
+    }
+
+    private function saveTagRule(): void
+    {
+        $data = $this->validate([
+            'tag_rule_tag_id' => 'required|integer|exists:tags,id',
+            'tag_rule_pattern_type' => ['required', \Illuminate\Validation\Rule::in(['contains', 'regex'])],
+            'tag_rule_pattern' => 'required|string|max:500',
+            'tag_rule_priority' => 'integer|min:0|max:1000',
+            'tag_rule_active' => 'boolean',
+        ]);
+        $payload = [
+            'tag_id' => $data['tag_rule_tag_id'],
+            'pattern_type' => $data['tag_rule_pattern_type'],
+            'pattern' => $data['tag_rule_pattern'],
+            'priority' => (int) ($data['tag_rule_priority'] ?? 100),
+            'active' => $data['tag_rule_active'],
+        ];
+
+        if ($this->id) {
+            \App\Models\TagRule::findOrFail($this->id)->forceFill($payload)->save();
+        } else {
+            $this->id = \App\Models\TagRule::forceCreate($payload)->id;
+        }
+    }
+
+    /**
+     * Tag options for the tag-rule inspector, keyed by id → name.
+     *
+     * @return array<int, string>
+     */
+    #[Computed]
+    public function tagPickerOptions(): array
+    {
+        return \App\Models\Tag::orderBy('name')->pluck('name', 'id')->all();
+    }
+
+    // ── Subscription ─────────────────────────────────────────────────────
+    private function loadSubscription(): void
+    {
+        $s = \App\Models\Subscription::findOrFail($this->id);
+        $this->subscription_name = $s->name;
+        $this->subscription_counterparty_id = $s->counterparty_contact_id;
+        $this->subscription_recurring_rule_id = $s->recurring_rule_id;
+        $this->subscription_contract_id = $s->contract_id;
+        $this->subscription_state = $s->state;
+        $this->subscription_paused_until = $s->paused_until?->toDateString() ?? '';
+        $this->subscription_currency = $s->currency;
+        $this->subscription_notes = $s->notes ?? '';
+    }
+
+    private function saveSubscription(): void
+    {
+        $data = $this->validate([
+            'subscription_name' => 'required|string|max:120',
+            'subscription_counterparty_id' => 'nullable|integer|exists:contacts,id',
+            'subscription_recurring_rule_id' => 'nullable|integer|exists:recurring_rules,id',
+            'subscription_contract_id' => 'nullable|integer|exists:contracts,id',
+            'subscription_state' => ['required', \Illuminate\Validation\Rule::in(['active', 'paused', 'cancelled'])],
+            'subscription_paused_until' => 'nullable|date',
+            'subscription_currency' => 'required|string|size:3|alpha',
+            'subscription_notes' => 'nullable|string|max:5000',
+        ]);
+
+        // Keep monthly_cost_cached in sync if a rule is linked. This runs
+        // outside the observer path (the rule's amount/rrule may have
+        // changed without triggering SubscriptionSync), so recompute here.
+        $monthly = null;
+        if ($data['subscription_recurring_rule_id']) {
+            $rule = \App\Models\RecurringRule::find($data['subscription_recurring_rule_id']);
+            if ($rule) {
+                $multiplier = \App\Support\SubscriptionSync::monthlyMultiplier((string) $rule->rrule);
+                $monthly = $multiplier !== null ? $multiplier * abs((float) $rule->amount) : null;
+            }
+        }
+
+        $payload = [
+            'name' => $data['subscription_name'],
+            'counterparty_contact_id' => $data['subscription_counterparty_id'] ?: null,
+            'recurring_rule_id' => $data['subscription_recurring_rule_id'] ?: null,
+            'contract_id' => $data['subscription_contract_id'] ?: null,
+            'state' => $data['subscription_state'],
+            // `paused_until` only matters when state = paused. Clearing state
+            // back to active drops the marker so the next pause starts fresh.
+            'paused_until' => $data['subscription_state'] === 'paused'
+                ? ($data['subscription_paused_until'] ?: null)
+                : null,
+            'currency' => strtoupper($data['subscription_currency']),
+            'notes' => $data['subscription_notes'] ?: null,
+            'monthly_cost_cached' => $monthly,
+            'last_seen_at' => now(),
+        ];
+
+        if ($this->id) {
+            \App\Models\Subscription::findOrFail($this->id)->forceFill($payload)->save();
+        } else {
+            $payload['first_seen_at'] = now();
+            $this->id = \App\Models\Subscription::forceCreate($payload)->id;
+        }
+    }
+
+    // ── Checklist template ──────────────────────────────────────────────
+    //
+    // Recurrence is edited as a mode (daily / weekdays / weekends / custom)
+    // in the form so the user isn't forced to hand-write an RRULE for the
+    // common cases. "custom" reveals the raw string field (RFC-5545 subset
+    // supported by App\Support\Rrule).
+    private const CHECKLIST_PRESET_RRULES = [
+        'daily' => 'FREQ=DAILY',
+        'weekdays' => 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR',
+        'weekends' => 'FREQ=WEEKLY;BYDAY=SA,SU',
+    ];
+
+    private function loadChecklistTemplate(): void
+    {
+        $t = \App\Models\ChecklistTemplate::with(['items' => fn ($q) => $q->orderBy('position')])
+            ->findOrFail($this->id);
+
+        $this->checklist_name = $t->name;
+        $this->checklist_description = $t->description ?? '';
+        $this->checklist_time_of_day = $t->time_of_day ?? 'anytime';
+        $this->checklist_rrule = $t->rrule ?? '';
+        $this->checklist_dtstart = $t->dtstart?->toDateString() ?? now()->toDateString();
+        $this->checklist_paused_until = $t->paused_until?->toDateString() ?? '';
+        $this->checklist_active = (bool) $t->active;
+        $this->checklist_recurrence_mode = $this->recurrenceModeForRrule($this->checklist_rrule);
+
+        // Repeater rows are stored as a key-keyed associative array so every
+        // `wire:model="checklist_items.{key}.label"` binding stays stable
+        // across drag-and-drop reorders. PHP arrays preserve insertion order,
+        // so the map also carries the visual order — no separate index list.
+        $rows = [];
+        foreach ($t->items as $i) {
+            $key = 'item-'.$i->id;
+            $rows[$key] = [
+                'key' => $key,
+                'id' => (int) $i->id,
+                'label' => (string) $i->label,
+                'active' => (bool) $i->active,
+            ];
+        }
+        $this->checklist_items = $rows;
+    }
+
+    private function saveChecklistTemplate(): void
+    {
+        $data = $this->validate([
+            'checklist_name' => 'required|string|max:120',
+            'checklist_description' => 'nullable|string|max:2000',
+            'checklist_time_of_day' => ['required', Rule::in(['morning', 'midday', 'evening', 'night', 'anytime'])],
+            'checklist_recurrence_mode' => ['required', Rule::in(['daily', 'weekdays', 'weekends', 'custom'])],
+            'checklist_rrule' => 'nullable|string|max:255',
+            'checklist_dtstart' => 'required|date',
+            'checklist_paused_until' => 'nullable|date',
+            'checklist_active' => 'boolean',
+            'checklist_items' => 'array',
+            'checklist_items.*.label' => 'nullable|string|max:255',
+            'checklist_items.*.active' => 'boolean',
+            'checklist_items.*.id' => 'nullable|integer',
+        ]);
+
+        $rrule = $data['checklist_recurrence_mode'] === 'custom'
+            ? trim($data['checklist_rrule'] ?? '')
+            : (self::CHECKLIST_PRESET_RRULES[$data['checklist_recurrence_mode']] ?? 'FREQ=DAILY');
+
+        $payload = [
+            'name' => $data['checklist_name'],
+            'description' => $data['checklist_description'] ?: null,
+            'time_of_day' => $data['checklist_time_of_day'],
+            'rrule' => $rrule !== '' ? $rrule : null,
+            'dtstart' => $data['checklist_dtstart'],
+            'paused_until' => $data['checklist_paused_until'] ?: null,
+            'active' => (bool) ($data['checklist_active'] ?? true),
+        ];
+
+        if ($this->id) {
+            $template = \App\Models\ChecklistTemplate::findOrFail($this->id);
+            $template->update($payload);
+        } else {
+            $payload['user_id'] = auth()->id();
+            $template = \App\Models\ChecklistTemplate::create($payload);
+            $this->id = $template->id;
+        }
+
+        $this->persistChecklistItems($template);
+    }
+
+    /**
+     * Sync the item-repeater rows onto the template: insert rows without an
+     * id, update rows that carry one, and delete rows the user removed in
+     * the UI (any persisted item not present in the payload). Positions are
+     * taken from the payload's array order, so drag-less reordering via the
+     * up/down buttons is enough.
+     */
+    private function persistChecklistItems(\App\Models\ChecklistTemplate $template): void
+    {
+        $existingIds = $template->items()->pluck('id')->map(fn ($i) => (int) $i)->all();
+        $keepIds = [];
+
+        $position = 0;
+        foreach ($this->checklist_items as $row) {
+            $label = trim((string) ($row['label'] ?? ''));
+            if ($label === '') {
+                // Skip empty rows entirely — treat as "user left blank".
+                continue;
+            }
+            $active = (bool) ($row['active'] ?? true);
+            $existingId = isset($row['id']) && is_numeric($row['id']) ? (int) $row['id'] : null;
+
+            if ($existingId && in_array($existingId, $existingIds, true)) {
+                \App\Models\ChecklistTemplateItem::where('id', $existingId)->update([
+                    'label' => $label,
+                    'active' => $active,
+                    'position' => $position,
+                ]);
+                $keepIds[] = $existingId;
+            } else {
+                $item = $template->items()->create([
+                    'label' => $label,
+                    'active' => $active,
+                    'position' => $position,
+                ]);
+                $keepIds[] = (int) $item->id;
+            }
+            $position++;
+        }
+
+        $toDelete = array_diff($existingIds, $keepIds);
+        if ($toDelete !== []) {
+            \App\Models\ChecklistTemplateItem::whereIn('id', $toDelete)->delete();
+        }
+    }
+
+    private function recurrenceModeForRrule(?string $rrule): string
+    {
+        $r = trim((string) $rrule);
+        if ($r === '') {
+            return 'daily';
+        }
+        foreach (self::CHECKLIST_PRESET_RRULES as $mode => $preset) {
+            if ($r === $preset) {
+                return $mode;
+            }
+        }
+
+        return 'custom';
+    }
+
+    public function addItem(): void
+    {
+        $key = Str::uuid()->toString();
+        $this->checklist_items[$key] = [
+            'key' => $key,
+            'id' => null,
+            'label' => '',
+            'active' => true,
+        ];
+    }
+
+    public function removeItem(string $key): void
+    {
+        unset($this->checklist_items[$key]);
+    }
+
+    /**
+     * Reorder `checklist_items` to match the supplied sequence of row keys.
+     * The Alpine drag handler computes the new order client-side and calls
+     * this method with the final DOM-order keys. Unknown keys are ignored;
+     * any rows whose keys aren't in the payload keep their relative order
+     * at the tail (defensive — e.g. if the DOM and server briefly diverge).
+     *
+     * Because `checklist_items` is a keyed assoc array whose insertion order
+     * is the visible order, reordering is just "rebuild the map in the new
+     * key order". wire:model bindings stay stable since each row is still
+     * reached via its UUID key.
+     *
+     * @param  array<int, string>  $orderedKeys
+     */
+    public function reorderItems(array $orderedKeys): void
+    {
+        if ($this->checklist_items === []) {
+            return;
+        }
+
+        $next = [];
+        foreach ($orderedKeys as $key) {
+            $k = (string) $key;
+            if (isset($this->checklist_items[$k])) {
+                $next[$k] = $this->checklist_items[$k];
+            }
+        }
+        foreach ($this->checklist_items as $k => $row) {
+            if (! isset($next[$k])) {
+                $next[$k] = $row;
+            }
+        }
+
+        $this->checklist_items = $next;
+    }
+
+    // ── Time entry (manual backlog) ──────────────────────────────────────
+    //
+    // Schema stores started_at + ended_at + duration_seconds. For backlog
+    // entries the user cares about "I worked 2.5h on X yesterday", not the
+    // clock times, so we accept a date + hours and synthesize the clock
+    // window (09:00 in the user's tz → +duration) to satisfy NOT NULL.
+    private function loadTimeEntry(): void
+    {
+        $e = \App\Models\TimeEntry::findOrFail($this->id);
+        $this->te_activity_date = $e->activity_date?->toDateString() ?? '';
+        $this->te_hours = $e->duration_seconds
+            ? rtrim(rtrim(number_format($e->duration_seconds / 3600, 2, '.', ''), '0'), '.')
+            : '';
+        $this->te_project_id = $e->project_id;
+        $this->te_task_id = $e->task_id;
+        $this->te_description = $e->description ?? '';
+        $this->te_billable = (bool) $e->billable;
+    }
+
+    private function saveTimeEntry(): void
+    {
+        $data = $this->validate([
+            'te_activity_date' => 'required|date',
+            'te_hours' => 'required|numeric|min:0.01|max:24',
+            'te_project_id' => 'nullable|integer|exists:projects,id',
+            'te_task_id' => 'nullable|integer|exists:tasks,id',
+            'te_description' => 'nullable|string|max:1000',
+            'te_billable' => 'boolean',
+        ]);
+
+        $tz = auth()->user()?->timezone ?: config('app.timezone', 'UTC');
+        $durationSeconds = (int) round((float) $data['te_hours'] * 3600);
+        $startedAt = \Carbon\CarbonImmutable::parse($data['te_activity_date'].' 09:00', $tz)->utc();
+        $endedAt = $startedAt->addSeconds($durationSeconds);
+
+        $payload = [
+            'activity_date' => $data['te_activity_date'],
+            'started_at' => $startedAt,
+            'ended_at' => $endedAt,
+            'duration_seconds' => $durationSeconds,
+            'project_id' => $data['te_project_id'] ?: null,
+            'task_id' => $data['te_task_id'] ?: null,
+            'description' => $data['te_description'] ?: null,
+            'billable' => (bool) ($data['te_billable'] ?? false),
+        ];
+
+        if ($this->id) {
+            \App\Models\TimeEntry::findOrFail($this->id)->update($payload);
+        } else {
+            $payload['user_id'] = auth()->id();
+            $this->id = \App\Models\TimeEntry::create($payload)->id;
+        }
+    }
+
+    // ── Transfer (manual) ────────────────────────────────────────────────
+    //
+    // Builds a Transfer that links two sides. Each side is either an
+    // existing unpaired Transaction the user picks (for the
+    // already-imported case) or a fresh mirror Transaction we create
+    // here. Picking an existing transaction on a side reuses it; leaving
+    // the picker blank synthesizes the row. The combinations:
+    //
+    //   both pickers filled    — pure linkage, no new transactions.
+    //   one picker filled      — create the missing side; link the picked.
+    //   neither filled         — create both sides from the form fields.
+    //
+    // Create-only via the inspector for v1 — editing accounts or amount
+    // after the fact would require rewriting both linked transactions,
+    // which is risky; for now the user edits the underlying Transactions
+    // directly (or deletes the transfer and re-creates it). Same-currency
+    // only.
+    private function saveTransfer(): void
+    {
+        $data = $this->validate([
+            'transfer_occurred_on' => 'required|date',
+            'transfer_from_account_id' => 'required|integer|exists:accounts,id|different:transfer_to_account_id',
+            'transfer_to_account_id' => 'required|integer|exists:accounts,id',
+            'transfer_amount' => 'required|numeric|min:0.01',
+            'transfer_currency' => 'required|string|size:3|alpha',
+            'transfer_description' => 'nullable|string|max:500',
+            'transfer_from_transaction_id' => 'nullable|integer|exists:transactions,id',
+            'transfer_to_transaction_id' => 'nullable|integer|exists:transactions,id',
+        ]);
+
+        if ($this->id) {
+            // Editing transfers is not supported via the inspector — see comment above.
+            return;
+        }
+
+        $household = CurrentHousehold::get();
+        abort_unless($household, 403);
+
+        $amount = abs((float) $data['transfer_amount']);
+        $currency = strtoupper($data['transfer_currency']);
+        $description = $data['transfer_description'] ?: __('Transfer');
+        $fromAccountId = (int) $data['transfer_from_account_id'];
+        $toAccountId = (int) $data['transfer_to_account_id'];
+
+        $fromTxn = $data['transfer_from_transaction_id']
+            ? Transaction::find($data['transfer_from_transaction_id'])
+            : null;
+        $toTxn = $data['transfer_to_transaction_id']
+            ? Transaction::find($data['transfer_to_transaction_id'])
+            : null;
+
+        // Guardrails for picked transactions: each must belong to the
+        // matching account, have the expected sign, and not already be
+        // wired up to another Transfer.
+        $pickedError = $this->validatePickedTransferTransactions(
+            $fromTxn, $toTxn, $fromAccountId, $toAccountId
+        );
+        if ($pickedError !== null) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'transfer_from_transaction_id' => $pickedError,
+            ]);
+        }
+
+        \Illuminate\Support\Facades\DB::transaction(function () use (
+            $household, $data, $amount, $currency, $description,
+            $fromAccountId, $toAccountId, &$fromTxn, &$toTxn
+        ) {
+            if (! $fromTxn) {
+                $fromTxn = Transaction::create([
+                    'household_id' => $household->id,
+                    'account_id' => $fromAccountId,
+                    'occurred_on' => $data['transfer_occurred_on'],
+                    'amount' => -$amount,
+                    'currency' => $currency,
+                    'description' => $description,
+                    'status' => 'cleared',
+                    'import_source' => 'manual:transfer',
+                ]);
+            }
+
+            if (! $toTxn) {
+                $toTxn = Transaction::create([
+                    'household_id' => $household->id,
+                    'account_id' => $toAccountId,
+                    'occurred_on' => $data['transfer_occurred_on'],
+                    'amount' => $amount,
+                    'currency' => $currency,
+                    'description' => $description,
+                    'status' => 'cleared',
+                    'import_source' => 'manual:transfer',
+                ]);
+            }
+
+            $transfer = \App\Models\Transfer::create([
+                'household_id' => $household->id,
+                'occurred_on' => $data['transfer_occurred_on'],
+                'from_account_id' => $fromTxn->account_id,
+                'from_amount' => $fromTxn->amount,
+                'from_currency' => $fromTxn->currency,
+                'from_transaction_id' => $fromTxn->id,
+                'to_account_id' => $toTxn->account_id,
+                'to_amount' => $toTxn->amount,
+                'to_currency' => $toTxn->currency,
+                'to_transaction_id' => $toTxn->id,
+                'description' => $description,
+                'status' => 'cleared',
+            ]);
+
+            $this->id = $transfer->id;
+        });
+    }
+
+    private function validatePickedTransferTransactions(
+        ?Transaction $fromTxn,
+        ?Transaction $toTxn,
+        int $fromAccountId,
+        int $toAccountId,
+    ): ?string {
+        $alreadyPaired = function (Transaction $t): bool {
+            return \App\Models\Transfer::query()
+                ->where(function ($q) use ($t) {
+                    $q->where('from_transaction_id', $t->id)
+                        ->orWhere('to_transaction_id', $t->id);
+                })->exists();
+        };
+
+        if ($fromTxn) {
+            if ($fromTxn->account_id !== $fromAccountId) {
+                return __('The picked outflow transaction is in a different account.');
+            }
+            if ((float) $fromTxn->amount >= 0) {
+                return __('The picked outflow transaction must be a debit.');
+            }
+            if ($alreadyPaired($fromTxn)) {
+                return __('That outflow transaction is already part of another transfer.');
+            }
+        }
+
+        if ($toTxn) {
+            if ($toTxn->account_id !== $toAccountId) {
+                return __('The picked inflow transaction is in a different account.');
+            }
+            if ((float) $toTxn->amount <= 0) {
+                return __('The picked inflow transaction must be a credit.');
+            }
+            if ($alreadyPaired($toTxn)) {
+                return __('That inflow transaction is already part of another transfer.');
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Unpaired outflow transactions (debits) eligible as the "from" side
+     * of a manual transfer. Filters by the selected from_account to keep
+     * the dropdown tight; falls back to the full unpaired set when no
+     * account is selected yet.
+     *
+     * @return array<int, string>
+     */
+    #[Computed]
+    public function transferOutflowPickerOptions(): array
+    {
+        return $this->unpairedTransferCandidates('outflow', $this->transfer_from_account_id);
+    }
+
+    /**
+     * Unpaired inflow transactions (credits) eligible as the "to" side.
+     *
+     * @return array<int, string>
+     */
+    #[Computed]
+    public function transferInflowPickerOptions(): array
+    {
+        return $this->unpairedTransferCandidates('inflow', $this->transfer_to_account_id);
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function unpairedTransferCandidates(string $direction, ?int $accountId): array
+    {
+        $pairedIds = \App\Models\Transfer::query()
+            ->whereNotNull('from_transaction_id')->pluck('from_transaction_id')
+            ->merge(\App\Models\Transfer::query()->whereNotNull('to_transaction_id')->pluck('to_transaction_id'))
+            ->unique()
+            ->all();
+
+        $query = Transaction::query()
+            ->whereNotIn('id', $pairedIds)
+            ->when($accountId, fn ($q) => $q->where('account_id', $accountId));
+
+        if ($direction === 'outflow') {
+            $query->where('amount', '<', 0);
+        } else {
+            $query->where('amount', '>', 0);
+        }
+
+        return $query
+            ->orderByDesc('occurred_on')
+            ->limit(100)
+            ->with('account:id,name')
+            ->get(['id', 'account_id', 'occurred_on', 'amount', 'currency', 'description'])
+            ->mapWithKeys(function ($t) {
+                $date = $t->occurred_on ? $t->occurred_on->toDateString() : '—';
+                $account = $t->account?->name ?? '—';
+                $amount = Formatting::money(abs((float) $t->amount), $t->currency ?? 'USD');
+                $desc = (string) ($t->description ?? '');
+                $label = trim($date.' · '.$account.' · '.$amount.($desc !== '' ? ' · '.\Illuminate\Support\Str::limit($desc, 40) : ''));
+
+                return [$t->id => $label];
+            })
+            ->all();
+    }
+
     /** @return \Illuminate\Database\Eloquent\Collection<int, Property> */
     #[Computed]
     public function propertyOptions()
@@ -2024,7 +3608,7 @@ new class extends Component
         $this->dispatch('inspector-body-shown');
     }
 
-    public function createCounterparty(string $name): void
+    public function createCounterparty(string $name, ?string $modelKey = null): void
     {
         $name = trim($name);
         if ($name === '') {
@@ -2036,11 +3620,19 @@ new class extends Component
             'display_name' => $name,
         ]);
 
-        $this->counterparty_contact_id = $contact->id;
+        // Write back to whichever Livewire property the calling searchable-select
+        // is bound to. The client passes `modelKey` as the second arg so this
+        // works for every counterparty picker (subscription_*, contract_*,
+        // account_vendor_id, inventory_vendor_id, …), not just the legacy
+        // generic counterparty_contact_id field.
+        $targetKey = $modelKey && property_exists($this, $modelKey)
+            ? $modelKey
+            : 'counterparty_contact_id';
+        $this->{$targetKey} = $contact->id;
         unset($this->contacts);
 
         $this->dispatch('ss-option-added',
-            model: 'counterparty_contact_id',
+            model: $targetKey,
             id: $contact->id,
             label: $contact->display_name,
         );
@@ -2069,6 +3661,14 @@ new class extends Component
                 'property' => Property::findOrFail($this->id)->delete(),
                 'vehicle' => Vehicle::findOrFail($this->id)->delete(),
                 'inventory' => InventoryItem::findOrFail($this->id)->delete(),
+                'reminder' => \App\Models\Reminder::findOrFail($this->id)->delete(),
+                'savings_goal' => \App\Models\SavingsGoal::findOrFail($this->id)->delete(),
+                'budget_cap' => \App\Models\BudgetCap::findOrFail($this->id)->delete(),
+                'category_rule' => \App\Models\CategoryRule::findOrFail($this->id)->delete(),
+                'tag_rule' => \App\Models\TagRule::findOrFail($this->id)->delete(),
+                'subscription' => \App\Models\Subscription::findOrFail($this->id)->delete(),
+                'checklist_template' => \App\Models\ChecklistTemplate::findOrFail($this->id)->delete(),
+                'time_entry' => \App\Models\TimeEntry::findOrFail($this->id)->delete(),
                 default => null,
             };
         } catch (\App\Exceptions\PeriodLockedException $e) {
@@ -2168,6 +3768,9 @@ new class extends Component
             'property' => __('property'),
             'vehicle' => __('vehicle'),
             'inventory' => __('inventory item'),
+            'time_entry' => __('time entry'),
+            'transfer' => __('transfer'),
+            'checklist_template' => __('checklist'),
             default => '',
         };
 
@@ -2248,6 +3851,38 @@ new class extends Component
         @endif
 
         <div class="flex-1 overflow-y-auto px-5 py-4">
+            @if ($ambiguousCandidates !== [])
+                {{-- Multi-hit disambiguator: after a Transaction save that found
+                     2+ candidate projections, the drawer stays open and asks the
+                     user to pick which bill this paid (or skip linking). Handled
+                     entirely in the drawer — no separate modal. --}}
+                <section role="region" aria-label="{{ __('Pick a bill to link') }}" class="space-y-3">
+                    <header>
+                        <h3 class="text-sm font-semibold text-neutral-100">{{ __('Which bill did this pay?') }}</h3>
+                        <p class="mt-1 text-xs text-neutral-400">{{ __('Multiple projected bills match this transaction. Pick one to link them, or skip to leave this transaction standalone.') }}</p>
+                    </header>
+                    <ul class="space-y-2">
+                        @foreach ($ambiguousCandidates as $c)
+                            <li>
+                                <button type="button" wire:click="linkProjection({{ $c['id'] }})"
+                                        class="flex w-full items-center justify-between gap-3 rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-left text-sm text-neutral-100 hover:border-emerald-500 hover:bg-emerald-950/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                                    <div class="min-w-0">
+                                        <div class="truncate font-medium">{{ $c['title'] }}</div>
+                                        <div class="text-[11px] text-neutral-500 tabular-nums">{{ __('due :d', ['d' => $c['due_on']]) }}</div>
+                                    </div>
+                                    <span class="shrink-0 text-sm tabular-nums text-neutral-300">{{ $c['amount'] }}</span>
+                                </button>
+                            </li>
+                        @endforeach
+                    </ul>
+                    <div class="flex justify-end">
+                        <button type="button" wire:click="skipProjectionLink"
+                                class="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                            {{ __('Skip — leave unlinked') }}
+                        </button>
+                    </div>
+                </section>
+            @else
             @switch($type)
                 @case('')        @include('partials.inspector.type-picker')          @break
                 @case('task')    @include('partials.inspector.forms.task')           @break
@@ -2266,10 +3901,20 @@ new class extends Component
                 @case('vehicle') @include('partials.inspector.forms.vehicle')        @break
                 @case('inventory') @include('partials.inspector.forms.inventory')    @break
                 @case('appointment') @include('partials.inspector.forms.appointment') @break
+                @case('reminder') @include('partials.inspector.forms.reminder') @break
+                @case('savings_goal') @include('partials.inspector.forms.savings_goal') @break
+                @case('budget_cap') @include('partials.inspector.forms.budget_cap') @break
+                @case('category_rule') @include('partials.inspector.forms.category_rule') @break
+                @case('tag_rule') @include('partials.inspector.forms.tag_rule') @break
+                @case('subscription') @include('partials.inspector.forms.subscription') @break
+                @case('checklist_template') @include('partials.inspector.forms.checklist_template') @break
+                @case('time_entry') @include('partials.inspector.forms.time_entry') @break
+                @case('transfer') @include('partials.inspector.forms.transfer') @break
             @endswitch
+            @endif
         </div>
 
-        @if ($type !== '')
+        @if ($type !== '' && $ambiguousCandidates === [])
             <footer class="flex items-center justify-between border-t border-neutral-800 bg-neutral-900/50 px-5 py-3">
                 <div>
                     @if ($id)

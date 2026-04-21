@@ -29,3 +29,7 @@ Thumbs.db
 /playwright-report
 /blob-report
 /playwright/.cache
+
+# OWASP ZAP reports and config
+/zap/*.html
+/zap/*.json

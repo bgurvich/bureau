@@ -43,13 +43,70 @@ it('navigates month cursor forward and back', function () {
     CarbonImmutable::setTestNow('2026-04-15 12:00:00');
     authedInHousehold();
 
+    // Cursor is a full YYYY-MM-DD anchor since week/day views landed. Month
+    // `go(n)` steps month-by-month via addMonthsNoOverflow.
     Livewire::test('calendar-index')
+        ->assertSet('view', 'month')
         ->call('go', 1)
-        ->assertSet('cursor', '2026-05')
+        ->assertSet('cursor', '2026-05-15')
         ->call('go', -2)
-        ->assertSet('cursor', '2026-03')
+        ->assertSet('cursor', '2026-03-15')
         ->call('today')
         ->assertSet('cursor', '');
+
+    CarbonImmutable::setTestNow();
+});
+
+it('switches to week view and navigates by week', function () {
+    CarbonImmutable::setTestNow('2026-04-15 12:00:00');
+    $user = authedInHousehold();
+
+    Meeting::create(['title' => 'Weekly sync', 'starts_at' => '2026-04-15 10:00:00', 'ends_at' => '2026-04-15 11:00:00']);
+    Task::create(['title' => 'Ship feature', 'due_at' => '2026-04-17 17:00:00', 'state' => 'open', 'assigned_user_id' => $user->id]);
+
+    Livewire::test('calendar-index')
+        ->call('setView', 'week')
+        ->assertSet('view', 'week')
+        ->assertSee('Weekly sync')
+        ->assertSee('Ship feature')
+        ->call('go', 1)
+        ->assertSet('cursor', '2026-04-22')
+        ->call('go', -1)
+        ->assertSet('cursor', '2026-04-15');
+
+    CarbonImmutable::setTestNow();
+});
+
+it('switches to day view and navigates by day', function () {
+    CarbonImmutable::setTestNow('2026-04-15 12:00:00');
+    authedInHousehold();
+
+    Meeting::create(['title' => 'Morning standup', 'starts_at' => '2026-04-15 09:00:00', 'ends_at' => '2026-04-15 09:30:00']);
+    Document::create(['kind' => 'passport', 'label' => 'Expires today', 'expires_on' => '2026-04-15']);
+    // Next-day event must NOT appear in today's day view.
+    Meeting::create(['title' => 'Tomorrow meeting', 'starts_at' => '2026-04-16 10:00:00', 'ends_at' => '2026-04-16 11:00:00']);
+
+    Livewire::test('calendar-index')
+        ->call('setView', 'day')
+        ->assertSet('view', 'day')
+        ->assertSee('Morning standup')
+        ->assertSee('Expires today')
+        ->assertDontSee('Tomorrow meeting')
+        ->call('go', 1)
+        ->assertSet('cursor', '2026-04-16')
+        ->assertSee('Tomorrow meeting')
+        ->assertDontSee('Morning standup');
+
+    CarbonImmutable::setTestNow();
+});
+
+it('rejects unknown view values', function () {
+    CarbonImmutable::setTestNow('2026-04-15 12:00:00');
+    authedInHousehold();
+
+    Livewire::test('calendar-index')
+        ->call('setView', 'year')
+        ->assertSet('view', 'month'); // unchanged
 
     CarbonImmutable::setTestNow();
 });

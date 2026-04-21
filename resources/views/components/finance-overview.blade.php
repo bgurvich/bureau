@@ -272,10 +272,10 @@ class extends Component
             <div>
                 <div class="text-xs font-medium uppercase tracking-wider text-neutral-500">{{ __('Household net worth') }}</div>
                 <div class="mt-1 text-3xl font-semibold tabular-nums text-neutral-100">
-                    {{ $this->currency }} {{ number_format($this->netWorth['total'], 2) }}
+                    {{ Formatting::money($this->netWorth['total'], $this->currency) }}
                 </div>
                 <div class="mt-1 text-[11px] text-neutral-500">
-                    {{ __('Accounts') }} {{ number_format($this->netWorth['accounts'], 0) }} · {{ __('Assets') }} {{ number_format($this->netWorth['assets'], 0) }}
+                    {{ __('Accounts') }} {{ Formatting::money($this->netWorth['accounts'], $this->currency) }} · {{ __('Assets') }} {{ Formatting::money($this->netWorth['assets'], $this->currency) }}
                 </div>
             </div>
             @if (count($this->netWorth['sparkline']) >= 2)
@@ -318,7 +318,7 @@ class extends Component
                     <div>
                         <dt class="text-[10px] uppercase tracking-wider text-neutral-500">{{ $kindLabels[$kind] ?? $kind }}</dt>
                         <dd class="mt-0.5 tabular-nums text-sm {{ $amount >= 0 ? 'text-neutral-200' : 'text-rose-400' }}">
-                            {{ number_format($amount, 2) }}
+                            {{ Formatting::money($amount, $this->currency) }}
                         </dd>
                     </div>
                 @endforeach
@@ -333,16 +333,16 @@ class extends Component
             <div class="mt-3 space-y-1 text-sm">
                 <div class="flex items-baseline justify-between">
                     <span class="text-neutral-500">{{ __('Income') }}</span>
-                    <span class="tabular-nums text-emerald-400">+{{ number_format($this->cashflow['income'], 2) }}</span>
+                    <span class="tabular-nums text-emerald-400">+{{ Formatting::money($this->cashflow['income'], $this->currency) }}</span>
                 </div>
                 <div class="flex items-baseline justify-between">
                     <span class="text-neutral-500">{{ __('Expense') }}</span>
-                    <span class="tabular-nums text-rose-400">−{{ number_format($this->cashflow['expense'], 2) }}</span>
+                    <span class="tabular-nums text-rose-400">−{{ Formatting::money($this->cashflow['expense'], $this->currency) }}</span>
                 </div>
                 <div class="mt-1 flex items-baseline justify-between border-t border-neutral-800 pt-1">
                     <span class="text-neutral-300">{{ __('Net') }}</span>
                     <span class="tabular-nums {{ $this->cashflow['net'] >= 0 ? 'text-emerald-400' : 'text-rose-400' }} font-semibold">
-                        {{ $this->cashflow['net'] >= 0 ? '+' : '' }}{{ number_format($this->cashflow['net'], 2) }}
+                        {{ $this->cashflow['net'] >= 0 ? '+' : '' }}{{ Formatting::money($this->cashflow['net'], $this->currency) }}
                     </span>
                 </div>
             </div>
@@ -353,15 +353,15 @@ class extends Component
             <div class="mt-3 space-y-1 text-sm">
                 <div class="flex items-baseline justify-between">
                     <span class="text-neutral-500">{{ __('Next 30d') }}</span>
-                    <span class="tabular-nums text-rose-400">−{{ number_format($this->obligations['d30'], 2) }}</span>
+                    <span class="tabular-nums text-rose-400">−{{ Formatting::money($this->obligations['d30'], $this->currency) }}</span>
                 </div>
                 <div class="flex items-baseline justify-between">
                     <span class="text-neutral-500">{{ __('Next 60d') }}</span>
-                    <span class="tabular-nums text-rose-300">−{{ number_format($this->obligations['d60'], 2) }}</span>
+                    <span class="tabular-nums text-rose-300">−{{ Formatting::money($this->obligations['d60'], $this->currency) }}</span>
                 </div>
                 <div class="flex items-baseline justify-between">
                     <span class="text-neutral-500">{{ __('Next 90d') }}</span>
-                    <span class="tabular-nums text-neutral-400">−{{ number_format($this->obligations['d90'], 2) }}</span>
+                    <span class="tabular-nums text-neutral-400">−{{ Formatting::money($this->obligations['d90'], $this->currency) }}</span>
                 </div>
             </div>
         </section>
@@ -371,7 +371,7 @@ class extends Component
             <div class="mt-3 space-y-1 text-sm">
                 <div class="flex items-baseline justify-between">
                     <span class="text-neutral-500">{{ __('Monthly') }}</span>
-                    <span class="tabular-nums text-neutral-200">{{ number_format($this->subscriptionBurn['monthly'], 2) }}</span>
+                    <span class="tabular-nums text-neutral-200">{{ Formatting::money($this->subscriptionBurn['monthly'], $this->currency) }}</span>
                 </div>
                 <div class="flex items-baseline justify-between">
                     <span class="text-neutral-500">{{ __('Active contracts') }}</span>
@@ -400,7 +400,7 @@ class extends Component
                     <li class="flex items-baseline justify-between">
                         <span class="text-neutral-300">{{ $row['name'] }}</span>
                         <span class="tabular-nums {{ $row['total'] >= 0 ? 'text-neutral-200' : 'text-rose-400' }}">
-                            {{ number_format($row['total'], 2) }}
+                            {{ Formatting::money($row['total'], $this->currency) }}
                         </span>
                     </li>
                 @endforeach
@@ -419,11 +419,11 @@ class extends Component
                 </div>
                 <div>
                     <dt class="text-[10px] uppercase tracking-wider text-neutral-500">{{ __('Face value') }}</dt>
-                    <dd class="mt-0.5 tabular-nums text-neutral-200">{{ number_format($this->giftCards['face_value'], 0) }}</dd>
+                    <dd class="mt-0.5 tabular-nums text-neutral-200">{{ Formatting::money($this->giftCards['face_value'], $this->currency) }}</dd>
                 </div>
                 <div>
                     <dt class="text-[10px] uppercase tracking-wider text-neutral-500">{{ __('Remaining') }}</dt>
-                    <dd class="mt-0.5 tabular-nums text-emerald-400">{{ number_format($this->giftCards['remaining'], 0) }}</dd>
+                    <dd class="mt-0.5 tabular-nums text-emerald-400">{{ Formatting::money($this->giftCards['remaining'], $this->currency) }}</dd>
                 </div>
                 <div>
                     <dt class="text-[10px] uppercase tracking-wider text-neutral-500">{{ __('Expiring ≤ 30d') }}</dt>

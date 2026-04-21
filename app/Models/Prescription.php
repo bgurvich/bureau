@@ -21,11 +21,13 @@ class Prescription extends Model
         'next_refill_on' => 'date',
     ];
 
+    /** @return MorphTo<Model, $this> */
     public function subject(): MorphTo
     {
         return $this->morphTo();
     }
 
+    /** @return BelongsTo<HealthProvider, $this> */
     public function prescriber(): BelongsTo
     {
         return $this->belongsTo(HealthProvider::class, 'prescriber_id');

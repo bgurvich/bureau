@@ -3,6 +3,9 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToHousehold;
+use App\Models\Concerns\HasLinkedNotes;
+use App\Models\Concerns\HasLinkedTasks;
+use App\Models\Concerns\HasLinkedTransactions;
 use App\Models\Concerns\HasMedia;
 use App\Models\Concerns\HasTags;
 use App\Models\Concerns\HasValuations;
@@ -11,7 +14,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class InventoryItem extends Model
 {
-    use BelongsToHousehold, HasMedia, HasTags, HasValuations;
+    use BelongsToHousehold, HasLinkedNotes, HasLinkedTasks, HasLinkedTransactions, HasMedia, HasTags, HasValuations;
 
     protected $guarded = [];
 
@@ -28,11 +31,13 @@ class InventoryItem extends Model
         'listing_posted_at' => 'date',
     ];
 
+    /** @return BelongsTo<Property, $this> */
     public function property(): BelongsTo
     {
         return $this->belongsTo(Property::class, 'location_property_id');
     }
 
+    /** @return BelongsTo<Contact, $this> */
     public function purchasedFrom(): BelongsTo
     {
         return $this->belongsTo(Contact::class, 'purchased_from_contact_id');

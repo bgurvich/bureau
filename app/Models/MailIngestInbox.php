@@ -18,6 +18,7 @@ class MailIngestInbox extends Model
         'active' => 'boolean',
     ];
 
+    /** @return HasMany<MailMessage, $this> */
     public function messages(): HasMany
     {
         return $this->hasMany(MailMessage::class, 'inbox_id');

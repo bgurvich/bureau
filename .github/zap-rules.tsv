@@ -1,0 +1,9 @@
+# ZAP alert-rule tuning for Bureau.
+# Format: <ruleId>\t<threshold>\t<comment>
+# Thresholds: IGNORE | WARN | FAIL
+#
+# Only add a rule here with a comment explaining WHY the default is wrong for
+# Bureau. Defaults are good; silence sparingly.
+#
+# Example:
+# 10027	IGNORE	(remove me when this site is HTTPS-only) "Information disclosure - suspicious comments" — we intentionally ship dev notes in code during alpha.

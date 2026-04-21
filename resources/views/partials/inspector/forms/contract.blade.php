@@ -72,6 +72,24 @@
                class="w-full rounded-md border border-neutral-700 bg-neutral-950 px-2 py-2 text-sm text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
         <p class="mt-1 text-[11px] text-neutral-500">{{ __('Free-trial window; leave blank if this is already a paid contract.') }}</p>
     </div>
+    <fieldset class="space-y-3 rounded-md border border-neutral-800 bg-neutral-900/40 px-3 py-3">
+        <legend class="px-1 text-[10px] font-medium uppercase tracking-wider text-neutral-500">{{ __('How to cancel') }}</legend>
+        <div>
+            <label for="i-k-cancel-url" class="mb-1 block text-xs text-neutral-400">{{ __('Cancellation URL') }}</label>
+            <input wire:model="contract_cancellation_url" id="i-k-cancel-url" type="url"
+                   placeholder="https://example.com/account/cancel"
+                   class="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+            @error('contract_cancellation_url')<div role="alert" class="mt-1 text-xs text-rose-400">{{ $message }}</div>@enderror
+        </div>
+        <div>
+            <label for="i-k-cancel-email" class="mb-1 block text-xs text-neutral-400">{{ __('Cancellation email') }}</label>
+            <input wire:model="contract_cancellation_email" id="i-k-cancel-email" type="email"
+                   placeholder="unsubscribe@example.com"
+                   class="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+            @error('contract_cancellation_email')<div role="alert" class="mt-1 text-xs text-rose-400">{{ $message }}</div>@enderror
+        </div>
+        <p class="text-[11px] text-neutral-500">{{ __('Drop the link (or email) here so future-you doesn\'t have to hunt for it when cancelling.') }}</p>
+    </fieldset>
     @include('partials.inspector.fields.photos')
     @include('partials.inspector.fields.notes')
     @include('partials.inspector.fields.tags')

@@ -6,9 +6,11 @@ use App\Models\InventoryItem;
 use App\Models\Property;
 use App\Models\RecurringProjection;
 use App\Models\Snapshot;
+use App\Models\Subscription;
 use App\Models\Transaction;
 use App\Models\Transfer;
 use App\Models\Vehicle;
+use App\Support\Formatting;
 use Livewire\Attributes\Computed;
 use Livewire\Component;
 
@@ -104,6 +106,32 @@ new class extends Component
     }
 
     /**
+     * Monthly-equivalent spend across all active subscriptions. Returns
+     * null if any active subscription has an unknown cadence (matches the
+     * /subscriptions page convention — better dash than lie).
+     */
+    #[Computed]
+    public function subscriptionsMonthly(): ?float
+    {
+        $subs = Subscription::where('state', 'active')->get(['monthly_cost_cached']);
+        $sum = 0.0;
+        foreach ($subs as $s) {
+            if ($s->monthly_cost_cached === null) {
+                return null;
+            }
+            $sum += (float) $s->monthly_cost_cached;
+        }
+
+        return $sum;
+    }
+
+    #[Computed]
+    public function subscriptionsCount(): int
+    {
+        return Subscription::where('state', 'active')->count();
+    }
+
+    /**
      * Deterministic forecast: signed net of projected bills + income over the
      * next N days. Returns [income, expense, net]. Probabilistic seasonality
      * is a future layer.
@@ -181,7 +209,7 @@ new class extends Component
             <div class="text-xs text-neutral-500">Net worth</div>
             <div class="mt-1 flex items-baseline justify-between gap-4">
                 <div class="text-2xl font-semibold tabular-nums text-neutral-100">
-                    {{ $this->currency }} {{ number_format($this->netWorth, 2) }}
+                    {{ Formatting::money($this->netWorth, $this->currency) }}
                 </div>
                 @if (count($this->trend) >= 2)
                     @php
@@ -213,16 +241,32 @@ new class extends Component
             <div>
                 <div class="text-xs text-neutral-500">This month</div>
                 <div class="mt-1 text-sm tabular-nums {{ $this->monthToDateCashflow >= 0 ? 'text-emerald-400' : 'text-rose-400' }}">
-                    {{ $this->monthToDateCashflow >= 0 ? '+' : '' }}{{ number_format($this->monthToDateCashflow, 2) }}
+                    {{ $this->monthToDateCashflow >= 0 ? '+' : '' }}{{ Formatting::money($this->monthToDateCashflow, $this->currency) }}
                 </div>
             </div>
             <div>
                 <div class="text-xs text-neutral-500">Next 30 days out</div>
                 <div class="mt-1 text-sm tabular-nums text-neutral-300">
-                    {{ number_format($this->next30DaysObligations, 2) }}
+                    {{ Formatting::money($this->next30DaysObligations, $this->currency) }}
                 </div>
             </div>
         </div>
+
+        @if ($this->subscriptionsCount > 0)
+            <a href="{{ route('fiscal.subscriptions') }}"
+               class="block rounded-lg border border-neutral-800 bg-neutral-900/60 px-3 py-2 text-xs text-neutral-400 transition hover:border-neutral-600 hover:text-neutral-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                <div class="flex items-baseline justify-between gap-3">
+                    <span>{{ __(':n subscriptions', ['n' => $this->subscriptionsCount]) }}</span>
+                    <span class="tabular-nums text-neutral-200">
+                        @if ($this->subscriptionsMonthly !== null)
+                            {{ Formatting::money($this->subscriptionsMonthly, $this->currency) }}/mo
+                        @else
+                            —
+                        @endif
+                    </span>
+                </div>
+            </a>
+        @endif
 
         @php $f = $this->forecast30; @endphp
         @if ($f['net'] !== 0.0)
@@ -230,13 +274,13 @@ new class extends Component
                 <div class="flex items-baseline justify-between gap-3 text-xs">
                     <span class="text-neutral-500">{{ __('30d projected net') }}</span>
                     <span class="tabular-nums {{ $f['net'] >= 0 ? 'text-emerald-400' : 'text-rose-400' }}">
-                        {{ $f['net'] >= 0 ? '+' : '' }}{{ number_format($f['net'], 2) }}
+                        {{ $f['net'] >= 0 ? '+' : '' }}{{ Formatting::money($f['net'], $this->currency) }}
                     </span>
                 </div>
                 <div class="mt-0.5 flex items-baseline justify-between gap-3 text-[11px] text-neutral-500">
                     <span>{{ __('Ends near') }}</span>
                     <span class="tabular-nums text-neutral-300">
-                        {{ $this->currency }} {{ number_format($f['end_balance'], 2) }}
+                        {{ Formatting::money($f['end_balance'], $this->currency) }}
                     </span>
                 </div>
             </div>

@@ -18,20 +18,34 @@
         </div>
     </div>
     <hr class="border-neutral-800">
-    <h4 class="text-[10px] font-medium uppercase tracking-wider text-neutral-500">{{ __('Address') }}</h4>
-    <input wire:model="property_address_line1" type="text" placeholder="{{ __('Street address') }}"
-           aria-label="{{ __('Street address') }}"
-           class="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
-    <div class="grid grid-cols-3 gap-2">
-        <input wire:model="property_address_city" type="text" placeholder="{{ __('City') }}"
-               aria-label="{{ __('City') }}"
-               class="rounded-md border border-neutral-700 bg-neutral-950 px-2 py-2 text-sm text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
-        <input wire:model="property_address_region" type="text" placeholder="{{ __('Region') }}"
-               aria-label="{{ __('Region') }}"
-               class="rounded-md border border-neutral-700 bg-neutral-950 px-2 py-2 text-sm text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
-        <input wire:model="property_address_postcode" type="text" placeholder="{{ __('Postcode') }}"
-               aria-label="{{ __('Postcode') }}"
-               class="rounded-md border border-neutral-700 bg-neutral-950 px-2 py-2 text-sm text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+    <div class="space-y-3"
+         x-on:property-address-picked.window="
+             const s = $event.detail?.suggestion;
+             if (!s) return;
+             $wire.set('property_address_line1', s.street || s.formatted || '');
+             $wire.set('property_address_city', s.city || '');
+             $wire.set('property_address_region', s.state || '');
+             $wire.set('property_address_postcode', s.postal_code || '');
+         ">
+        <h4 class="text-[10px] font-medium uppercase tracking-wider text-neutral-500">{{ __('Address') }}</h4>
+        <x-dynamic-component
+            component="partials.inspector.fields.address-autocomplete"
+            id="i-pr-addr-line"
+            label="{{ __('Street address') }}"
+            model="property_address_line1"
+            event="property-address-picked"
+        />
+        <div class="grid grid-cols-3 gap-2">
+            <input wire:model="property_address_city" type="text" placeholder="{{ __('City') }}"
+                   aria-label="{{ __('City') }}"
+                   class="rounded-md border border-neutral-700 bg-neutral-950 px-2 py-2 text-sm text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+            <input wire:model="property_address_region" type="text" placeholder="{{ __('Region') }}"
+                   aria-label="{{ __('Region') }}"
+                   class="rounded-md border border-neutral-700 bg-neutral-950 px-2 py-2 text-sm text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+            <input wire:model="property_address_postcode" type="text" placeholder="{{ __('Postcode') }}"
+                   aria-label="{{ __('Postcode') }}"
+                   class="rounded-md border border-neutral-700 bg-neutral-950 px-2 py-2 text-sm text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+        </div>
     </div>
     <hr class="border-neutral-800">
     <h4 class="text-[10px] font-medium uppercase tracking-wider text-neutral-500">{{ __('Purchase') }}</h4>

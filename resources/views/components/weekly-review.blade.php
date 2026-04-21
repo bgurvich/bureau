@@ -1,5 +1,7 @@
 <?php
 
+use App\Models\ChecklistRun;
+use App\Models\ChecklistTemplate;
 use App\Models\Contract;
 use App\Models\Document;
 use App\Models\InventoryItem;
@@ -7,6 +9,7 @@ use App\Models\Media;
 use App\Models\RecurringProjection;
 use App\Models\Task;
 use App\Models\Transaction;
+use App\Support\ChecklistScheduling;
 use App\Support\Formatting;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
@@ -90,6 +93,53 @@ class extends Component
         return Media::doesntHave('tags')->whereNull('folder_id')->count();
     }
 
+    /**
+     * Week-to-date ritual completion per active template. A template's
+     * "scheduled" count is how many of the past 7 days (inclusive of today)
+     * it was scheduled on; the "done" count is how many of those have a
+     * run with completed_at set.
+     *
+     * @return Collection<int, array{template: ChecklistTemplate, done: int, scheduled: int}>
+     */
+    #[Computed]
+    public function ritualsThisWeek(): Collection
+    {
+        $templates = ChecklistTemplate::with('items')
+            ->where('active', true)
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->get();
+
+        if ($templates->isEmpty()) {
+            return collect();
+        }
+
+        $start = now()->subDays(6)->startOfDay();
+        $end = now()->endOfDay();
+        $runs = ChecklistRun::whereIn('checklist_template_id', $templates->pluck('id')->all())
+            ->whereBetween('run_date', [$start->toDateString(), $end->toDateString()])
+            ->whereNotNull('completed_at')
+            ->get()
+            ->groupBy('checklist_template_id');
+
+        return $templates->map(function ($t) use ($start, $runs) {
+            $scheduled = 0;
+            for ($i = 0; $i < 7; $i++) {
+                $day = $start->copy()->addDays($i);
+                if (ChecklistScheduling::isScheduledOn($t, $day)) {
+                    $scheduled++;
+                }
+            }
+            $done = $runs->get($t->id)?->count() ?? 0;
+
+            return [
+                'template' => $t,
+                'done' => $done,
+                'scheduled' => $scheduled,
+            ];
+        })->filter(fn ($row) => $row['scheduled'] > 0)->values();
+    }
+
     public function totalAttention(): int
     {
         return $this->overdueTasks->count()
@@ -109,7 +159,7 @@ class extends Component
         </p>
     </header>
 
-    @if ($this->totalAttention() === 0 && $this->unprocessedInventoryCount === 0 && $this->untaggedMediaCount === 0)
+    @if ($this->totalAttention() === 0 && $this->unprocessedInventoryCount === 0 && $this->untaggedMediaCount === 0 && $this->ritualsThisWeek->isEmpty())
         <div class="rounded-xl border border-dashed border-emerald-900/40 bg-emerald-900/10 p-10 text-center text-sm text-emerald-300">
             {{ __('Inbox zero. Nothing outstanding right now.') }}
         </div>
@@ -148,7 +198,7 @@ class extends Component
                                     wire:click="$dispatch('inspector-open', {{ json_encode(['type' => 'transaction', 'id' => $t->id]) }})"
                                     class="flex w-full items-baseline justify-between gap-3 px-4 py-2 text-left text-sm hover:bg-neutral-800/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
                                 <span class="truncate text-neutral-100">{{ $t->description ?: __('Transaction') }}</span>
-                                <span class="shrink-0 tabular-nums text-neutral-400">{{ number_format((float) $t->amount, 2) }} · {{ Formatting::date($t->occurred_on) }}</span>
+                                <span class="shrink-0 tabular-nums text-neutral-400">{{ Formatting::money((float) $t->amount, $t->currency ?? 'USD') }} · {{ Formatting::date($t->occurred_on) }}</span>
                             </button>
                         </li>
                     @endforeach
@@ -167,7 +217,7 @@ class extends Component
                         <li class="flex items-baseline justify-between gap-3 px-4 py-2 text-sm">
                             <span class="truncate text-neutral-100">{{ $p->rule?->title ?? __('Bill') }}</span>
                             <div class="flex items-center gap-3">
-                                <span class="shrink-0 tabular-nums text-neutral-400">{{ number_format((float) $p->amount, 2) }} · {{ Formatting::date($p->due_on) }}</span>
+                                <span class="shrink-0 tabular-nums text-neutral-400">{{ Formatting::money((float) $p->amount, $p->rule?->currency ?? $p->currency ?? 'USD') }} · {{ Formatting::date($p->due_on) }}</span>
                                 <button type="button"
                                         wire:click="$dispatch('inspector-mark-paid', { projectionId: {{ $p->id }} })"
                                         class="rounded-md border border-emerald-700/40 bg-emerald-900/20 px-2 py-0.5 text-[10px] uppercase tracking-wider text-emerald-300 hover:bg-emerald-900/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
@@ -215,6 +265,32 @@ class extends Component
                                     class="flex w-full items-baseline justify-between gap-3 px-4 py-2 text-left text-sm hover:bg-neutral-800/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
                                 <span class="truncate text-neutral-100">{{ $c->title }} <span class="text-neutral-500">· {{ $c->kind }}</span></span>
                                 <span class="shrink-0 tabular-nums text-amber-400">{{ Formatting::date($c->ends_on) }}</span>
+                            </button>
+                        </li>
+                    @endforeach
+                </ul>
+            </section>
+        @endif
+
+        @if ($this->ritualsThisWeek->isNotEmpty())
+            <section aria-labelledby="wr-rituals" class="space-y-2">
+                <h3 id="wr-rituals" class="flex items-baseline justify-between text-[10px] font-medium uppercase tracking-wider text-neutral-500">
+                    <span>{{ __('Rituals this week') }}</span>
+                    <a href="{{ route('life.checklists.index') }}" class="text-neutral-500 hover:text-neutral-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">{{ __('All →') }}</a>
+                </h3>
+                <ul class="divide-y divide-neutral-800 overflow-hidden rounded-xl border border-neutral-800 bg-neutral-900/40">
+                    @foreach ($this->ritualsThisWeek as $r)
+                        @php
+                            $t = $r['template'];
+                            $pct = $r['scheduled'] > 0 ? (int) round(($r['done'] / $r['scheduled']) * 100) : 0;
+                            $tone = $pct >= 85 ? 'text-emerald-300' : ($pct >= 50 ? 'text-amber-300' : 'text-rose-400');
+                        @endphp
+                        <li wire:key="wr-ritual-{{ $t->id }}">
+                            <button type="button"
+                                    wire:click="$dispatch('inspector-open', {{ json_encode(['type' => 'checklist_template', 'id' => $t->id]) }})"
+                                    class="flex w-full items-baseline justify-between gap-3 px-4 py-2 text-left text-sm hover:bg-neutral-800/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                                <span class="truncate text-neutral-100">{{ $t->name }}</span>
+                                <span class="shrink-0 tabular-nums {{ $tone }}">{{ $r['done'] }}/{{ $r['scheduled'] }}</span>
                             </button>
                         </li>
                     @endforeach

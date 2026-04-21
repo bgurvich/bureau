@@ -13,11 +13,13 @@ class Tag extends Model
 
     protected $guarded = [];
 
+    /** @return BelongsTo<Tag, $this> */
     public function parent(): BelongsTo
     {
         return $this->belongsTo(Tag::class, 'parent_id');
     }
 
+    /** @return HasMany<Tag, $this> */
     public function children(): HasMany
     {
         return $this->hasMany(Tag::class, 'parent_id');

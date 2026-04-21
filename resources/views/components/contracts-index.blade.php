@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Contract;
+use App\Support\CurrentHousehold;
 use App\Support\Formatting;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
@@ -66,6 +67,12 @@ class extends Component
             ->whereDate('ends_on', '<=', $cutoff->toDateString())
             ->count();
     }
+
+    #[Computed]
+    public function currency(): string
+    {
+        return CurrentHousehold::get()?->default_currency ?? 'USD';
+    }
 };
 ?>
 
@@ -81,7 +88,7 @@ class extends Component
     <dl class="flex gap-5 text-xs">
             <div>
                 <dt class="text-[10px] uppercase tracking-wider text-neutral-500">{{ __('Monthly burn') }}</dt>
-                <dd class="mt-0.5 tabular-nums text-rose-400">{{ number_format($this->monthlyBurn, 2) }}</dd>
+                <dd class="mt-0.5 tabular-nums text-rose-400">{{ Formatting::money($this->monthlyBurn, $this->currency) }}</dd>
             </div>
             <div>
                 <dt class="text-[10px] uppercase tracking-wider text-neutral-500">{{ __('Expiring ≤ 30d') }}</dt>
@@ -184,7 +191,7 @@ class extends Component
                         <div class="shrink-0 text-right">
                             @if ($c->monthly_cost_amount !== null)
                                 <div class="text-sm tabular-nums text-neutral-100">
-                                    {{ number_format((float) $c->monthly_cost_amount, 2) }} {{ $c->monthly_cost_currency }}
+                                    {{ Formatting::money((float) $c->monthly_cost_amount, $c->monthly_cost_currency ?? $this->currency) }}
                                 </div>
                                 <div class="text-[10px] uppercase tracking-wider text-neutral-500">{{ __('per month') }}</div>
                             @endif

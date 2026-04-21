@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Contract;
+use App\Support\CurrentHousehold;
 use App\Support\Enums;
 use App\Support\Formatting;
 use Carbon\CarbonImmutable;
@@ -74,6 +75,12 @@ class extends Component
     {
         return Enums::insuranceCoverageKinds();
     }
+
+    #[Computed]
+    public function currency(): string
+    {
+        return CurrentHousehold::get()?->default_currency ?? 'USD';
+    }
 };
 ?>
 
@@ -89,7 +96,7 @@ class extends Component
     <dl class="flex gap-5 text-xs">
         <div>
             <dt class="text-[10px] uppercase tracking-wider text-neutral-500">{{ __('Monthly premium') }}</dt>
-            <dd class="mt-0.5 tabular-nums text-rose-400">{{ number_format($this->premiumBurn, 2) }}</dd>
+            <dd class="mt-0.5 tabular-nums text-rose-400">{{ Formatting::money($this->premiumBurn, $this->currency) }}</dd>
         </div>
         <div>
             <dt class="text-[10px] uppercase tracking-wider text-neutral-500">{{ __('Policies') }}</dt>
@@ -176,7 +183,7 @@ class extends Component
                         <div class="shrink-0 text-right">
                             @if ($policy?->premium_amount !== null)
                                 <div class="text-sm tabular-nums text-neutral-100">
-                                    {{ number_format((float) $policy->premium_amount, 2) }} {{ $policy->premium_currency }}
+                                    {{ Formatting::money((float) $policy->premium_amount, $policy->premium_currency ?? $this->currency) }}
                                 </div>
                                 <div class="text-[10px] uppercase tracking-wider text-neutral-500">{{ $policy->premium_cadence }}</div>
                             @endif
@@ -188,7 +195,7 @@ class extends Component
                                 <div>
                                     <dt class="text-neutral-500">{{ __('Coverage') }}</dt>
                                     <dd class="tabular-nums text-neutral-200">
-                                        {{ number_format((float) $policy->coverage_amount, 2) }} {{ $policy->coverage_currency }}
+                                        {{ Formatting::money((float) $policy->coverage_amount, $policy->coverage_currency ?? $this->currency) }}
                                     </dd>
                                 </div>
                             @endif
@@ -196,7 +203,7 @@ class extends Component
                                 <div>
                                     <dt class="text-neutral-500">{{ __('Deductible') }}</dt>
                                     <dd class="tabular-nums text-neutral-200">
-                                        {{ number_format((float) $policy->deductible_amount, 2) }} {{ $policy->deductible_currency }}
+                                        {{ Formatting::money((float) $policy->deductible_amount, $policy->deductible_currency ?? $this->currency) }}
                                     </dd>
                                 </div>
                             @endif

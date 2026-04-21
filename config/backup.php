@@ -162,10 +162,21 @@ return [
 
             /*
              * The disk names on which the backups will be stored.
+             *
+             * `local` always — the on-box archive. `s3` is added automatically
+             * when AWS_BUCKET is configured, giving off-site redundancy. The
+             * s3 disk supports B2 / DO Spaces / any S3-compatible endpoint via
+             * AWS_ENDPOINT (see docs/integrations/auth-credentials.md).
+             *
+             * BACKUP_ARCHIVE_PASSWORD must be set for off-site shipping — the
+             * archive travels over TLS, but a stolen bucket credential alone
+             * must not be able to read backup contents. Second-layer AES-256
+             * inside the zip is what makes the destination safe.
              */
-            'disks' => [
+            'disks' => array_filter([
                 'local',
-            ],
+                env('AWS_BUCKET') ? 's3' : null,
+            ]),
 
             /*
              * Determines whether to allow backups to continue when some targets fail instead of failing completely.

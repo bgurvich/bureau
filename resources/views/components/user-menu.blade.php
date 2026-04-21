@@ -98,6 +98,12 @@ new class extends Component
                 <span>{{ __('Profile') }}</span>
                 <span aria-hidden="true" class="text-neutral-500">›</span>
             </a>
+            <a href="{{ route('settings') }}"
+               role="menuitem"
+               class="flex items-center justify-between px-3 py-2 text-neutral-200 hover:bg-neutral-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                <span>{{ __('Settings') }}</span>
+                <span aria-hidden="true" class="text-neutral-500">›</span>
+            </a>
             <button type="button"
                     @click="submenu = 'theme'"
                     role="menuitem"

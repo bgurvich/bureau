@@ -5,6 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{{ $title ?? config('app.name') }}</title>
+    <link rel="icon" href="/icon.svg" type="image/svg+xml">
+    <link rel="icon" href="/favicon.ico" sizes="32x32">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    {{-- Resolve the theme SYNCHRONOUSLY before CSS paints. Without this,
+         the browser renders with default (dark) styling for a frame before
+         resources/js/app.ts runs and flips data-resolved-theme. --}}
+    @include('partials.theme-flash')
     @vite(['resources/css/app.css', 'resources/js/app.ts'])
 </head>
 <body class="min-h-screen bg-neutral-950 text-neutral-100 antialiased">
@@ -25,7 +32,7 @@
                         @endif
                     @endauth
                 </div>
-                <nav class="flex-1 overflow-y-auto px-3 py-4 text-sm" aria-label="{{ __('Main navigation') }}">
+                <nav id="main-nav" class="flex-1 overflow-y-auto px-3 py-4 text-sm" aria-label="{{ __('Main navigation') }}">
                     @php
                         $sections = [
                             null => [
@@ -37,12 +44,22 @@
                                 [__('Accounts'), 'fiscal.accounts', 'wallet'],
                                 [__('Transactions'), 'fiscal.transactions', 'swap'],
                                 [__('Bills & Income'), 'fiscal.recurring', 'receipt'],
+                                [__('Reconcile'), 'reconcile', 'check-square'],
+                                [__('Subscriptions'), 'fiscal.subscriptions', 'key'],
+                                [__('Year over year'), 'fiscal.yoy', 'pie'],
+                                [__('Budgets'), 'fiscal.budgets', 'pie'],
+                                [__('Category rules'), 'fiscal.category_rules', 'note'],
+                                [__('Tag rules'), 'fiscal.tag_rules', 'note'],
+                                [__('Savings goals'), 'fiscal.savings_goals', 'check-square'],
+                                [__('Inbox'), 'fiscal.inbox', 'note'],
+                                [__('Import statements'), 'fiscal.import.statements', 'swap'],
                                 [__('Bookkeeper'), 'bookkeeper', 'file-signature'],
                             ],
                             __('Life') => [
                                 [__('Calendar'), 'calendar.index', 'calendar'],
                                 [__('Tasks'), 'calendar.tasks', 'check-square'],
                                 [__('Meetings'), 'calendar.meetings', 'calendar'],
+                                [__('Checklists'), 'life.checklists.index', 'check-square'],
                                 [__('Contacts'), 'relationships.contacts', 'user'],
                             ],
                             __('Time') => [
@@ -61,6 +78,7 @@
                             __('Records') => [
                                 [__('Documents'), 'records.documents', 'file-text'],
                                 [__('Media'), 'records.media', 'image'],
+                                [__('Mail'), 'records.mail', 'image'],
                                 [__('Notes'), 'records.notes', 'note'],
                                 [__('Online accounts'), 'records.online_accounts', 'key'],
                                 [__('In case of'), 'records.in_case_of', 'shield'],
@@ -88,6 +106,7 @@
                             </a>
                         @endforeach
                     @endforeach
+                    @include('partials.nav-scroll-init')
                 </nav>
             </div>
         </aside>

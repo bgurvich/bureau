@@ -2,6 +2,7 @@
 
 use App\Models\Project;
 use App\Models\TimeEntry;
+use App\Support\CurrentHousehold;
 use App\Support\Formatting;
 use Illuminate\Database\Eloquent\Collection;
 use Livewire\Attributes\Computed;
@@ -116,6 +117,12 @@ class extends Component
     {
         return Project::orderBy('name')->get(['id', 'name']);
     }
+
+    #[Computed]
+    public function currency(): string
+    {
+        return CurrentHousehold::get()?->default_currency ?? 'USD';
+    }
 };
 ?>
 
@@ -137,7 +144,7 @@ class extends Component
             @if ($this->totals['earnings'] > 0)
                 <div>
                     <dt class="text-[10px] uppercase tracking-wider text-neutral-500">{{ __('Earnings') }}</dt>
-                    <dd class="mt-0.5 tabular-nums text-emerald-400">{{ number_format($this->totals['earnings'], 2) }}</dd>
+                    <dd class="mt-0.5 tabular-nums text-emerald-400">{{ Formatting::money($this->totals['earnings'], $this->currency) }}</dd>
                 </div>
             @endif
         </dl>
@@ -213,7 +220,7 @@ class extends Component
                                 {{ number_format($hours, 2) }}h
                             </div>
                             @if ($projectRate !== null)
-                                <div class="text-[10px] tabular-nums text-emerald-400/80">{{ number_format($projectRate, 2) }}</div>
+                                <div class="text-[10px] tabular-nums text-emerald-400/80">{{ Formatting::money($projectRate, $e->project?->hourly_rate_currency ?? $this->currency) }}</div>
                             @endif
                             @if ($e->billed)
                                 <div class="text-[10px] uppercase tracking-wider text-neutral-500">{{ __('billed') }}</div>

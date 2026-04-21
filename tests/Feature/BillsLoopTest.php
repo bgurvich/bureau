@@ -148,6 +148,131 @@ it('refuses to auto-match when two candidates are tied', function () {
 
     expect(ProjectionMatcher::attempt($txn))->toBeNull();
     expect(RecurringProjection::where('status', 'matched')->count())->toBe(0);
+
+    // resolve() should surface the ambiguity so the Inspector can pick.
+    $result = ProjectionMatcher::resolve($txn);
+    expect($result->isAmbiguous())->toBeTrue()
+        ->and($result->isLinked())->toBeFalse()
+        ->and($result->candidates)->toHaveCount(2);
+});
+
+it('resolve() returns a linked result on single-match auto-link', function () {
+    [, , $account] = setupForBills();
+
+    $rule = RecurringRule::create([
+        'kind' => 'bill', 'title' => 'Rent',
+        'amount' => -1000, 'currency' => 'USD',
+        'rrule' => 'FREQ=MONTHLY;BYMONTHDAY=1',
+        'dtstart' => '2026-04-01',
+        'account_id' => $account->id,
+    ]);
+    $projection = RecurringProjection::create([
+        'rule_id' => $rule->id, 'due_on' => '2026-04-01',
+        'issued_on' => '2026-04-01', 'amount' => -1000,
+        'currency' => 'USD', 'status' => 'overdue',
+    ]);
+
+    $txn = Transaction::create([
+        'account_id' => $account->id,
+        'occurred_on' => '2026-04-01',
+        'amount' => -1000, 'currency' => 'USD', 'status' => 'cleared',
+    ]);
+
+    $result = ProjectionMatcher::resolve($txn);
+    expect($result->isLinked())->toBeTrue()
+        ->and($result->isAmbiguous())->toBeFalse()
+        ->and($result->linked?->id)->toBe($projection->id)
+        ->and($result->candidates)->toBeEmpty();
+});
+
+it('Inspector shows a picker when a new transaction matches 2+ projections', function () {
+    [, , $account] = setupForBills();
+
+    // Two projections with identical amount/date-range so the matcher can't pick.
+    $rule = RecurringRule::create([
+        'kind' => 'bill', 'title' => 'Ambiguous rent',
+        'amount' => -1000, 'currency' => 'USD',
+        'rrule' => 'FREQ=DAILY;COUNT=1',
+        'dtstart' => '2026-04-01',
+        'account_id' => $account->id,
+    ]);
+    foreach (['2026-04-01', '2026-04-02'] as $date) {
+        RecurringProjection::create([
+            'rule_id' => $rule->id,
+            'due_on' => $date, 'issued_on' => $date,
+            'amount' => -1000, 'currency' => 'USD', 'status' => 'overdue',
+        ]);
+    }
+
+    $c = Livewire::test('inspector')
+        ->call('openInspector', 'transaction')
+        ->set('account_id', $account->id)
+        ->set('amount', '-1000')
+        ->set('occurred_on', '2026-04-01')
+        ->set('currency', 'USD')
+        ->set('description', 'Rent')
+        ->call('save');
+
+    // Drawer stays open, picker is populated, no projection linked yet.
+    $candidates = $c->get('ambiguousCandidates');
+    expect($candidates)->toHaveCount(2)
+        ->and($c->get('ambiguousTransactionId'))->not->toBeNull()
+        ->and(RecurringProjection::where('status', 'matched')->count())->toBe(0);
+
+    // User picks one → that projection is linked, drawer closes.
+    $chosenId = $candidates[0]['id'];
+    $c->call('linkProjection', $chosenId);
+
+    $matched = RecurringProjection::where('status', 'matched')->first();
+    expect($matched?->id)->toBe($chosenId)
+        ->and($c->get('ambiguousCandidates'))->toBe([])
+        ->and($c->get('open'))->toBeFalse();
+});
+
+it('Inspector skipProjectionLink leaves the transaction unlinked', function () {
+    [, , $account] = setupForBills();
+    $rule = RecurringRule::create([
+        'kind' => 'bill', 'title' => 'Ambig',
+        'amount' => -50, 'currency' => 'USD',
+        'rrule' => 'FREQ=DAILY;COUNT=1',
+        'dtstart' => '2026-04-01',
+        'account_id' => $account->id,
+    ]);
+    foreach (['2026-04-01', '2026-04-02'] as $date) {
+        RecurringProjection::create([
+            'rule_id' => $rule->id, 'due_on' => $date, 'issued_on' => $date,
+            'amount' => -50, 'currency' => 'USD', 'status' => 'overdue',
+        ]);
+    }
+
+    Livewire::test('inspector')
+        ->call('openInspector', 'transaction')
+        ->set('account_id', $account->id)
+        ->set('amount', '-50')
+        ->set('occurred_on', '2026-04-01')
+        ->set('currency', 'USD')
+        ->set('description', 'x')
+        ->call('save')
+        ->call('skipProjectionLink')
+        ->assertSet('open', false);
+
+    expect(RecurringProjection::where('status', 'matched')->count())->toBe(0)
+        ->and(Transaction::where('amount', -50)->count())->toBe(1);
+});
+
+it('resolve() returns a miss when no projection or rule matches', function () {
+    [, , $account] = setupForBills();
+
+    $txn = Transaction::create([
+        'account_id' => $account->id,
+        'occurred_on' => '2026-04-01',
+        'amount' => -12.34, 'currency' => 'USD', 'status' => 'cleared',
+    ]);
+
+    $result = ProjectionMatcher::resolve($txn);
+    expect($result->isMiss())->toBeTrue()
+        ->and($result->isLinked())->toBeFalse()
+        ->and($result->isAmbiguous())->toBeFalse();
 });
 
 it('auto-matches via the Inspector when a transaction is saved', function () {

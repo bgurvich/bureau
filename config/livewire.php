@@ -130,7 +130,12 @@ return [
 
     'temporary_file_upload' => [
         'disk' => env('LIVEWIRE_TEMPORARY_FILE_UPLOAD_DISK'), // Example: 'local', 's3'             | Default: 'default'
-        'rules' => null,                                      // Example: ['file', 'mimes:png,jpg'] | Default: ['required', 'file', 'max:12288'] (12MB)
+        // Raised from Livewire's 12 MB default so multi-page bank-statement
+        // PDFs (year-end bundles can run 15–18 MB) + photo-heavy inventory
+        // scans don't get rejected before the component's own per-file
+        // validation runs. statements-import.blade.php caps at 20 MB too,
+        // so the two gates agree on the ceiling.
+        'rules' => ['required', 'file', 'max:20480'],         // 20 MB per file.
         'directory' => null,                                  // Example: 'tmp'                     | Default: 'livewire-tmp'
         'middleware' => null,                                 // Example: 'throttle:5,1'            | Default: 'throttle:60,1'
         'preview_mimes' => [                                  // Supported file types for temporary pre-signed file URLs...

@@ -71,10 +71,15 @@ function extractTheme(payload: unknown): ThemePref {
 
 // Keyboard shortcuts for the Inspector.
 //   .             — Inspector type picker
-//   t n c x b a d m p h v i s — direct-to-type (task, note, contact, transaction, bill, account, document, meeting, project, property, vehicle, inventory, insurance)
+//   t n c x b a d m p h v i s o r e g u l — direct-to-type
+//     (task, note, contact, transaction, bill, account, document, meeting,
+//      project, property, vehicle, inventory, insurance, online_account,
+//      reminder, appointment [E=event], savings_goal, subscription,
+//      time_entry [L=log])
 //   \             — time tracker setup / stop
 //   '             — alerts dropdown
 // All skip when the user is typing so they don't hijack normal input.
+// Keep this map in sync with resources/views/partials/inspector/type-picker.blade.php.
 
 const TYPE_SHORTCUTS: Record<string, string> = {
     t: 'task',
@@ -91,6 +96,12 @@ const TYPE_SHORTCUTS: Record<string, string> = {
     i: 'inventory',
     s: 'insurance',
     o: 'online_account',
+    r: 'reminder',
+    e: 'appointment',
+    g: 'savings_goal',
+    u: 'subscription',
+    l: 'time_entry',
+    k: 'checklist_template',
 };
 
 const GLOBAL_SHORTCUTS: Record<string, () => void> = {
@@ -185,9 +196,101 @@ type SearchableSelectData = {
     createInline(): void;
 };
 
+// Live-reorder sortable list for repeaters (checklist items, and any
+// future <x-ui.sortable-list> caller). Rows live in DOM order; dragstart
+// on a handle inside a row starts the drag, dragover on the <ul>
+// rearranges DOM nodes under the cursor in real time, drop commits the
+// new key order to Livewire. If the user drops outside the list, the UL's
+// dragend restores the snapshot taken at dragstart.
+//
+// Requires each row to carry `data-item-key` and a `draggable="true"`
+// handle that calls `onDragStart(key, $event)`. The `<ul>` must carry
+// `data-reorder-method="..."` naming the Livewire method that accepts
+// `array<int, string>` of row keys — the `<x-ui.sortable-list>` Blade
+// component handles this wiring.
+type SortableListData = {
+    dragFrom: string | null;
+    committed: boolean;
+    snapshot: Element[];
+    $el: HTMLElement;
+    $wire: Record<string, unknown>;
+    onDragStart(key: string | number, evt: DragEvent): void;
+    onDragOver(evt: DragEvent): void;
+    onDrop(): void;
+    onDragEnd(): void;
+};
+
 document.addEventListener('alpine:init', () => {
     const alpine = window.Alpine;
     if (!alpine) return;
+
+    alpine.data('checklistItemsSortable', (() => ({
+        dragFrom: null as string | null,
+        committed: false,
+        snapshot: [] as Element[],
+        onDragStart(this: SortableListData, key: string | number, evt: DragEvent): void {
+            // Keys are always strings internally so int IDs (e.g. media.id)
+            // compare equal to the template's `@js($k)` output regardless of
+            // whether Blade emitted a numeric or quoted literal.
+            const k = String(key);
+            this.dragFrom = k;
+            this.committed = false;
+            this.snapshot = Array.from(this.$el.querySelectorAll('[data-item-key]'));
+            if (evt.dataTransfer) {
+                evt.dataTransfer.effectAllowed = 'move';
+                // Firefox requires setData for `drop` to fire at all.
+                evt.dataTransfer.setData('text/plain', k);
+                // Use the row as the drag image so the user sees the whole
+                // item follow the cursor, not just the tiny handle.
+                const row = (evt.target as HTMLElement | null)?.closest<HTMLElement>('[data-item-key]');
+                if (row) evt.dataTransfer.setDragImage(row, 20, 20);
+            }
+        },
+        onDragOver(this: SortableListData, evt: DragEvent): void {
+            if (this.dragFrom === null) return;
+            const target = (evt.target as HTMLElement | null)?.closest<HTMLElement>('[data-item-key]');
+            if (!target) return;
+            const targetKey = target.getAttribute('data-item-key');
+            if (targetKey === this.dragFrom) return;
+            const dragEl = this.$el.querySelector<HTMLElement>(
+                `[data-item-key="${CSS.escape(this.dragFrom)}"]`,
+            );
+            if (!dragEl || dragEl === target) return;
+            const rect = target.getBoundingClientRect();
+            const before = evt.clientY < rect.top + rect.height / 2;
+            if (before) {
+                target.parentNode?.insertBefore(dragEl, target);
+            } else {
+                target.parentNode?.insertBefore(dragEl, target.nextSibling);
+            }
+        },
+        onDrop(this: SortableListData): void {
+            if (this.dragFrom === null) return;
+            this.committed = true;
+            const order = Array.from(this.$el.querySelectorAll('[data-item-key]'))
+                .map((el) => el.getAttribute('data-item-key') ?? '')
+                .filter((k) => k !== '');
+            // `data-reorder-method` on the <ul> names the Livewire method
+            // to invoke. Falls back to reorderItems so callers that don't
+            // set the attribute still work (mirrors the original hardcoded
+            // name for the checklist-items repeater).
+            const methodName = this.$el.dataset.reorderMethod || 'reorderItems';
+            const method = this.$wire[methodName];
+            if (typeof method === 'function') {
+                (method as (...a: unknown[]) => unknown).call(this.$wire, order);
+            }
+            this.dragFrom = null;
+        },
+        onDragEnd(this: SortableListData): void {
+            if (!this.committed && this.snapshot.length) {
+                const parent = this.snapshot[0].parentNode;
+                if (parent) this.snapshot.forEach((el) => parent.appendChild(el));
+            }
+            this.dragFrom = null;
+            this.committed = false;
+            this.snapshot = [];
+        },
+    })) as unknown as (...args: unknown[]) => Record<string, unknown>);
 
     alpine.data('searchableSelect', ((config: SearchableSelectConfig) => ({
         search: '',
@@ -278,7 +381,13 @@ document.addEventListener('alpine:init', () => {
             const fn = this.$wire[this.createMethod];
             if (typeof fn !== 'function') return;
             this.creating = true;
-            Promise.resolve((fn as (...a: unknown[]) => unknown).call(this.$wire, name)).catch(() => {
+            // Pass the binding's model name so the server method can dispatch
+            // `ss-option-added` back to *this* select instead of only the
+            // default/legacy field name — otherwise pickers like
+            // subscription_counterparty_id never receive the update.
+            Promise.resolve(
+                (fn as (...a: unknown[]) => unknown).call(this.$wire, name, this.model),
+            ).catch(() => {
                 this.creating = false;
             });
         },
@@ -295,4 +404,278 @@ function normalizeSsPayload(payload: unknown): { model: string; id: string | num
         id: obj.id as string | number,
         label: String(obj.label ?? ''),
     };
+}
+
+// ────────────────────────────────────────────────────────────────────────
+// WebAuthn (passkey) helpers + Alpine components
+//
+// The server ceremony is implemented by laragear/webauthn and exchanges
+// PublicKeyCredentialCreationOptions / RequestOptions. We must convert
+// the base64url fields the server emits into ArrayBuffers for the
+// browser WebAuthn API, then convert the authenticator response fields
+// back to base64url strings for the server to verify.
+// ────────────────────────────────────────────────────────────────────────
+
+function base64UrlToBuffer(value: string): ArrayBuffer {
+    const pad = (4 - (value.length % 4)) % 4;
+    const b64 = (value + '='.repeat(pad)).replace(/-/g, '+').replace(/_/g, '/');
+    const bin = atob(b64);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out.buffer;
+}
+
+function bufferToBase64Url(buf: ArrayBuffer | null): string {
+    if (!buf) return '';
+    const bytes = new Uint8Array(buf);
+    let s = '';
+    for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+    return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function csrfToken(): string {
+    const el = document.querySelector('meta[name="csrf-token"]');
+    return el instanceof HTMLMetaElement ? el.content : '';
+}
+
+async function postJson(url: string, body: unknown): Promise<Response> {
+    return fetch(url, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRF-TOKEN': csrfToken(),
+        },
+        body: JSON.stringify(body ?? {}),
+    });
+}
+
+interface PublicKeyOptions {
+    challenge: string;
+    user?: { id: string; name: string; displayName: string };
+    pubKeyCredParams?: unknown;
+    rp?: unknown;
+    timeout?: number;
+    excludeCredentials?: Array<{ id: string; type: string; transports?: string[] }>;
+    allowCredentials?: Array<{ id: string; type: string; transports?: string[] }>;
+    authenticatorSelection?: unknown;
+    attestation?: string;
+    extensions?: unknown;
+    userVerification?: string;
+    rpId?: string;
+}
+
+function decodeCreationOptions(src: PublicKeyOptions): PublicKeyCredentialCreationOptions {
+    return {
+        ...(src as unknown as PublicKeyCredentialCreationOptions),
+        challenge: base64UrlToBuffer(src.challenge),
+        user: {
+            ...(src.user as PublicKeyCredentialUserEntity),
+            id: base64UrlToBuffer(src.user!.id),
+        },
+        excludeCredentials: (src.excludeCredentials ?? []).map((c) => ({
+            id: base64UrlToBuffer(c.id),
+            type: c.type as PublicKeyCredentialType,
+            transports: c.transports as AuthenticatorTransport[] | undefined,
+        })),
+    };
+}
+
+function decodeRequestOptions(src: PublicKeyOptions): PublicKeyCredentialRequestOptions {
+    return {
+        ...(src as unknown as PublicKeyCredentialRequestOptions),
+        challenge: base64UrlToBuffer(src.challenge),
+        allowCredentials: (src.allowCredentials ?? []).map((c) => ({
+            id: base64UrlToBuffer(c.id),
+            type: c.type as PublicKeyCredentialType,
+            transports: c.transports as AuthenticatorTransport[] | undefined,
+        })),
+    };
+}
+
+function encodeAttestation(cred: PublicKeyCredential): Record<string, unknown> {
+    const r = cred.response as AuthenticatorAttestationResponse;
+    return {
+        id: cred.id,
+        rawId: bufferToBase64Url(cred.rawId),
+        type: cred.type,
+        response: {
+            clientDataJSON: bufferToBase64Url(r.clientDataJSON),
+            attestationObject: bufferToBase64Url(r.attestationObject),
+        },
+    };
+}
+
+function encodeAssertion(cred: PublicKeyCredential): Record<string, unknown> {
+    const r = cred.response as AuthenticatorAssertionResponse;
+    return {
+        id: cred.id,
+        rawId: bufferToBase64Url(cred.rawId),
+        type: cred.type,
+        response: {
+            clientDataJSON: bufferToBase64Url(r.clientDataJSON),
+            authenticatorData: bufferToBase64Url(r.authenticatorData),
+            signature: bufferToBase64Url(r.signature),
+            userHandle: r.userHandle ? bufferToBase64Url(r.userHandle) : null,
+        },
+    };
+}
+
+document.addEventListener('alpine:init', () => {
+    const alpine = window.Alpine;
+    if (!alpine) return;
+
+    alpine.data('passkeyManager', (() => ({
+        alias: '',
+        busy: false,
+        error: '',
+        notice: '',
+        async enroll(this: { alias: string; busy: boolean; error: string; notice: string }): Promise<void> {
+            if (!('credentials' in navigator)) {
+                this.error = 'This browser does not support passkeys.';
+                return;
+            }
+            this.busy = true;
+            this.error = '';
+            this.notice = '';
+            try {
+                const optsRes = await postJson('/webauthn/register/options', {});
+                if (!optsRes.ok) throw new Error('Could not start passkey registration.');
+                const opts = (await optsRes.json()) as PublicKeyOptions;
+                const cred = (await navigator.credentials.create({
+                    publicKey: decodeCreationOptions(opts),
+                })) as PublicKeyCredential | null;
+                if (!cred) throw new Error('Registration was cancelled.');
+                const body = { ...encodeAttestation(cred), alias: this.alias || '' };
+                const saveRes = await postJson('/webauthn/register', body);
+                if (!saveRes.ok) throw new Error('Server rejected the new passkey.');
+                this.notice = 'Passkey registered.';
+                this.alias = '';
+                window.dispatchEvent(new CustomEvent('passkey-enrolled'));
+            } catch (err) {
+                this.error = err instanceof Error ? err.message : 'Passkey registration failed.';
+            } finally {
+                this.busy = false;
+            }
+        },
+    })) as unknown as (...args: unknown[]) => Record<string, unknown>);
+
+    alpine.data('passkeyLogin', (() => ({
+        busy: false,
+        error: '',
+        async signIn(this: { busy: boolean; error: string }): Promise<void> {
+            if (!('credentials' in navigator)) {
+                this.error = 'This browser does not support passkeys.';
+                return;
+            }
+            this.busy = true;
+            this.error = '';
+            try {
+                const optsRes = await postJson('/webauthn/login/options', {});
+                if (!optsRes.ok) throw new Error('Could not start passkey sign-in.');
+                const opts = (await optsRes.json()) as PublicKeyOptions;
+                const cred = (await navigator.credentials.get({
+                    publicKey: decodeRequestOptions(opts),
+                })) as PublicKeyCredential | null;
+                if (!cred) throw new Error('Sign-in was cancelled.');
+                const loginRes = await postJson('/webauthn/login', encodeAssertion(cred));
+                if (!loginRes.ok) throw new Error('That passkey isn\u2019t recognized on this account.');
+                const body = (await loginRes.json()) as { redirect?: string };
+                window.location.assign(body.redirect ?? '/');
+            } catch (err) {
+                this.error = err instanceof Error ? err.message : 'Passkey sign-in failed.';
+            } finally {
+                this.busy = false;
+            }
+        },
+    })) as unknown as (...args: unknown[]) => Record<string, unknown>);
+
+    // The address-autocomplete field partial expects this factory to exist —
+    // the prior implementation registered it dynamically from the Blade
+    // partial, which is brittle. Centralize it here so the helper is always
+    // available on pages that include the field.
+    alpine.data(
+        'addressAutocomplete',
+        ((config: { url: string; eventName: string; minChars?: number }) => ({
+            query: '',
+            open: false,
+            loading: false,
+            suggestions: [] as Array<Record<string, string>>,
+            activeIndex: -1,
+            token: 0,
+            async onInput(this: {
+                query: string;
+                open: boolean;
+                loading: boolean;
+                suggestions: Array<Record<string, string>>;
+                activeIndex: number;
+                token: number;
+            }): Promise<void> {
+                const q = this.query.trim();
+                if (q.length < (config.minChars ?? 3)) {
+                    this.suggestions = [];
+                    this.open = false;
+                    return;
+                }
+                this.loading = true;
+                const myToken = ++this.token;
+                try {
+                    const url = `${config.url}?q=${encodeURIComponent(q)}`;
+                    const res = await fetch(url, {
+                        credentials: 'same-origin',
+                        headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                    });
+                    if (!res.ok) throw new Error('autocomplete request failed');
+                    const body = (await res.json()) as { results?: Array<Record<string, string>> };
+                    if (this.token !== myToken) return; // stale
+                    this.suggestions = body.results ?? [];
+                    this.activeIndex = this.suggestions.length ? 0 : -1;
+                    this.open = this.suggestions.length > 0;
+                } finally {
+                    this.loading = false;
+                }
+            },
+            move(this: { activeIndex: number; suggestions: unknown[]; open: boolean }, delta: number): void {
+                if (!this.suggestions.length) return;
+                this.open = true;
+                const len = this.suggestions.length;
+                this.activeIndex = (this.activeIndex + delta + len) % len;
+            },
+            activate(this: { activeIndex: number; suggestions: unknown[]; pick: (i: number) => void }): void {
+                if (this.activeIndex >= 0 && this.activeIndex < this.suggestions.length) {
+                    this.pick(this.activeIndex);
+                }
+            },
+            pick(
+                this: {
+                    suggestions: Array<Record<string, string>>;
+                    query: string;
+                    open: boolean;
+                    activeIndex: number;
+                },
+                i: number,
+            ): void {
+                const s = this.suggestions[i];
+                if (!s) return;
+                this.query = s.formatted ?? '';
+                this.open = false;
+                this.activeIndex = -1;
+                window.dispatchEvent(new CustomEvent(config.eventName, { detail: { suggestion: s } }));
+            },
+            close(this: { open: boolean; activeIndex: number }): void {
+                this.open = false;
+                this.activeIndex = -1;
+            },
+        })) as unknown as (...args: unknown[]) => Record<string, unknown>,
+    );
+});
+
+// PWA service worker registration — previously an inline <script> in the
+// mobile layout. Deferred to 'load' so it can't delay first paint.
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch(() => {});
+    });
 }

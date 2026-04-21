@@ -21,11 +21,13 @@ class Transfer extends Model
         'fee_amount' => 'decimal:4',
     ];
 
+    /** @return BelongsTo<Account, $this> */
     public function fromAccount(): BelongsTo
     {
         return $this->belongsTo(Account::class, 'from_account_id');
     }
 
+    /** @return BelongsTo<Account, $this> */
     public function toAccount(): BelongsTo
     {
         return $this->belongsTo(Account::class, 'to_account_id');

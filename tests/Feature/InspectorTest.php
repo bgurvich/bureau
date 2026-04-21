@@ -200,6 +200,23 @@ it('ignores empty names for counterparty auto-create', function () {
     expect(Contact::count())->toBe(0);
 });
 
+it('dispatches ss-option-added for the exact picker that triggered the create', function () {
+    // Regression: before fix, createCounterparty always dispatched with
+    // model='counterparty_contact_id', so subscription/contract/inventory/etc.
+    // searchable-selects (bound to their own *_id field) never received the
+    // new option and appeared to hang after creation.
+    authedInHousehold();
+
+    Livewire::test('inspector')
+        ->call('openInspector', 'subscription')
+        ->call('createCounterparty', 'Fresh Vendor LLC', 'subscription_counterparty_id')
+        ->assertDispatched('ss-option-added',
+            model: 'subscription_counterparty_id',
+            label: 'Fresh Vendor LLC',
+        )
+        ->assertSet('subscription_counterparty_id', fn ($v) => $v !== null && $v > 0);
+});
+
 it('creates a one-off bill via the Bill form', function () {
     authedInHousehold();
 

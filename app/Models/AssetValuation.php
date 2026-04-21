@@ -17,6 +17,7 @@ class AssetValuation extends Model
         'value' => 'decimal:4',
     ];
 
+    /** @return MorphTo<Model, $this> */
     public function valuable(): MorphTo
     {
         return $this->morphTo();

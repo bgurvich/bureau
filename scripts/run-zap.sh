@@ -102,19 +102,39 @@ case "$MODE" in
 
         ;;
     auth)
-        # Authenticated scan using automation framework
-        if [[ ! -f "$ZAP_DIR/automation.yaml" ]]; then
-            echo -e "${RED}✗ Missing zap/automation.yaml. Run ./scripts/setup-zap.sh first.${NC}"
+        # Authenticated baseline scan: mint a signed-in session via
+        # `artisan zap:session`, then run zap-baseline with the session cookie
+        # injected on every outbound request. Drops the brittle browser-based
+        # automation flow that needed a seeded user with a known password.
+        REPORT_HTML="zap-auth-${TIMESTAMP}.html"
+        REPORT_JSON="zap-auth-${TIMESTAMP}.json"
+
+        echo -e "${YELLOW}Minting session cookie via artisan zap:session...${NC}"
+        COOKIE_KV="$(cd "$PROJECT_DIR" && php artisan zap:session --no-interaction 2>/dev/null | tail -n 1)"
+        if [[ -z "$COOKIE_KV" || "$COOKIE_KV" != *"="* ]]; then
+            echo -e "${RED}✗ Could not mint a session cookie (empty output from artisan zap:session).${NC}"
             exit 1
         fi
+        echo -e "${GREEN}✓${NC} Session cookie prepared"
 
-        REPORT_HTML="zap-auth-report.html"
+        EXTRA_FLAGS="-I"
+        if [[ "$CI_MODE" == true ]]; then
+            EXTRA_FLAGS=""
+        fi
 
         docker run "${DOCKER_OPTS[@]}" \
-            zap.sh -cmd -addonupdate \
-            -autorun /zap/wrk/automation.yaml \
-            -config api.disablekey=true \
-        2>&1 | tee "$ZAP_DIR/zap-auth-progress.log" \
+            zap-baseline.py \
+            -t "$TARGET" \
+            -r "$REPORT_HTML" \
+            -J "$REPORT_JSON" \
+            -c "/zap/wrk/rules.tsv" \
+            $EXTRA_FLAGS \
+            -z "-config replacer.full_list(0).description=authcookie \
+                -config replacer.full_list(0).enabled=true \
+                -config replacer.full_list(0).matchtype=REQ_HEADER \
+                -config replacer.full_list(0).matchstr=Cookie \
+                -config replacer.full_list(0).regex=false \
+                -config replacer.full_list(0).replacement=${COOKIE_KV}" \
         || EXIT_CODE=$?
 
         ;;

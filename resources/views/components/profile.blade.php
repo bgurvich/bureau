@@ -1,6 +1,8 @@
 <?php
 
+use App\Models\LoginEvent;
 use App\Models\User;
+use App\Models\UserNotificationPreference;
 use App\Support\CurrentHousehold;
 use Livewire\Attributes\Validate;
 use Livewire\Component;
@@ -33,6 +35,41 @@ new class extends Component
 
     public bool $saved = false;
 
+    /**
+     * Matrix keys the notification table shows. Rows = record kinds Bureau
+     * emits reminders for; columns = channels a reminder can go out on.
+     * Adding a new kind or channel: drop it in here and the matrix expands.
+     *
+     * @var array<int, array{key: string, label: string}>
+     */
+    public array $notificationKinds = [
+        ['key' => 'generic_reminder', 'label' => 'Reminders'],
+        ['key' => 'task_reminder', 'label' => 'Tasks'],
+        ['key' => 'bill_reminder', 'label' => 'Bills'],
+        ['key' => 'document_reminder', 'label' => 'Document expirations'],
+        ['key' => 'contract_reminder', 'label' => 'Contract renewals'],
+        ['key' => 'savingsgoal_reminder', 'label' => 'Savings goals'],
+    ];
+
+    /**
+     * @var array<int, array{key: string, label: string}>
+     */
+    public array $notificationChannels = [
+        ['key' => 'in_app', 'label' => 'In-app'],
+        ['key' => 'email', 'label' => 'Email'],
+        ['key' => 'push', 'label' => 'Push'],
+        ['key' => 'telegram', 'label' => 'Telegram'],
+    ];
+
+    /**
+     * Map of "kind:channel" => bool, seeded from the user_notification_preferences
+     * table. Missing entries default to enabled (reminders fire until the user
+     * explicitly opts out).
+     *
+     * @var array<string, bool>
+     */
+    public array $notificationMatrix = [];
+
     public function mount(): void
     {
         $user = auth()->user();
@@ -46,6 +83,39 @@ new class extends Component
         $this->week_starts_on = (int) $user->week_starts_on;
         $this->theme = $user->theme;
         $this->household_default_currency = CurrentHousehold::get()?->default_currency ?? 'USD';
+
+        $household = CurrentHousehold::get();
+        if ($household) {
+            $rows = UserNotificationPreference::where('user_id', $user->id)
+                ->where('household_id', $household->id)
+                ->get(['kind', 'channel', 'enabled']);
+
+            foreach ($this->notificationKinds as $k) {
+                foreach ($this->notificationChannels as $c) {
+                    $key = $k['key'].':'.$c['key'];
+                    $row = $rows->firstWhere(fn ($r) => $r->kind === $k['key'] && $r->channel === $c['key']);
+                    $this->notificationMatrix[$key] = $row ? (bool) $row->enabled : true;
+                }
+            }
+        }
+    }
+
+    public function togglePreference(string $kind, string $channel): void
+    {
+        $user = auth()->user();
+        $household = CurrentHousehold::get();
+        if (! $user || ! $household) {
+            return;
+        }
+
+        $key = $kind.':'.$channel;
+        $enabled = ! ($this->notificationMatrix[$key] ?? true);
+        $this->notificationMatrix[$key] = $enabled;
+
+        UserNotificationPreference::updateOrCreate(
+            ['user_id' => $user->id, 'household_id' => $household->id, 'kind' => $kind, 'channel' => $channel],
+            ['enabled' => $enabled],
+        );
     }
 
     public function save(): void
@@ -70,9 +140,14 @@ new class extends Component
 
     public function with(): array
     {
+        $user = auth()->user();
+
         return [
             'locales' => User::availableLocales(),
             'themes' => User::availableThemes(),
+            'loginEvents' => $user
+                ? LoginEvent::where('user_id', $user->id)->latest('created_at')->limit(10)->get()
+                : collect(),
             'dateFormats' => [
                 'Y-m-d' => '2026-04-17 (Y-m-d)',
                 'm/d/Y' => '04/17/2026 (m/d/Y)',
@@ -90,7 +165,7 @@ new class extends Component
                 1 => __('Monday'),
                 6 => __('Saturday'),
             ],
-            'timezones' => \DateTimeZone::listIdentifiers(),
+            'timezones' => DateTimeZone::listIdentifiers(),
         ];
     }
 };
@@ -210,4 +285,86 @@ new class extends Component
             </button>
         </div>
     </form>
+
+    <section class="mt-8 rounded-xl border border-neutral-800 bg-neutral-900/40 p-6"
+             aria-labelledby="notifications-heading">
+        <header class="mb-4">
+            <h3 id="notifications-heading" class="text-sm font-semibold text-neutral-100">{{ __('Notification preferences') }}</h3>
+            <p class="mt-1 text-xs text-neutral-500">
+                {{ __('Each row is a reminder category, each column a channel. Unchecked = never deliver for this combination. Defaults to enabled; only explicit opt-outs are stored.') }}
+            </p>
+        </header>
+        <table class="w-full text-xs">
+            <thead class="text-[10px] uppercase tracking-wider text-neutral-500">
+                <tr>
+                    <th class="pb-2 text-left font-medium">{{ __('Kind') }}</th>
+                    @foreach ($notificationChannels as $c)
+                        <th class="pb-2 text-center font-medium">{{ $c['label'] }}</th>
+                    @endforeach
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-neutral-800">
+                @foreach ($notificationKinds as $k)
+                    <tr>
+                        <td class="py-2 text-neutral-200">{{ __($k['label']) }}</td>
+                        @foreach ($notificationChannels as $c)
+                            @php $key = $k['key'].':'.$c['key']; @endphp
+                            <td class="py-2 text-center">
+                                <label class="inline-flex items-center justify-center">
+                                    <span class="sr-only">{{ $k['label'].' · '.$c['label'] }}</span>
+                                    <input type="checkbox"
+                                           wire:click="togglePreference('{{ $k['key'] }}', '{{ $c['key'] }}')"
+                                           @checked($notificationMatrix[$key] ?? true)
+                                           class="rounded border-neutral-700 bg-neutral-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                                </label>
+                            </td>
+                        @endforeach
+                    </tr>
+                @endforeach
+            </tbody>
+        </table>
+    </section>
+
+    <section class="mt-8 rounded-xl border border-neutral-800 bg-neutral-900/40 p-6"
+             aria-labelledby="passkeys-heading">
+        <header class="mb-4">
+            <h3 id="passkeys-heading" class="text-sm font-semibold text-neutral-100">{{ __('Passkeys') }}</h3>
+            <p class="mt-1 text-xs text-neutral-500">
+                {{ __('Sign in with your device\'s biometrics or a security key instead of a password. Passkeys are bound to this site and can\'t be phished.') }}
+            </p>
+        </header>
+
+        <livewire:passkey-manager />
+    </section>
+
+    <section class="mt-8 rounded-xl border border-neutral-800 bg-neutral-900/40 p-6"
+             aria-labelledby="login-history-heading">
+        <header class="mb-4">
+            <h3 id="login-history-heading" class="text-sm font-semibold text-neutral-100">{{ __('Recent sign-ins') }}</h3>
+            <p class="mt-1 text-xs text-neutral-500">
+                {{ __('The last 10 successful and failed sign-in attempts on your account. Something here you don\'t recognize? Change your password or remove unknown passkeys.') }}
+            </p>
+        </header>
+        @if ($loginEvents->isEmpty())
+            <p class="text-xs text-neutral-500">{{ __('No sign-in history yet.') }}</p>
+        @else
+            <ul class="divide-y divide-neutral-800 rounded-md border border-neutral-800 text-xs">
+                @foreach ($loginEvents as $e)
+                    <li class="flex items-center gap-3 px-3 py-2">
+                        <span class="inline-flex items-center gap-1">
+                            @if ($e->succeeded)
+                                <span class="inline-block size-1.5 rounded-full bg-emerald-400" aria-label="{{ __('success') }}"></span>
+                            @else
+                                <span class="inline-block size-1.5 rounded-full bg-rose-400" aria-label="{{ __('failure') }}"></span>
+                            @endif
+                            <span class="font-mono text-neutral-300">{{ $e->method }}</span>
+                        </span>
+                        <span class="text-neutral-500">{{ $e->ip ?: '—' }}</span>
+                        <span class="truncate text-neutral-600">{{ \Illuminate\Support\Str::limit((string) $e->user_agent, 60) }}</span>
+                        <span class="ml-auto tabular-nums text-neutral-500">{{ $e->created_at?->diffForHumans() }}</span>
+                    </li>
+                @endforeach
+            </ul>
+        @endif
+    </section>
 </div>

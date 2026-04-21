@@ -1,0 +1,4 @@
+# ZAP rule overrides for Bureau — suppress known false positives
+# Format: ruleId<TAB>action<TAB>reason
+10038	IGNORE	(CSP unsafe-eval required for Alpine.js inline expressions)
+10098	IGNORE	(Cross-Domain Misconfiguration — internal single-origin app)

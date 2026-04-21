@@ -30,6 +30,7 @@ class extends Component
 
         $media = Media::create([
             'disk' => 'local',
+            'source' => 'mobile',
             'path' => $path,
             'original_name' => $originalName,
             'mime' => $mime,

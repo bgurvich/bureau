@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\InventoryItem;
+use App\Support\CurrentHousehold;
 use App\Support\Formatting;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Collection;
@@ -182,6 +183,16 @@ class extends Component
         $this->selected = [];
     }
 
+    public function selectAll(): void
+    {
+        $this->selected = $this->items->pluck('id')->map(fn ($v) => (int) $v)->all();
+    }
+
+    public function clearSelection(): void
+    {
+        $this->selected = [];
+    }
+
     public function processRow(int $id): void
     {
         $item = InventoryItem::findOrFail($id);
@@ -229,6 +240,12 @@ class extends Component
     public function totalValue(): float
     {
         return (float) $this->items->sum('cost_amount');
+    }
+
+    #[Computed]
+    public function currency(): string
+    {
+        return CurrentHousehold::get()?->default_currency ?? 'USD';
     }
 
     /** @return Collection<int, \App\Models\Property> */
@@ -341,7 +358,7 @@ Passport holder
             </div>
             <div>
                 <dt class="text-[10px] uppercase tracking-wider text-neutral-500">{{ __('Shown value') }}</dt>
-                <dd class="mt-0.5 tabular-nums text-neutral-200">{{ number_format($this->totalValue, 0) }}</dd>
+                <dd class="mt-0.5 tabular-nums text-neutral-200">{{ Formatting::money($this->totalValue, $this->currency) }}</dd>
             </div>
     </dl>
 
@@ -390,35 +407,56 @@ Passport holder
         </label>
     </form>
 
-    @if (count($selected) > 0)
-        <div role="region" aria-label="{{ __('Bulk actions') }}"
-             class="flex items-center justify-between rounded-lg border border-amber-800/40 bg-amber-900/20 px-4 py-2 text-sm text-amber-200">
-            <span class="tabular-nums">{{ __(':n selected', ['n' => count($selected)]) }}</span>
-            <div class="flex items-center gap-2">
-                <button type="button" wire:click="$set('selected', [])"
-                        class="rounded-md px-2 py-1 text-xs text-amber-200 hover:bg-amber-900/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
-                    {{ __('Clear') }}
-                </button>
-                <button type="button" wire:click="editSelected"
-                        class="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1 text-xs text-neutral-100 hover:border-neutral-500 hover:bg-neutral-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
-                    {{ __('Edit selected') }}
-                </button>
-                <button type="button"
-                        wire:click="deleteSelected"
-                        wire:confirm="{{ __('Delete the :n selected items? This cannot be undone.', ['n' => count($selected)]) }}"
-                        class="rounded-md border border-rose-800/40 bg-rose-900/30 px-3 py-1 text-xs font-medium text-rose-100 hover:bg-rose-900/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
-                    {{ __('Delete selected') }}
-                </button>
-            </div>
-        </div>
-    @endif
-
     @if ($this->items->isEmpty())
         <div class="rounded-xl border border-dashed border-neutral-800 bg-neutral-900/40 p-10 text-center text-sm text-neutral-500">
             {{ __('No items match those filters.') }}
         </div>
     @else
-        <ul class="divide-y divide-neutral-800 rounded-xl border border-neutral-800 bg-neutral-900/40">
+        @php
+            $selCount = count($selected);
+            $itemCount = $this->items->count();
+            $hasSelection = $selCount > 0;
+            $allChecked = $hasSelection && $selCount === $itemCount;
+            $someChecked = $hasSelection && $selCount !== $itemCount;
+        @endphp
+        <section aria-label="{{ __('Inventory list') }}">
+        <div role="region" aria-label="{{ __('List header') }}"
+             class="sticky top-0 z-10 rounded-t-xl border border-b-0 {{ $hasSelection ? 'border-amber-800/50 bg-amber-950/30' : 'border-neutral-800 bg-neutral-900/60' }} px-4 py-2 text-[11px]">
+            <div class="flex min-h-8 flex-wrap items-center gap-3">
+                <input type="checkbox"
+                       wire:click="{{ $allChecked ? 'clearSelection' : 'selectAll' }}"
+                       @checked($allChecked)
+                       x-bind:indeterminate="{{ $someChecked ? 'true' : 'false' }}"
+                       aria-label="{{ __('Select all') }}"
+                       class="rounded border-neutral-700 bg-neutral-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                <span class="{{ $hasSelection ? 'text-amber-100' : 'text-neutral-400' }}">
+                    @if ($hasSelection)
+                        {{ __(':sel of :n selected', ['sel' => count($selected), 'n' => $this->items->count()]) }}
+                    @else
+                        {{ __(':n items', ['n' => $this->items->count()]) }}
+                    @endif
+                </span>
+                @if ($hasSelection)
+                    <div class="ml-auto flex flex-wrap items-center gap-2">
+                        <button type="button" wire:click="editSelected"
+                                class="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1 text-xs text-neutral-100 hover:border-neutral-500 hover:bg-neutral-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                            {{ __('Edit selected') }}
+                        </button>
+                        <button type="button"
+                                wire:click="deleteSelected"
+                                wire:confirm="{{ __('Delete the :n selected items? This cannot be undone.', ['n' => count($selected)]) }}"
+                                class="rounded-md border border-rose-800/50 bg-rose-900/30 px-3 py-1 text-xs font-medium text-rose-100 hover:bg-rose-900/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                            {{ __('Delete selected') }}
+                        </button>
+                        <button type="button" wire:click="clearSelection"
+                                class="rounded-md px-3 py-1 text-xs text-amber-200 hover:bg-amber-900/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                            {{ __('Clear') }}
+                        </button>
+                    </div>
+                @endif
+            </div>
+        </div>
+        <ul class="divide-y divide-neutral-800 rounded-b-xl border border-neutral-800 bg-neutral-900/40">
             @foreach ($this->items as $i)
                 @php
                     $editable = $statusFilter === 'unprocessed' || in_array($i->id, $editingIds, true);
@@ -537,7 +575,7 @@ Passport holder
                             <div class="shrink-0 text-right">
                                 @if ($i->cost_amount !== null)
                                     <div class="text-sm tabular-nums text-neutral-100">
-                                        {{ number_format((float) $i->cost_amount, 0) }} {{ $i->cost_currency }}
+                                        {{ Formatting::money((float) $i->cost_amount, $i->cost_currency ?? $this->currency) }}
                                     </div>
                                 @endif
                                 @if ($warranty)
@@ -555,5 +593,6 @@ Passport holder
                 </li>
             @endforeach
         </ul>
+        </section>
     @endif
 </div>

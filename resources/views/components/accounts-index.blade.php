@@ -109,7 +109,7 @@ class extends Component
 };
 ?>
 
-<div class="space-y-6">
+<div class="space-y-5">
     <header class="flex items-baseline justify-between gap-4">
         <div>
             <h2 class="text-base font-semibold text-neutral-100">{{ __('Accounts') }}</h2>

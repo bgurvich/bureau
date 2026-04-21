@@ -14,6 +14,7 @@ class AccountBalance extends Model
         'balance' => 'decimal:4',
     ];
 
+    /** @return BelongsTo<Account, $this> */
     public function account(): BelongsTo
     {
         return $this->belongsTo(Account::class);

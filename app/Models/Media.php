@@ -18,9 +18,12 @@ class Media extends Model
     protected $casts = [
         'captured_at' => 'datetime',
         'meta' => 'array',
+        'ocr_extracted' => 'array',
+        'processed_at' => 'datetime',
         'size' => 'integer',
     ];
 
+    /** @return BelongsTo<MediaFolder, $this> */
     public function folder(): BelongsTo
     {
         return $this->belongsTo(MediaFolder::class, 'folder_id');

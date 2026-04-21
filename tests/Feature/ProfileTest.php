@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\UserNotificationPreference;
 use Livewire\Livewire;
 
 it('renders the profile page with the user\'s current values', function () {
@@ -52,4 +53,32 @@ it('rejects invalid themes', function () {
         ->set('theme', 'neon')
         ->call('save')
         ->assertHasErrors(['theme']);
+});
+
+it('renders the notification preferences matrix on the profile page', function () {
+    authedInHousehold();
+
+    $this->get('/profile')
+        ->assertOk()
+        ->assertSee(__('Notification preferences'))
+        ->assertSee(__('Bills'))
+        ->assertSee('Email');
+});
+
+it('toggling a notification preference persists an opt-out', function () {
+    $user = authedInHousehold();
+
+    $comp = Livewire::test('profile')
+        ->call('togglePreference', 'task_reminder', 'email');
+
+    $row = UserNotificationPreference::where('user_id', $user->id)
+        ->where('kind', 'task_reminder')
+        ->where('channel', 'email')
+        ->first();
+
+    expect($row)->not->toBeNull()
+        ->and((bool) $row->enabled)->toBeFalse();
+
+    $comp->call('togglePreference', 'task_reminder', 'email');
+    expect((bool) $row->fresh()->enabled)->toBeTrue();
 });

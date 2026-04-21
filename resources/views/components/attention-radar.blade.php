@@ -1,11 +1,18 @@
 <?php
 
 use App\Models\Account;
+use App\Models\ChecklistRun;
 use App\Models\Contract;
+use App\Models\InventoryItem;
+use App\Models\Media;
 use App\Models\RecurringProjection;
 use App\Models\Reminder;
 use App\Models\Task;
 use App\Models\Transaction;
+use App\Models\SavingsGoal;
+use App\Support\BudgetMonitor;
+use App\Support\ChecklistScheduling;
+use App\Support\SpendingAnomalyDetector;
 use Livewire\Attributes\Computed;
 use Livewire\Component;
 
@@ -63,6 +70,21 @@ new class extends Component
             ->count();
     }
 
+    /**
+     * Auto-renewing contracts ending in the next 14 days that still have a
+     * known cancellation path. Surfacing them here gives the user the last-
+     * chance window to cancel before the next period bills.
+     */
+    #[Computed]
+    public function autorenewingContractsEndingSoon(): int
+    {
+        return Contract::where('auto_renews', true)
+            ->whereNotNull('ends_on')
+            ->whereBetween('ends_on', [now()->toDateString(), now()->addDays(14)->toDateString()])
+            ->where(fn ($q) => $q->whereNotNull('cancellation_url')->orWhereNotNull('cancellation_email'))
+            ->count();
+    }
+
     #[Computed]
     public function giftCardsExpiringSoon(): int
     {
@@ -73,6 +95,98 @@ new class extends Component
     }
 
     #[Computed]
+    public function billsInbox(): int
+    {
+        return Media::whereNull('processed_at')
+            ->where('ocr_status', 'done')
+            ->whereNotNull('ocr_extracted')
+            ->count();
+    }
+
+    #[Computed]
+    public function unprocessedInventory(): int
+    {
+        return InventoryItem::whereNull('processed_at')->count();
+    }
+
+    /**
+     * Categories whose month-to-date spend has crossed 80% of their envelope
+     * cap. We surface both WARNING and OVER together — the user's action is
+     * the same in both cases: inspect the category.
+     */
+    #[Computed]
+    public function budgetEnvelopesAtRisk(): int
+    {
+        return BudgetMonitor::currentMonthWarningCount();
+    }
+
+    /**
+     * Recent transactions whose magnitude is >2.5σ above their category's
+     * 90-day baseline — "did a routine bill spike unexpectedly?" tile.
+     */
+    #[Computed]
+    public function spendingAnomalies(): int
+    {
+        return (new SpendingAnomalyDetector)->recentAnomaliesCount();
+    }
+
+    /**
+     * Active savings goals that have hit their target but haven't been
+     * marked achieved yet — prompts the user to celebrate/close them.
+     */
+    #[Computed]
+    public function savingsGoalsReadyToClose(): int
+    {
+        return SavingsGoal::where('state', 'active')
+            ->get()
+            ->filter(fn ($g) => $g->progressRatio() >= 1.0)
+            ->count();
+    }
+
+    /**
+     * Count of scheduled-today ritual templates in a given time_of_day
+     * bucket that haven't been completed yet, surfaced once the bucket's
+     * window is over — morning after 11:00 local, evening after 22:00.
+     * Skipped runs count as "not missing" (user explicitly opted out).
+     */
+    private function unfinishedRitualsForBucket(string $bucket, int $afterHour): int
+    {
+        if (now()->hour < $afterHour) {
+            return 0;
+        }
+
+        $templates = ChecklistScheduling::templatesScheduledOn(now())
+            ->where('time_of_day', $bucket);
+        if ($templates->isEmpty()) {
+            return 0;
+        }
+
+        $ids = $templates->pluck('id')->all();
+        $runs = ChecklistRun::whereIn('checklist_template_id', $ids)
+            ->where('run_date', now()->toDateString())
+            ->get()
+            ->keyBy('checklist_template_id');
+
+        return $templates->filter(function ($t) use ($runs) {
+            $run = $runs->get($t->id);
+
+            return ! $run || ($run->completed_at === null && $run->skipped_at === null);
+        })->count();
+    }
+
+    #[Computed]
+    public function unfinishedMorningRituals(): int
+    {
+        return $this->unfinishedRitualsForBucket('morning', 11);
+    }
+
+    #[Computed]
+    public function unfinishedEveningRituals(): int
+    {
+        return $this->unfinishedRitualsForBucket('evening', 22);
+    }
+
+    #[Computed]
     public function total(): int
     {
         return $this->overdueTasks
@@ -80,7 +194,15 @@ new class extends Component
             + $this->overdueBills
             + $this->pendingReminders
             + $this->trialsEndingSoon
-            + $this->giftCardsExpiringSoon;
+            + $this->autorenewingContractsEndingSoon
+            + $this->giftCardsExpiringSoon
+            + $this->billsInbox
+            + $this->unprocessedInventory
+            + $this->budgetEnvelopesAtRisk
+            + $this->spendingAnomalies
+            + $this->savingsGoalsReadyToClose
+            + $this->unfinishedMorningRituals
+            + $this->unfinishedEveningRituals;
     }
 };
 ?>
@@ -127,10 +249,70 @@ new class extends Component
                     <span class="tabular-nums text-rose-400">{{ $this->trialsEndingSoon }}</span>
                 </li>
             @endif
+            @if ($this->autorenewingContractsEndingSoon)
+                <li class="flex items-baseline justify-between">
+                    <a href="{{ route('relationships.contracts') }}" class="text-neutral-300 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">{{ __('Auto-renewing ≤ 14d') }}</a>
+                    <span class="tabular-nums text-amber-400">{{ $this->autorenewingContractsEndingSoon }}</span>
+                </li>
+            @endif
             @if ($this->giftCardsExpiringSoon)
                 <li class="flex items-baseline justify-between">
                     <span class="text-neutral-300">Gift cards expiring ≤ 30d</span>
                     <span class="tabular-nums text-amber-400">{{ $this->giftCardsExpiringSoon }}</span>
+                </li>
+            @endif
+            @if ($this->billsInbox)
+                <li class="flex items-baseline justify-between">
+                    <a href="{{ route('fiscal.inbox') }}" class="text-neutral-300 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">{{ __('Bills Inbox') }}</a>
+                    <span class="tabular-nums text-sky-300">{{ $this->billsInbox }}</span>
+                </li>
+            @endif
+            @if ($this->unprocessedInventory)
+                <li class="flex items-baseline justify-between">
+                    <a href="{{ route('assets.inventory', ['status' => 'unprocessed']) }}" class="text-neutral-300 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">{{ __('Unprocessed inventory') }}</a>
+                    <span class="tabular-nums text-amber-400">{{ $this->unprocessedInventory }}</span>
+                </li>
+            @endif
+            @if ($this->budgetEnvelopesAtRisk)
+                <li class="flex items-baseline justify-between">
+                    <a href="{{ route('fiscal.budgets') }}"
+                       class="text-neutral-300 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                        {{ __('Envelopes ≥ 80% used') }}
+                    </a>
+                    <span class="tabular-nums text-rose-400">{{ $this->budgetEnvelopesAtRisk }}</span>
+                </li>
+            @endif
+            @if ($this->spendingAnomalies)
+                <li class="flex items-baseline justify-between">
+                    <span class="text-neutral-300">{{ __('Unusual charges ≤ 7d') }}</span>
+                    <span class="tabular-nums text-amber-400">{{ $this->spendingAnomalies }}</span>
+                </li>
+            @endif
+            @if ($this->savingsGoalsReadyToClose)
+                <li class="flex items-baseline justify-between">
+                    <a href="{{ route('fiscal.savings_goals') }}"
+                       class="text-neutral-300 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                        {{ __('Savings goals hit target') }}
+                    </a>
+                    <span class="tabular-nums text-emerald-400">{{ $this->savingsGoalsReadyToClose }}</span>
+                </li>
+            @endif
+            @if ($this->unfinishedMorningRituals)
+                <li class="flex items-baseline justify-between">
+                    <a href="{{ route('life.checklists.today') }}"
+                       class="text-neutral-300 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                        {{ __('Unfinished morning routine') }}
+                    </a>
+                    <span class="tabular-nums text-amber-400">{{ $this->unfinishedMorningRituals }}</span>
+                </li>
+            @endif
+            @if ($this->unfinishedEveningRituals)
+                <li class="flex items-baseline justify-between">
+                    <a href="{{ route('life.checklists.today') }}"
+                       class="text-neutral-300 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                        {{ __('Unfinished evening routine') }}
+                    </a>
+                    <span class="tabular-nums text-amber-400">{{ $this->unfinishedEveningRituals }}</span>
                 </li>
             @endif
         </ul>

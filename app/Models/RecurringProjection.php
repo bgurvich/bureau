@@ -21,16 +21,19 @@ class RecurringProjection extends Model
         'unmatched_at' => 'datetime',
     ];
 
+    /** @return BelongsTo<RecurringRule, $this> */
     public function rule(): BelongsTo
     {
         return $this->belongsTo(RecurringRule::class, 'rule_id');
     }
 
+    /** @return BelongsTo<Transaction, $this> */
     public function matchedTransaction(): BelongsTo
     {
         return $this->belongsTo(Transaction::class, 'matched_transaction_id');
     }
 
+    /** @return BelongsTo<Transfer, $this> */
     public function matchedTransfer(): BelongsTo
     {
         return $this->belongsTo(Transfer::class, 'matched_transfer_id');

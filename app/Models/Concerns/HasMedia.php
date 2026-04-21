@@ -7,6 +7,9 @@ use Illuminate\Database\Eloquent\Relations\MorphToMany;
 
 trait HasMedia
 {
+    /**
+     * @return MorphToMany<Media, $this>
+     */
     public function media(): MorphToMany
     {
         return $this->morphToMany(Media::class, 'mediable')->withPivot('role', 'position');

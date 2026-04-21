@@ -17,6 +17,7 @@ class LoanTerm extends Model
         'monthly_payment_amount' => 'decimal:4',
     ];
 
+    /** @return BelongsTo<Account, $this> */
     public function account(): BelongsTo
     {
         return $this->belongsTo(Account::class);

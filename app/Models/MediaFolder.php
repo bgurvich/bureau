@@ -17,6 +17,7 @@ class MediaFolder extends Model
         'active' => 'boolean',
     ];
 
+    /** @return HasMany<Media, $this> */
     public function media(): HasMany
     {
         return $this->hasMany(Media::class, 'folder_id');

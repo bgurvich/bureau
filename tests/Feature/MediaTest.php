@@ -79,12 +79,12 @@ it('marks OCR as failed when the tesseract binary errors', function () {
     expect($m->fresh()->ocr_status)->toBe('failed');
 });
 
-it('skips OCR for non-image media', function () {
+it('skips OCR for non-image, non-pdf media', function () {
     authedInHousehold();
 
     $m = Media::create([
-        'disk' => 'local', 'path' => 'doc.pdf',
-        'original_name' => 'doc.pdf', 'mime' => 'application/pdf', 'size' => 100,
+        'disk' => 'local', 'path' => 'doc.zip',
+        'original_name' => 'doc.zip', 'mime' => 'application/zip', 'size' => 100,
         'ocr_status' => 'pending',
     ]);
 

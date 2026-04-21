@@ -17,6 +17,7 @@ class Snapshot extends Model
         'payload' => 'array',
     ];
 
+    /** @return MorphTo<Model, $this> */
     public function subject(): MorphTo
     {
         return $this->morphTo();

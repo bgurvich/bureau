@@ -64,6 +64,7 @@ class RescanMediaFolders extends Command
                     Media::create([
                         'folder_id' => $folder->id,
                         'disk' => $diskName,
+                        'source' => 'folder',
                         'path' => $relativePath,
                         'original_name' => basename($relativePath),
                         'mime' => $mime,

@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 #
 # Run every check: dependency audits, Pint, PHPStan, Pest, Playwright.
-# Usage: ./scripts/test-all.sh [--fast] [--e2e-only]
+# Usage: ./scripts/test-all.sh [--fast] [--e2e-only] [--zap]
 #   --fast      Skip audits + PHPStan + Pint --test (saves ~30s)
 #   --e2e-only  Only run Playwright
+#   --zap       Also run OWASP ZAP baseline scan in --ci mode (fails on High/Medium).
+#               Requires Docker + a running app on localhost:8000.
+#               Off by default — ~2-3min extra + Docker roundtrip.
 #
 set -euo pipefail
 
@@ -11,9 +14,11 @@ RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[0;33m'; BOLD='\033[1m'; NC='\
 
 FAST=false
 E2E_ONLY=false
+ZAP=false
 for arg in "$@"; do
     [[ "$arg" == "--fast" ]] && FAST=true
     [[ "$arg" == "--e2e-only" ]] && E2E_ONLY=true
+    [[ "$arg" == "--zap" ]] && ZAP=true
 done
 
 FAILED=(); PASSED=(); SKIPPED=()
@@ -47,6 +52,13 @@ if [[ "$E2E_ONLY" == false ]]; then
 fi
 
 run_step "Playwright" npx playwright test
+
+# ZAP baseline is opt-in. The dev server must already be up (via `composer dev`
+# or `php artisan serve --host=0.0.0.0 --port=8000`) — run-zap.sh preflight
+# checks that and bails clean if not. --ci makes the scan fail on High/Medium.
+if [[ "$ZAP" == true ]]; then
+    run_step "ZAP baseline" ./scripts/run-zap.sh baseline --ci
+fi
 
 echo -e "\n${BOLD}══ Summary ══${NC}"
 for p in "${PASSED[@]}";  do echo -e "  ${GREEN}✓${NC} $p"; done

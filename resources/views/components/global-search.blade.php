@@ -8,9 +8,11 @@ use App\Models\InventoryItem;
 use App\Models\Media;
 use App\Models\Note;
 use App\Models\Property;
+use App\Models\Subscription;
 use App\Models\Task;
 use App\Models\Transaction;
 use App\Models\Vehicle;
+use App\Support\Formatting;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\On;
@@ -141,8 +143,24 @@ new class extends Component
             $out[] = [
                 'type' => 'transaction', 'id' => (int) $t->id,
                 'title' => $t->description ?: ($t->reference_number ?? __('Transaction')),
-                'subtitle' => $t->occurred_on?->toDateString().' · '.number_format((float) $t->amount, 2).' '.$t->currency,
+                'subtitle' => $t->occurred_on?->toDateString().' · '.Formatting::money((float) $t->amount, $t->currency ?? 'USD'),
                 'group' => __('Transactions'),
+                'inspector' => true,
+            ];
+        }
+
+        foreach (Subscription::query()
+            ->where('state', 'active')
+            ->where('name', 'like', $like)
+            ->orderBy('name')
+            ->limit(5)->get(['id', 'name', 'monthly_cost_cached', 'currency']) as $s) {
+            $out[] = [
+                'type' => 'subscription', 'id' => (int) $s->id,
+                'title' => (string) $s->name,
+                'subtitle' => $s->monthly_cost_cached
+                    ? Formatting::money((float) $s->monthly_cost_cached, $s->currency ?? 'USD').'/mo'
+                    : '',
+                'group' => __('Subscriptions'),
                 'inspector' => true,
             ];
         }

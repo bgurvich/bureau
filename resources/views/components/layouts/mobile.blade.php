@@ -12,10 +12,11 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png">
     <link rel="icon" href="/icon.svg" type="image/svg+xml">
     <title>{{ $title ?? 'Bureau' }}</title>
+    @include('partials.theme-flash')
     @vite(['resources/css/app.css', 'resources/js/app.ts'])
 </head>
 <body class="min-h-screen bg-neutral-950 text-neutral-100 antialiased">
-    <div class="flex min-h-screen flex-col" style="padding-top: env(safe-area-inset-top); padding-bottom: calc(4rem + env(safe-area-inset-bottom));">
+    <div class="mobile-shell flex min-h-screen flex-col">
         <main id="main" tabindex="-1" class="flex-1 px-4 py-4">
             {{ $slot }}
         </main>
@@ -23,12 +24,5 @@
 
     @include('partials.mobile-tabs')
 
-    <script>
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js').catch(() => {});
-            });
-        }
-    </script>
 </body>
 </html>

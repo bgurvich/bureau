@@ -52,6 +52,7 @@ class Household extends Model implements Tenant, TenantWithDatabase
         return $callback($this);
     }
 
+    /** @return BelongsToMany<User, $this> */
     public function users(): BelongsToMany
     {
         return $this->belongsToMany(User::class, 'household_user')

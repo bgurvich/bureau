@@ -29,7 +29,7 @@ new class extends Component
         // surfacing (assume the charge posts; longer = something failed).
         $graceCutoff = now()->subDays(7)->toDateString();
 
-        return RecurringProjection::with('rule:id,title')
+        return RecurringProjection::with('rule:id,title,currency')
             ->where('status', 'overdue')
             ->where(fn ($q) => $q
                 ->where('autopay', false)
@@ -161,7 +161,7 @@ new class extends Component
                                    class="flex items-baseline justify-between gap-3 px-4 py-1.5 text-sm hover:bg-neutral-800 focus:bg-neutral-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
                                     <span class="truncate text-neutral-200">{{ $b->rule?->title ?? '—' }}</span>
                                     <span class="shrink-0 text-[11px] tabular-nums text-rose-400">
-                                        {{ number_format((float) $b->amount, 2) }}
+                                        {{ Formatting::money((float) $b->amount, $b->rule?->currency ?? 'USD') }}
                                     </span>
                                 </a>
                             </li>

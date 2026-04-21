@@ -2,6 +2,8 @@
 
 use App\Models\Project;
 use App\Models\TimeEntry;
+use App\Support\CurrentHousehold;
+use App\Support\Formatting;
 use Illuminate\Support\Collection;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
@@ -135,7 +137,7 @@ class extends Component
                                     <span>{{ $p->client->display_name }}</span>
                                 @endif
                                 @if ($p->hourly_rate !== null)
-                                    <span class="tabular-nums">{{ number_format((float) $p->hourly_rate, 2) }} {{ $p->hourly_rate_currency }}/h</span>
+                                    <span class="tabular-nums">{{ Formatting::money((float) $p->hourly_rate, $p->hourly_rate_currency ?? (CurrentHousehold::get()?->default_currency ?? 'USD')) }}/h</span>
                                 @endif
                             </div>
                         </div>

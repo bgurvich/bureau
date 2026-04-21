@@ -1,6 +1,12 @@
 # Deploy scripts
 
-Three entry points, all idempotent and safe to re-run.
+Four entry points, all idempotent and safe to re-run.
+
+Production flow (first-time, in order):
+1. `install-packages.sh` — OS toolchain (nginx, php, mariadb, tesseract…)
+2. `setup.sh` — app bootstrap (composer, npm, storage, migrate, seed owner)
+3. `install.sh` — production wiring (`.env`, nginx vhost, Let's Encrypt)
+4. `deploy.sh` — every release thereafter
 
 ## First-time server provisioning
 
@@ -16,7 +22,7 @@ Installs the OS-level toolchain:
 - ImageMagick (PNG generation, media thumbnailing)
 - Poppler-utils (pdftotext, PDF-OCR fallback)
 
-ImageMagick's default policy blocks PDF rasterization; this script relaxes it so the future `pdftoppm → tesseract` pipeline works.
+ImageMagick's default policy blocks the PDF coder (a real attack surface — ImageTragick and kin). Bureau uses Poppler's `pdftotext` for PDFs, not ImageMagick, so the lockdown stays.
 
 Override versions at call time:
 ```bash
@@ -38,6 +44,32 @@ Prepares a cloned checkout:
 6. `php artisan storage:link`.
 7. `php artisan migrate --force`.
 8. `php artisan db:seed --force` — **only if the users table is empty** (never clobbers existing data).
+
+## Production wiring (env + nginx + certbot)
+
+```bash
+sudo bash scripts/deploy/install.sh
+```
+
+Stepped, marker-tracked installer (`/var/lib/bureau-install/*.done`). Adapted from `~/nfp/scripts/deploy/install.sh`. Five steps, all re-runnable:
+
+1. **env** — populates `.env` with production values (APP_ENV=production, APP_URL=`https://bureau.homes`, SESSION_SECURE_COOKIE=true, SESSION_DOMAIN, DB/mail creds). Generates `APP_KEY` if empty. Owner → `bureau:www-data`, mode `640`.
+2. **nginx** — substitutes `nginx-bureau.conf` placeholders (`__DOMAIN__`, `__APP_DIR__`, `__PHP_VER__`) into `/etc/nginx/sites-available/bureau.conf`, symlinks into `sites-enabled`, drops a 24h self-signed placeholder cert so nginx boots before the ACME step, tests + reloads.
+3. **ssl** (alias: `certbot`) — issues `bureau.homes` + `www.bureau.homes` via `certbot --webroot -w /var/www/certbot`, rewrites vhost `ssl_certificate` paths, drops a post-renewal reload hook.
+4. **queue-worker** — installs `/etc/systemd/system/bureau-queue.service` running `php artisan queue:work --sleep=3 --tries=3 --backoff=30 --max-time=3600`. Plain `queue:work` rather than Horizon (single-tenant, low volume — Horizon forces Redis and adds dashboard UI the app doesn't need). `deploy.sh`'s `queue:restart` drains and respawns workers on each release.
+5. **scheduler** — cron `* * * * * php artisan schedule:run` for user `bureau`. Drives `recurring:project`, `media:rescan`, `backup:run/clean/monitor`, `snapshots:rollup`, reminders delivery, weekly digests. Idempotent — re-runs strip the old line before appending.
+
+```bash
+sudo bash scripts/deploy/install.sh --only nginx          # single step
+sudo bash scripts/deploy/install.sh --only nginx ssl      # multiple
+sudo bash scripts/deploy/install.sh --skip ssl            # all except ssl
+sudo bash scripts/deploy/install.sh --force nginx         # re-run nginx only
+sudo bash scripts/deploy/install.sh --force all           # re-run everything
+```
+
+Prompts for domain (default `bureau.homes`), DB password, SMTP creds (blank → mail log driver), and Let's Encrypt admin email. Credentials print once at the end and aren't written to disk.
+
+Webroot ACME flow means no nginx restart during cert renewal — certbot's systemd timer drops new certs into `/etc/letsencrypt/live/`, the deploy hook reloads nginx, done.
 
 ## Production release
 

@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use ZipArchive;
 
-class BookkeeperExportController extends Controller
+final class BookkeeperExportController extends Controller
 {
     public function __invoke(Request $request): StreamedResponse
     {

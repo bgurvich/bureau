@@ -112,6 +112,6 @@ it('groups net worth by account kind', function () {
     $this->get('/finance')
         ->assertSee('Bank')
         ->assertSee('Credit')
-        ->assertSee('5,000.00')
-        ->assertSee('-800.00');
+        ->assertSee('$5,000.00')
+        ->assertSee('-$800.00');
 });

@@ -3,6 +3,9 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToHousehold;
+use App\Models\Concerns\HasLinkedNotes;
+use App\Models\Concerns\HasLinkedTasks;
+use App\Models\Concerns\HasLinkedTransactions;
 use App\Models\Concerns\HasMedia;
 use App\Models\Concerns\HasTags;
 use App\Models\Concerns\HasValuations;
@@ -12,7 +15,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Property extends Model
 {
-    use BelongsToHousehold, HasMedia, HasTags, HasValuations;
+    use BelongsToHousehold, HasLinkedNotes, HasLinkedTasks, HasLinkedTransactions, HasMedia, HasTags, HasValuations;
 
     protected $guarded = [];
 
@@ -25,6 +28,7 @@ class Property extends Model
         'sale_amount' => 'decimal:4',
     ];
 
+    /** @return HasMany<InventoryItem, $this> */
     public function inventoryItems(): HasMany
     {
         return $this->hasMany(InventoryItem::class, 'location_property_id');

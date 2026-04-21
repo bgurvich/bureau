@@ -7,9 +7,13 @@
     "license": "MIT",
     "require": {
         "php": "^8.3",
+        "laragear/webauthn": "^5.0",
         "laravel/framework": "^13.0",
+        "laravel/socialite": "^5.26",
         "laravel/tinker": "^3.0",
+        "league/flysystem-aws-s3-v3": "^3.0",
         "livewire/livewire": "^4.0",
+        "smalot/pdfparser": "^2.12",
         "spatie/laravel-backup": "^10.0",
         "stancl/tenancy": "^3.10"
     },
@@ -60,6 +64,9 @@
         ],
         "pint": "./vendor/bin/pint",
         "phpstan": "./vendor/bin/phpstan analyse --memory-limit=512M",
+        "zap": "./scripts/run-zap.sh baseline",
+        "zap:full": "./scripts/run-zap.sh full",
+        "zap:authed": "./scripts/run-zap.sh auth",
         "check": [
             "@pint --test",
             "@phpstan",

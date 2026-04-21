@@ -36,6 +36,48 @@ html[data-resolved-theme='light'] {
     --color-neutral-800: oklch(92.2% 0 0);
     --color-neutral-900: oklch(97%   0 0);
     --color-neutral-950: oklch(98.5% 0 0);
+
+    /*
+     * Accent tokens used in tiles, charts, and badges read fine at -400 on a
+     * dark background; on light they fail WCAG AA (emerald-400 on white is
+     * ~2:1). Remap the same utility names to the Tailwind 600/700 values
+     * that meet 4.5:1 on light surfaces. Keeps markup theme-agnostic.
+     */
+    --color-emerald-400: oklch(52.7% 0.154 150.069);
+    --color-emerald-300: oklch(59.6% 0.145 163.225);
+    --color-emerald-200: oklch(45.8% 0.157 150.069);  /* used on -900/20 chips */
+    --color-amber-400:   oklch(55.5% 0.163 48.998);
+    --color-amber-300:   oklch(66.6% 0.179 58.318);
+    --color-amber-200:   oklch(50.4% 0.163 48.998);
+    --color-rose-400:    oklch(55.1% 0.223 12.414);
+    --color-rose-300:    oklch(64.5% 0.223 12.414);
+    --color-rose-200:    oklch(45.5% 0.223 12.414);
+    --color-sky-400:     oklch(50%   0.134 242.749);
+    --color-sky-300:     oklch(58.8% 0.134 242.749);
+    --color-sky-200:     oklch(42.1% 0.134 242.749);
+    --color-violet-400:  oklch(54.1% 0.281 293.009);
+
+    /*
+     * Accent *surface* tints — dark theme uses `bg-emerald-900/20` on dark
+     * backgrounds which renders as a faint greenish tint. Under light theme
+     * the same alpha-blended value is nearly invisible on white. Bias the
+     * -900 family to lighter oklch so tint pills and status banners stay
+     * readable instead of fading into the background.
+     */
+    --color-emerald-900: oklch(87% 0.06 150.069);
+    --color-amber-900:   oklch(87% 0.06 48.998);
+    --color-rose-900:    oklch(87% 0.06 12.414);
+    --color-sky-900:     oklch(87% 0.06 242.749);
+    --color-violet-900:  oklch(87% 0.06 293.009);
+}
+
+/*
+ * Active-link affordance — retro has a phosphor left bar. Port the same
+ * convention to dark (neutral-400) and light (neutral-400 inverted) so
+ * the current page is always obvious, not just in retro mode.
+ */
+a[aria-current='page'] {
+    box-shadow: inset 2px 0 0 var(--color-neutral-400);
 }
 
 /*
@@ -103,4 +145,14 @@ body {
 /* numeric tabular figures in dashboard tiles */
 .tabular-nums {
     font-variant-numeric: tabular-nums;
+}
+
+/* iOS safe-area padding for the mobile PWA shell + bottom tab bar. */
+.mobile-shell {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: calc(4rem + env(safe-area-inset-bottom));
+}
+
+.mobile-tabs {
+    padding-bottom: env(safe-area-inset-bottom);
 }

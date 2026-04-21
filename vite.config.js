@@ -1,6 +1,34 @@
 import { defineConfig } from 'vite';
 import laravel from 'laravel-vite-plugin';
 import tailwindcss from '@tailwindcss/vite';
+import { createHash } from 'node:crypto';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { resolve } from 'node:path';
+
+// Injects a sha384 SRI hash onto each entry in Laravel's vite manifest so
+// Blade's @vite directive can emit integrity=""+crossorigin="anonymous"
+// attributes. Laravel's Vite facade reads the `integrity` key by default.
+// Cheaper than a third-party plugin; no new dep.
+function sriManifestPlugin() {
+    return {
+        name: 'bureau:sri-manifest',
+        apply: 'build',
+        closeBundle() {
+            const manifestPath = resolve(process.cwd(), 'public/build/manifest.json');
+            if (!existsSync(manifestPath)) return;
+            const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+            const buildDir = resolve(process.cwd(), 'public/build');
+            for (const entry of Object.values(manifest)) {
+                if (!entry || typeof entry !== 'object' || !entry.file) continue;
+                const abs = resolve(buildDir, entry.file);
+                if (!existsSync(abs)) continue;
+                const digest = createHash('sha384').update(readFileSync(abs)).digest('base64');
+                entry.integrity = `sha384-${digest}`;
+            }
+            writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+        },
+    };
+}
 
 export default defineConfig({
     plugins: [
@@ -9,6 +37,7 @@ export default defineConfig({
             refresh: true,
         }),
         tailwindcss(),
+        sriManifestPlugin(),
     ],
     server: {
         host: '0.0.0.0',

@@ -1,8 +1,15 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" shape-rendering="geometricPrecision">
+    <!-- Rounded dark tile — matches manifest.theme_color #0a0a0a. -->
     <rect width="512" height="512" rx="96" fill="#0a0a0a"/>
-    <rect x="112" y="112" width="288" height="288" rx="24" fill="none" stroke="#e5e5e5" stroke-width="16"/>
-    <rect x="144" y="152" width="224" height="96" rx="12" fill="none" stroke="#e5e5e5" stroke-width="12"/>
-    <circle cx="256" cy="200" r="10" fill="#e5e5e5"/>
-    <rect x="144" y="272" width="224" height="96" rx="12" fill="none" stroke="#e5e5e5" stroke-width="12"/>
-    <circle cx="256" cy="320" r="10" fill="#e5e5e5"/>
+    <!-- Filing-cabinet glyph: body + drawer divider, stroke-based so the
+         silhouette stays legible at 16px favicon size. -->
+    <g fill="none" stroke="#e5e5e5" stroke-width="24" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="112" y="96" width="288" height="320" rx="28"/>
+        <line x1="112" y1="256" x2="400" y2="256"/>
+    </g>
+    <!-- Solid drawer-pull bars, centered on each drawer. -->
+    <g fill="#e5e5e5">
+        <rect x="216" y="168" width="80" height="18" rx="9"/>
+        <rect x="216" y="328" width="80" height="18" rx="9"/>
+    </g>
 </svg>

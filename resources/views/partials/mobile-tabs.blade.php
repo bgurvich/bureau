@@ -1,5 +1,6 @@
 @php
     $tabs = [
+        ['mobile.home', __('Home'), 'home'],
         ['mobile.capture', __('Capture'), 'camera'],
         ['mobile.inbox', __('Inbox'), 'inbox'],
         ['mobile.search', __('Search'), 'search'],
@@ -7,8 +8,7 @@
     ];
 @endphp
 <nav aria-label="{{ __('Mobile navigation') }}"
-     class="fixed inset-x-0 bottom-0 z-40 border-t border-neutral-800 bg-neutral-950/95 backdrop-blur"
-     style="padding-bottom: env(safe-area-inset-bottom);">
+     class="mobile-tabs fixed inset-x-0 bottom-0 z-40 border-t border-neutral-800 bg-neutral-950/95 backdrop-blur">
     <ul class="mx-auto flex max-w-md items-stretch">
         @foreach ($tabs as [$route, $label, $icon])
             @php $active = request()->routeIs($route); @endphp
@@ -20,6 +20,10 @@
                     <svg class="h-5 w-5" viewBox="0 0 24 24" aria-hidden="true"
                          stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none">
                         @switch($icon)
+                            @case('home')
+                                <path d="M3 11 12 4l9 7"/>
+                                <path d="M5 10v10h5v-6h4v6h5V10"/>
+                                @break
                             @case('camera')
                                 <path d="M3 8a2 2 0 0 1 2-2h2.5l1.5-2h6l1.5 2H19a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8Z"/>
                                 <circle cx="12" cy="13" r="4"/>

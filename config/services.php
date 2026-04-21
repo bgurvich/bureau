@@ -16,6 +16,36 @@ return [
 
     'postmark' => [
         'key' => env('POSTMARK_API_KEY'),
+        'webhook_user' => env('POSTMARK_WEBHOOK_USER', ''),
+        'webhook_password' => env('POSTMARK_WEBHOOK_PASSWORD', ''),
+    ],
+
+    'google' => [
+        'client_id' => env('GOOGLE_CLIENT_ID', ''),
+        'client_secret' => env('GOOGLE_CLIENT_SECRET', ''),
+        'redirect' => env('GOOGLE_REDIRECT_URL', env('APP_URL').'/auth/google/callback'),
+    ],
+
+    'github' => [
+        'client_id' => env('GITHUB_CLIENT_ID', ''),
+        'client_secret' => env('GITHUB_CLIENT_SECRET', ''),
+        'redirect' => env('GITHUB_REDIRECT_URL', env('APP_URL').'/auth/github/callback'),
+    ],
+
+    'microsoft' => [
+        'client_id' => env('MICROSOFT_CLIENT_ID', ''),
+        'client_secret' => env('MICROSOFT_CLIENT_SECRET', ''),
+        'redirect' => env('MICROSOFT_REDIRECT_URL', env('APP_URL').'/auth/microsoft/callback'),
+    ],
+
+    'apple' => [
+        'client_id' => env('APPLE_CLIENT_ID', ''),
+        'client_secret' => env('APPLE_CLIENT_SECRET', ''),
+        'redirect' => env('APPLE_REDIRECT_URL', env('APP_URL').'/auth/apple/callback'),
+    ],
+
+    'paypal' => [
+        'verify_webhook_signature' => env('PAYPAL_VERIFY_WEBHOOK_SIGNATURE', true),
     ],
 
     'resend' => [
@@ -33,6 +63,13 @@ return [
             'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),
             'channel' => env('SLACK_BOT_USER_DEFAULT_CHANNEL'),
         ],
+    ],
+
+    'lm_studio' => [
+        'enabled' => env('LM_STUDIO_ENABLED', false),
+        'base_url' => rtrim((string) env('LM_STUDIO_BASE_URL', 'http://localhost:1234/v1'), '/'),
+        'model' => env('LM_STUDIO_MODEL', 'qwen2.5-coder-7b-instruct'),
+        'timeout' => (int) env('LM_STUDIO_TIMEOUT', 120),
     ],
 
 ];

@@ -55,6 +55,8 @@
                 id="i-txn-cat"
                 model="category_id"
                 :options="['' => '—'] + $this->categories->mapWithKeys(fn ($c) => [$c->id => ucfirst($c->kind).' · '.$c->name])->all()"
+                :allow-create="true"
+                create-method="createCategoryInline"
                 placeholder="—" />
         </div>
         <div>
@@ -85,6 +87,7 @@
                    class="w-full rounded-md border border-neutral-700 bg-neutral-950 px-2 py-2 text-sm text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
         </div>
     </div>
+    @include('partials.inspector.fields.subjects')
     @include('partials.inspector.fields.tags')
     @include('partials.inspector.fields.admin')
 </form>

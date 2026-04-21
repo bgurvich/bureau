@@ -1,2 +1,6 @@
+# Bureau is a private, single-user personal-affairs app. Every meaningful
+# URL sits behind auth + household middleware — there is nothing for a
+# search engine to index here. Block everything to keep the host out of
+# generic crawl results.
 User-agent: *
-Disallow:
+Disallow: /

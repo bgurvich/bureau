@@ -9,11 +9,13 @@ class MailAttachment extends Model
 {
     protected $guarded = [];
 
+    /** @return BelongsTo<MailMessage, $this> */
     public function message(): BelongsTo
     {
         return $this->belongsTo(MailMessage::class, 'message_id');
     }
 
+    /** @return BelongsTo<Media, $this> */
     public function media(): BelongsTo
     {
         return $this->belongsTo(Media::class);

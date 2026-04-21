@@ -3,6 +3,9 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToHousehold;
+use App\Models\Concerns\HasLinkedNotes;
+use App\Models\Concerns\HasLinkedTasks;
+use App\Models\Concerns\HasLinkedTransactions;
 use App\Models\Concerns\HasMedia;
 use App\Models\Concerns\HasTags;
 use App\Models\Concerns\HasValuations;
@@ -11,7 +14,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Vehicle extends Model
 {
-    use BelongsToHousehold, HasMedia, HasTags, HasValuations;
+    use BelongsToHousehold, HasLinkedNotes, HasLinkedTasks, HasLinkedTransactions, HasMedia, HasTags, HasValuations;
 
     protected $guarded = [];
 
@@ -24,6 +27,7 @@ class Vehicle extends Model
         'sale_amount' => 'decimal:4',
     ];
 
+    /** @return BelongsTo<User, $this> */
     public function primaryUser(): BelongsTo
     {
         return $this->belongsTo(User::class, 'primary_user_id');

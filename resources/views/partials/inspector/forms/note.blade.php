@@ -21,6 +21,7 @@
             {{ __('Private') }}
         </label>
     </div>
+    @include('partials.inspector.fields.subjects')
     @include('partials.inspector.fields.tags')
     @include('partials.inspector.fields.admin')
 </form>

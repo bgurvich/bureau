@@ -11,7 +11,7 @@
 <small>{{ __('Related: :ref', ['ref' => class_basename($reminder->remindable_type).' #'.$reminder->remindable_id]) }}</small>
 @endif
 
-<x-mail::button :url="config('app.url')">
+<x-mail::button :url="$url">
 {{ __('Open Bureau') }}
 </x-mail::button>
 
