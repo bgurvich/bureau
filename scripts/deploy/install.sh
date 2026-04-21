@@ -120,6 +120,7 @@ for _arg in "$@"; do
         echo "Mail (env step — prompted if not set):"
         echo "  MAIL_PROVIDER      = log|postmark|smtp"
         echo "  POSTMARK_API_KEY   = <server token>            # when MAIL_PROVIDER=postmark"
+        echo "  POSTMARK_WEBHOOK_USER / _PASSWORD                # inbound-webhook basic-auth pair (auto-gen if blank)"
         echo "  MAIL_HOST/PORT/USER/PASS/ENCRYPTION            # when MAIL_PROVIDER=smtp"
         echo "  MAIL_FROM_ADDRESS  = notifications@\${DOMAIN}"
         echo
@@ -264,6 +265,8 @@ MAIL_PASS="${MAIL_PASS:-}"
 MAIL_FROM_ADDRESS="${MAIL_FROM_ADDRESS:-}"
 MAIL_ENCRYPTION="${MAIL_ENCRYPTION:-}"
 POSTMARK_API_KEY="${POSTMARK_API_KEY:-}"
+POSTMARK_WEBHOOK_USER="${POSTMARK_WEBHOOK_USER:-}"
+POSTMARK_WEBHOOK_PASSWORD="${POSTMARK_WEBHOOK_PASSWORD:-}"
 ADMIN_EMAIL="${ADMIN_EMAIL:-}"
 BACKUP_ARCHIVE_PASSWORD="${BACKUP_ARCHIVE_PASSWORD:-}"
 
@@ -368,6 +371,9 @@ ensure_mail_config() {
     cur_enc="$(env_read MAIL_ENCRYPTION)"
     cur_from="$(env_read MAIL_FROM_ADDRESS)"
     cur_pmk="$(env_read POSTMARK_API_KEY)"
+    local cur_pmk_wuser cur_pmk_wpass
+    cur_pmk_wuser="$(env_read POSTMARK_WEBHOOK_USER)"
+    cur_pmk_wpass="$(env_read POSTMARK_WEBHOOK_PASSWORD)"
 
     if [[ -z "${MAIL_PROVIDER:-}" ]]; then
         prompt MAIL_PROVIDER "Mail provider [log/postmark/smtp]" "${cur_mailer:-log}"
@@ -377,6 +383,24 @@ ensure_mail_config() {
         postmark)
             prompt POSTMARK_API_KEY  "Postmark server API token"     "$cur_pmk"  secret
             prompt MAIL_FROM_ADDRESS "Outbound From: address"        "${cur_from:-notifications@${DOMAIN}}"
+
+            # Inbound webhook is optional — only needed if you plan to
+            # forward mail into Bureau (`/webhooks/postmark/inbound` feeds
+            # the mail_messages table + draft transactions from receipts).
+            # Outbound reminders / digests / magic links only need the
+            # POSTMARK_API_KEY above.
+            local default_inbound="n"
+            [[ -n "$cur_pmk_wuser" || -n "$cur_pmk_wpass" ]] && default_inbound="y"
+            local configure_inbound
+            prompt configure_inbound "Configure Postmark inbound webhook? [y/N]" "$default_inbound"
+            if [[ "${configure_inbound,,}" == "y" || "${configure_inbound,,}" == "yes" ]]; then
+                # Auto-generate strong creds on first run; press-Enter-to-keep
+                # on re-runs so existing Postmark URL config stays valid.
+                [[ -n "$cur_pmk_wuser" ]] || cur_pmk_wuser="pmk-$(openssl rand -hex 8)"
+                [[ -n "$cur_pmk_wpass" ]] || cur_pmk_wpass="$(openssl rand -hex 24)"
+                prompt POSTMARK_WEBHOOK_USER     "Postmark inbound webhook username" "$cur_pmk_wuser"
+                prompt POSTMARK_WEBHOOK_PASSWORD "Postmark inbound webhook password" "$cur_pmk_wpass" secret
+            fi
             ;;
         smtp)
             prompt MAIL_HOST         "SMTP host"                     "${cur_host:-smtp.example.com}"
@@ -682,7 +706,11 @@ step_env() {
 
     case "$mailer" in
         postmark)
-            env_set POSTMARK_API_KEY "$POSTMARK_API_KEY"
+            env_set POSTMARK_API_KEY          "$POSTMARK_API_KEY"
+            # Inbound webhook auth — gates /webhooks/postmark/inbound.
+            # WebhookAuthTest fails closed in production when either is blank.
+            env_set POSTMARK_WEBHOOK_USER     "${POSTMARK_WEBHOOK_USER:-}"
+            env_set POSTMARK_WEBHOOK_PASSWORD "${POSTMARK_WEBHOOK_PASSWORD:-}"
             ;;
         smtp)
             env_set MAIL_HOST            "$MAIL_HOST"
