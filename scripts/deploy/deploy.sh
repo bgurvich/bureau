@@ -211,8 +211,15 @@ echo -e "${BOLD}── Cache & optimisation ────────────
 php artisan optimize
 ok "php artisan optimize (config + routes + views + events cached)"
 
-chmod -R ug+rwX,o-rwx storage bootstrap/cache
-ok "storage/ + bootstrap/cache/ → ug+rwX,o-rwx (world-unreadable)"
+# Some files under storage/framework/{views,cache} are written by php-fpm
+# at runtime (Livewire view cache, session files, compiled Blade) and end
+# up owned by www-data. The deploy user can update their contents via the
+# shared group, but chmod requires ownership — so filter to files we own
+# to avoid aborting the deploy on "Operation not permitted". Files we
+# don't own were either seeded by install.sh with correct perms or
+# inherit them via the setgid directory bit.
+find storage bootstrap/cache -user "$(id -un)" -exec chmod ug+rwX,o-rwx {} +
+ok "storage/ + bootstrap/cache/ → ug+rwX,o-rwx (scoped to files we own)"
 
 # ── Restart services ─────────────────────────────────────
 echo ""
