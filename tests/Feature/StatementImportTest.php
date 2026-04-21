@@ -236,6 +236,47 @@ it('surfaces "account required" in the bulk message when a file has none assigne
     expect(Transaction::count())->toBe(0);
 });
 
+it('reuses one vendor Contact for ATM rows whose suffix varies per transaction', function () {
+    // Regression: ATM-withdrawal descriptions carry variable address
+    // tails like "Non-WF ATM Withdrawal 4326 Main St" and "Non-WF ATM
+    // Withdrawal 5678 Oak Ave". The old fingerprint kept words past
+    // the first digit, so the two rows fingerprinted differently
+    // ("withdrawal main" vs "withdrawal"), each spawning its own
+    // Contact even though humanizeDescription collapsed them to the
+    // same display_name. The fingerprint now cuts at the first digit
+    // to match humanize's scope.
+    authedInHousehold();
+    $account = Account::create(['type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
+
+    $rows = [
+        ['occurred_on' => '2026-01-05', 'description' => 'Non-WF ATM Withdrawal 4326 Main St', 'amount' => -100.00, 'closing_balance' => null],
+        ['occurred_on' => '2026-01-12', 'description' => 'Non-WF ATM Withdrawal 5678 Oak Ave', 'amount' => -200.00, 'closing_balance' => null],
+        ['occurred_on' => '2026-01-20', 'description' => 'Non-WF ATM Withdrawal 8817',        'amount' => -40.00,  'closing_balance' => null],
+    ];
+    $parsed = ['f1' => [
+        'name' => 'stmt.pdf', 'status' => 'ready', 'hash' => str_repeat('w', 64),
+        'bank_slug' => 'wellsfargo_checking', 'bank_label' => 'WF',
+        'import_source' => 'statement:wellsfargo_checking',
+        'account_last4' => null, 'period_start' => null, 'period_end' => null,
+        'opening' => null, 'closing' => null, 'detected_year' => 2026,
+        'disk_path' => 'x', 'mime' => 'application/pdf', 'size' => 1,
+        'rows' => $rows,
+    ]];
+
+    Livewire::test('statements-import')
+        ->set('parsed', $parsed)
+        ->set('accountFor', ['f1' => $account->id])
+        ->set('selected', ['f1' => [true, true, true]])
+        ->call('importFile', 'f1');
+
+    // All three rows share the same merchant → exactly one Contact.
+    expect(Contact::count())->toBe(1);
+    $contactId = Contact::first()->id;
+    $linked = Transaction::pluck('counterparty_contact_id')->filter()->unique()->values();
+    expect($linked->count())->toBe(1)
+        ->and($linked->first())->toBe($contactId);
+});
+
 it('reuses the same vendor Contact across statement batches', function () {
     // Regression: buildContactMap ran a substring LIKE against
     // display_name — but the fingerprint skips short words while

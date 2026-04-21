@@ -801,6 +801,15 @@ class extends Component
     private function descriptionFingerprint(string $raw): string
     {
         $lower = mb_strtolower($raw);
+        // Cut at the first digit / # / * the same way humanizeDescription
+        // does so the fingerprint is stable across transaction-specific
+        // suffixes (check numbers, ATM addresses, timestamps, reference
+        // ids). Without this, "Non-WF ATM Withdrawal 4326 Main St" and
+        // "Non-WF ATM Withdrawal 5678 Oak Ave" picked up different fps
+        // ("withdrawal main" vs "withdrawal") while their humanized
+        // display_names collapsed to the same string — a perfect recipe
+        // for duplicate Contacts on every re-import.
+        $lower = (string) preg_replace('/[\d#*].*$/', '', $lower);
         $lower = (string) preg_replace('/[^a-z\s]+/', ' ', $lower);
         $words = preg_split('/\s+/', trim($lower)) ?: [];
         $meaningful = array_values(array_filter($words, fn ($w) => mb_strlen($w) >= 4));
