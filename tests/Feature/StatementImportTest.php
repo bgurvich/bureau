@@ -29,6 +29,19 @@ it('renders the import page empty-state', function () {
         ->assertSee(__('Import statements'));
 });
 
+it('renders the upload-and-parse loader overlay', function () {
+    authedInHousehold();
+
+    // The overlay label needs to describe the whole upload + parse phase
+    // — bare "Uploading…" undersells the PDF parsing wait. The static
+    // markup is emitted with display:none and toggled on by Livewire's
+    // wire:loading, so the string ships in the initial HTML.
+    $this->get('/import/statements')
+        ->assertOk()
+        ->assertSee(__('Uploading & parsing files…'))
+        ->assertSee(__('PDFs can take a few seconds per file.'));
+});
+
 it('parses an uploaded Citi checking CSV and renders a review card', function () {
     authedInHousehold();
     $file = UploadedFile::fake()->createWithContent('citi-checking.csv', citiCheckingCsv());

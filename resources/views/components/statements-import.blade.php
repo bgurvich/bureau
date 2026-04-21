@@ -776,9 +776,9 @@ class extends Component
             <span class="text-[11px] text-neutral-500">{{ __('PDF, CSV, and ZIP archives accepted · multiple files OK') }}</span>
         </label>
 
-        {{-- Full-cover overlay while Livewire is streaming the files. A subtle
-             "Uploading…" line under the drop tile was getting missed; a solid
-             overlay with a spinner makes it unmistakable. --}}
+        {{-- Full-cover overlay while Livewire is streaming + parsing the
+             files. The upload phase is short; the heavy wait is PDF/CSV
+             parsing inside updatedFiles(), so the label covers both. --}}
         {{-- wire:loading.flex (not bare wire:loading) so Livewire's auto-toggled
              display stays `flex` — otherwise it reverts to `inline-block` and
              the flex centering collapses, leaving the spinner top-left. --}}
@@ -789,7 +789,8 @@ class extends Component
                 <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" opacity="0.25"/>
                 <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
             </svg>
-            <span>{{ __('Uploading…') }}</span>
+            <span>{{ __('Uploading & parsing files…') }}</span>
+            <span class="text-[11px] font-normal text-emerald-300/70">{{ __('PDFs can take a few seconds per file.') }}</span>
         </div>
 
         {{-- Livewire-layer upload failure (post_max_size / 413 / mime reject /
@@ -820,15 +821,34 @@ class extends Component
     @endif
 
     @if (! empty($parsed))
+        {{-- Full-screen busy overlay while importAll / importFile / any
+             per-row commit is running. Persisting rows is synchronous and
+             can take several seconds per file (hundreds of transactions
+             + transfer-pairing + duplicate detection), so a page-covering
+             status makes the wait legible instead of a frozen UI. --}}
+        <div wire:loading.flex wire:target="importAll,importFile"
+             role="status" aria-live="polite"
+             class="fixed inset-0 z-50 flex flex-col items-center justify-center gap-2 bg-neutral-950/80 text-sm font-medium text-emerald-200 backdrop-blur-sm">
+            <svg class="h-8 w-8 animate-spin text-emerald-400" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" opacity="0.25"/>
+                <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+            </svg>
+            <span>{{ __('Importing transactions…') }}</span>
+            <span class="text-[11px] font-normal text-emerald-300/70">{{ __('Pairing transfers and flagging duplicates as we go.') }}</span>
+        </div>
+
         <div class="flex items-center justify-between gap-3">
             <span class="text-xs text-neutral-500">{{ __(':n file(s) ready to review', ['n' => count($parsed)]) }}</span>
             <div class="flex gap-2">
                 <button type="button" wire:click="importAll"
-                        class="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
-                    {{ __('Import all selected') }}
+                        wire:loading.attr="disabled" wire:target="importAll,importFile"
+                        class="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300 disabled:cursor-wait disabled:opacity-60">
+                    <span wire:loading.remove wire:target="importAll,importFile">{{ __('Import all selected') }}</span>
+                    <span wire:loading wire:target="importAll,importFile">{{ __('Importing…') }}</span>
                 </button>
                 <button type="button" wire:click="clearAll"
-                        class="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                        wire:loading.attr="disabled" wire:target="importAll,importFile"
+                        class="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300 disabled:opacity-40">
                     {{ __('Clear all') }}
                 </button>
             </div>
@@ -940,9 +960,11 @@ class extends Component
                             <div class="flex items-center justify-between">
                                 <span class="text-[11px] text-neutral-500">{{ __(':n of :t selected', ['n' => $selCount, 't' => count($rows)]) }}</span>
                                 <button type="button" wire:click="importFile('{{ $fileId }}')"
+                                        wire:loading.attr="disabled" wire:target="importAll,importFile"
                                         @disabled(! $accountId || $selCount === 0)
-                                        class="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300 disabled:opacity-40">
-                                    {{ __('Import :n transactions', ['n' => $selCount]) }}
+                                        class="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300 disabled:cursor-wait disabled:opacity-40">
+                                    <span wire:loading.remove wire:target="importFile('{{ $fileId }}')">{{ __('Import :n transactions', ['n' => $selCount]) }}</span>
+                                    <span wire:loading wire:target="importFile('{{ $fileId }}')">{{ __('Importing…') }}</span>
                                 </button>
                             </div>
 
