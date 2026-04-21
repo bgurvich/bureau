@@ -214,7 +214,8 @@ env_set() {
         done
         (( found )) || printf '%s=%s\n' "$key" "$value" >> "$tmp"
     }
-    sudo install -m 640 -o "$APP_USER" -g www-data "$tmp" "$env"
+    local install_user="${SUDO_USER:-$USER}"
+    sudo install -m 640 -o "$install_user" -g www-data "$tmp" "$env"
     rm -f "$tmp"
 }
 
@@ -378,31 +379,48 @@ step_permissions() {
     step "File permissions"
     [[ -d "$APP_DIR" ]] || die "APP_DIR '$APP_DIR' does not exist."
 
+    # INSTALL_USER is whoever invoked `sudo install.sh` — keeps them as the
+    # repo owner so `git pull` / editor workflow keeps working after
+    # provisioning. APP_USER (bureau) runs the queue worker + scheduler and
+    # needs RO on code + RW on storage/bootstrap/cache — it gets that via
+    # the www-data group.
+    local install_user="${SUDO_USER:-$USER}"
+
     # Ancestor traverse — nginx / php-fpm runs as www-data and needs +x on
-    # every directory above APP_DIR to reach public/index.php. Home directories
-    # default to 0700 (no traverse for anyone but the owner), which blocks
-    # that path. Grant o+x up the chain from APP_DIR to / so others can
-    # traverse (not list — just enter). Stops at /.
+    # every directory above APP_DIR to reach public/index.php. Home
+    # directories default to 0700 (no traverse for anyone but the owner),
+    # which blocks that path. Grant o+x up the chain from APP_DIR to /.
     local parent="$APP_DIR"
     while [[ "$parent" != "/" && -n "$parent" ]]; do
         sudo chmod o+x "$parent" 2>/dev/null || true
         parent="$(dirname "$parent")"
     done
 
-    sudo chown -R "${APP_USER}:www-data" "$APP_DIR"
-    # ug+rwX everywhere, o-rwx. Storage + bootstrap/cache also group-writable
-    # so the www-data FPM process can write cached views / logs.
+    # Add bureau to www-data group so it can read .env (640 owner+group)
+    # and write to storage via group perms. Idempotent.
+    sudo usermod -a -G www-data "$APP_USER" 2>/dev/null || true
+
+    sudo chown -R "${install_user}:www-data" "$APP_DIR"
+
+    # Dirs 2755 (setgid so new files inherit www-data group), files 644 —
+    # world-readable but not writable, which is the canonical Laravel
+    # deploy shape. php-fpm (www-data) reads via group, everyone else
+    # just reads. No world-write anywhere.
     sudo find "$APP_DIR" -type d -exec chmod 2755 {} +
     sudo find "$APP_DIR" -type f -exec chmod 644 {} +
     [[ -f "${APP_DIR}/artisan" ]] && sudo chmod +x "${APP_DIR}/artisan"
     [[ -d "${APP_DIR}/vendor/bin" ]] && sudo chmod -R +x "${APP_DIR}/vendor/bin" 2>/dev/null || true
     [[ -d "${APP_DIR}/node_modules/.bin" ]] && sudo chmod -R +x "${APP_DIR}/node_modules/.bin" 2>/dev/null || true
     [[ -d "${APP_DIR}/scripts/deploy" ]] && sudo chmod +x "${APP_DIR}/scripts/deploy"/*.sh 2>/dev/null || true
-    sudo mkdir -p "${APP_DIR}/storage/framework"/{cache,sessions,testing,views} "${APP_DIR}/storage/logs" "${APP_DIR}/bootstrap/cache"
-    sudo chown -R "${APP_USER}:www-data" "${APP_DIR}/storage" "${APP_DIR}/bootstrap/cache"
-    sudo chmod -R ug+rwX,o-rwx "${APP_DIR}/storage" "${APP_DIR}/bootstrap/cache"
 
-    success "Ownership → ${APP_USER}:www-data; storage/ + bootstrap/cache/ writable."
+    # Writable dirs — group-writable + setgid so bureau (in www-data group)
+    # can write queue-log / cache files without escalation. Still o-rwx.
+    sudo mkdir -p "${APP_DIR}/storage/framework"/{cache,sessions,testing,views} "${APP_DIR}/storage/logs" "${APP_DIR}/bootstrap/cache"
+    sudo chown -R "${install_user}:www-data" "${APP_DIR}/storage" "${APP_DIR}/bootstrap/cache"
+    sudo chmod -R u+rwX,g+rwX,o-rwx "${APP_DIR}/storage" "${APP_DIR}/bootstrap/cache"
+    sudo find "${APP_DIR}/storage" "${APP_DIR}/bootstrap/cache" -type d -exec chmod g+s {} +
+
+    success "Owner → ${install_user}:www-data; ${APP_USER} added to www-data group; storage/ + bootstrap/cache/ group-writable."
 }
 
 step_env() {
@@ -411,8 +429,9 @@ step_env() {
     ensure_mail_config
     ensure_backup_password
 
+    local install_user="${SUDO_USER:-$USER}"
     if ! sudo test -f "${APP_DIR}/.env"; then
-        sudo -u "$APP_USER" cp "${APP_DIR}/.env.example" "${APP_DIR}/.env"
+        sudo -u "$install_user" cp "${APP_DIR}/.env.example" "${APP_DIR}/.env"
     fi
 
     # Generate APP_KEY if empty — the app won't boot without one.
@@ -485,8 +504,11 @@ step_env() {
 
     env_set BACKUP_ARCHIVE_PASSWORD "$BACKUP_ARCHIVE_PASSWORD"
 
-    # .env carries APP_KEY, DB creds, OAuth secrets → owner:www-data, 640.
-    sudo chown "${APP_USER}:www-data" "${APP_DIR}/.env"
+    # .env carries APP_KEY, DB creds, OAuth secrets. Owner is the installing
+    # user so `git pull` / editing stays ergonomic; group www-data so php-fpm
+    # (www-data) and bureau (added to www-data in step_permissions) can read.
+    # Mode 640 — no world access.
+    sudo chown "${install_user}:www-data" "${APP_DIR}/.env"
     sudo chmod 640 "${APP_DIR}/.env"
 
     success ".env configured (mailer=${mailer})."
@@ -494,20 +516,29 @@ step_env() {
 
 step_composer() {
     step "Composer dependencies"
-    sudo -u "$APP_USER" bash -lc "cd '${APP_DIR}' && composer install --no-dev --optimize-autoloader --no-interaction --quiet"
+    # Run as the installing user (owns the repo). composer's "don't run as
+    # root" warning is avoided because the installer itself runs as a
+    # regular user — that was the whole reason we refactored away from
+    # `sudo bash install.sh`.
+    local install_user="${SUDO_USER:-$USER}"
+    sudo -u "$install_user" bash -lc "cd '${APP_DIR}' && composer install --no-dev --optimize-autoloader --no-interaction --quiet"
     success "Composer packages installed."
 }
 
 step_frontend() {
     step "Frontend build"
-    # Node/npm are symlinked in /usr/local/bin so bureau's shell finds them.
-    sudo -u "$APP_USER" bash -lc "cd '${APP_DIR}' && npm ci --silent && npm run build"
+    local install_user="${SUDO_USER:-$USER}"
+    sudo -u "$install_user" bash -lc "cd '${APP_DIR}' && npm ci --silent && npm run build"
     success "Vite build complete."
 }
 
 step_artisan() {
     step "Artisan — migrations and seeders"
-    local art="sudo -u $APP_USER php ${APP_DIR}/artisan"
+    # artisan runs as install_user too — needs to read .env (via www-data
+    # group) and write storage (via group). Migrations use PDO so no
+    # filesystem writes beyond the compiled cache.
+    local install_user="${SUDO_USER:-$USER}"
+    local art="sudo -u $install_user php ${APP_DIR}/artisan"
 
     $art migrate --force
     success "Migrations applied."
@@ -534,8 +565,9 @@ step_artisan() {
 
 step_storage_link() {
     step "Storage link"
+    local install_user="${SUDO_USER:-$USER}"
     if [[ ! -L "${APP_DIR}/public/storage" ]]; then
-        sudo -u "$APP_USER" php "${APP_DIR}/artisan" storage:link
+        sudo -u "$install_user" php "${APP_DIR}/artisan" storage:link
         success "public/storage → ../storage/app/public."
     else
         info "public/storage already linked."
