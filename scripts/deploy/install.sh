@@ -261,8 +261,6 @@ if [[ -f "${_detected_app_dir}/artisan" ]]; then
 else
     APP_DIR="${APP_DIR:-$(pwd)}"
 fi
-APP_USER="${APP_USER:-bureau}"
-DOMAIN="${DOMAIN:-bureau.homes}"
 PHP_VER="${PHP_VER:-8.3}"
 NODE_VER="${NODE_VER:-22}"
 NVM_DIR="${NVM_DIR:-/opt/nvm}"
@@ -552,8 +550,8 @@ SQL
         env_set DB_CONNECTION mariadb
         env_set DB_HOST       127.0.0.1
         env_set DB_PORT       3306
-        env_set DB_DATABASE   bureau
-        env_set DB_USERNAME   bureau
+        env_set DB_DATABASE   "$DB_NAME"
+        env_set DB_USERNAME   "$DB_USER"
         env_set DB_PASSWORD   "$DB_PASSWORD"
     fi
 
@@ -1043,7 +1041,7 @@ echo
 if [[ ${#ONLY_STEPS[@]} -eq 0 ]]; then
     echo -e "  ${BOLD}App:${RESET}     https://${DOMAIN}"
     echo -e "  ${BOLD}Health:${RESET}  https://${DOMAIN}/up"
-    echo -e "  ${BOLD}Nginx:${RESET}   /etc/nginx/sites-available/bureau.conf"
+    echo -e "  ${BOLD}Nginx:${RESET}   /etc/nginx/sites-available/${NGINX_SITE}"
     echo -e "  ${BOLD}Cert:${RESET}    /etc/letsencrypt/live/${DOMAIN}/"
     echo -e "  ${BOLD}Queue:${RESET}   systemctl status ${QUEUE_UNIT}  |  journalctl -u ${QUEUE_UNIT} -f"
     echo -e "  ${BOLD}Cron:${RESET}    sudo crontab -u ${APP_USER} -l"
