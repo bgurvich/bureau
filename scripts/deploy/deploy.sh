@@ -41,6 +41,16 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 APP_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 cd "$APP_DIR"
 
+# Prime sudo up front — the php-fpm reload later uses `sudo -n` so it fails
+# fast instead of prompting mid-deploy. Keep the credential warm for the run.
+if ! sudo -v; then
+    echo "sudo authentication failed — aborting." >&2
+    exit 1
+fi
+( while true; do sudo -nv 2>/dev/null; sleep 60; done ) &
+SUDO_KEEPALIVE_PID=$!
+trap '[[ -n "${SUDO_KEEPALIVE_PID:-}" ]] && kill "$SUDO_KEEPALIVE_PID" 2>/dev/null || true' EXIT
+
 export NVM_DIR="${NVM_DIR:-/opt/nvm}"
 [ -s "$NVM_DIR/nvm.sh" ] && source "$NVM_DIR/nvm.sh"
 
@@ -255,8 +265,8 @@ ok "storage/framework + bootstrap/cache → ug+rwX,o-rwx (scoped to files we own
 echo ""
 echo -e "${BOLD}── Restart services ─────────────────────────────────────${RESET}"
 # reload needs root; use `sudo -n` so it fails loudly instead of prompting
-# for a password mid-deploy. install.sh installs a /etc/sudoers.d rule that
-# grants the deploy user passwordless reload for exactly these services.
+# for a password mid-deploy. The top-of-script `sudo -v` + keepalive keeps
+# credentials warm for the length of the run.
 if command -v systemctl &>/dev/null; then
     PHP_FPM_UNIT=$(systemctl list-units --type=service --no-pager --plain \
         | awk '/php.*fpm/ {print $1}' | head -1)
@@ -264,7 +274,7 @@ if command -v systemctl &>/dev/null; then
         if sudo -n systemctl reload "$PHP_FPM_UNIT" 2>/dev/null; then
             ok "Reloaded $PHP_FPM_UNIT"
         else
-            warn "Could not reload $PHP_FPM_UNIT — add a sudoers rule: \"$(id -un) ALL=(root) NOPASSWD: /bin/systemctl reload $PHP_FPM_UNIT\""
+            warn "Could not reload $PHP_FPM_UNIT — sudo credentials expired or missing; reload manually: sudo systemctl reload $PHP_FPM_UNIT"
         fi
     else
         warn "No php-fpm systemd unit found"
