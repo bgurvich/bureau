@@ -116,3 +116,30 @@ it('toggles a row into and out of selected', function () {
         ->call('toggleRow', $a)
         ->assertSet('selected', []);
 });
+
+it('header checkbox: selectAllVisible adds every visible row; deselectAllVisible drops only those, preserving cross-page picks', function () {
+    authedInHousehold();
+    [$a, $b, $c] = bulkSeed();
+
+    // Simulate a cross-page pick by seeding an id that isn't in the
+    // current visible set. We use a non-existent id so it's a
+    // deliberately external token.
+    $external = 9999;
+
+    // Widen the date window past the seed rows' future-dated
+    // occurred_on values so they're actually "visible" to the
+    // paginator when selectAllVisible runs.
+    $component = Livewire::test('transactions-index')
+        ->set('from', '2026-07-01')
+        ->set('to', '2026-07-31')
+        ->set('selected', [$external]);
+
+    // Click header when none of the visible are selected → all get added.
+    $component->call('selectAllVisible');
+    $after = $component->get('selected');
+    expect($after)->toEqualCanonicalizing([$external, $a, $b, $c]);
+
+    // Click header again → deselect only visible, keep the external pick.
+    $component->call('deselectAllVisible');
+    expect($component->get('selected'))->toBe([$external]);
+});

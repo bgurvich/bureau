@@ -141,6 +141,13 @@ class extends Component
         $this->selected = array_values(array_unique(array_merge($this->selected, $ids)));
     }
 
+    /** Drop only the visible page from the selection; cross-page picks stay. */
+    public function deselectAllVisible(): void
+    {
+        $visible = $this->transactions->pluck('id')->map(fn ($v) => (int) $v)->all();
+        $this->selected = array_values(array_diff($this->selected, $visible));
+    }
+
     public function clearSelection(): void
     {
         $this->selected = [];
@@ -478,11 +485,25 @@ class extends Component
             {{ __('No transactions match those filters.') }}
         </div>
     @else
+        @php
+            $visibleIds = $this->transactions->pluck('id')->map(fn ($v) => (int) $v)->all();
+            $visibleSel = array_values(array_intersect($selected, $visibleIds));
+            $allVisibleSelected = count($visibleIds) > 0 && count($visibleSel) === count($visibleIds);
+            $someVisibleSelected = count($visibleSel) > 0 && ! $allVisibleSelected;
+        @endphp
+
         <div class="overflow-x-auto rounded-xl border border-neutral-800 bg-neutral-900/40">
             <table class="w-full min-w-[60rem] text-sm">
                 <thead class="border-b border-neutral-800 text-left">
                     <tr>
-                        <th scope="col" class="w-10 px-3 py-2"><span class="sr-only">{{ __('Select') }}</span></th>
+                        <th scope="col" class="w-10 px-3 py-2">
+                            <input type="checkbox"
+                                   wire:click="{{ $allVisibleSelected ? 'deselectAllVisible' : 'selectAllVisible' }}"
+                                   @checked($allVisibleSelected)
+                                   x-bind:indeterminate="{{ $someVisibleSelected ? 'true' : 'false' }}"
+                                   aria-label="{{ $allVisibleSelected ? __('Deselect all visible') : __('Select all visible') }}"
+                                   class="rounded border-neutral-700 bg-neutral-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                        </th>
                         <th scope="col" class="w-10 px-2 py-2"><span class="sr-only">{{ __('Scan') }}</span></th>
                         <x-ui.sortable-header column="occurred_on" :label="__('Date')" :sort-by="$sortBy" :sort-dir="$sortDir" />
                         <x-ui.sortable-header column="description" :label="__('Description')" :sort-by="$sortBy" :sort-dir="$sortDir" />
