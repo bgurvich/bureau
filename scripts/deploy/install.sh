@@ -117,7 +117,14 @@ for _arg in "$@"; do
         echo "  NGINX_SITE         = \${APP_NAME}.conf"
         echo "  QUEUE_UNIT         = \${APP_NAME}-queue"
         echo
+        echo "Mail (env step — prompted if not set):"
+        echo "  MAIL_PROVIDER      = log|postmark|smtp"
+        echo "  POSTMARK_API_KEY   = <server token>            # when MAIL_PROVIDER=postmark"
+        echo "  MAIL_HOST/PORT/USER/PASS/ENCRYPTION            # when MAIL_PROVIDER=smtp"
+        echo "  MAIL_FROM_ADDRESS  = notifications@\${DOMAIN}"
+        echo
         echo "Example: APP_NAME=myapp DOMAIN=myapp.example.com bash install.sh"
+        echo "Example: MAIL_PROVIDER=postmark POSTMARK_API_KEY=xxx bash install.sh --only env"
         exit 0
     fi
 done
@@ -249,10 +256,14 @@ PHP_VER="${PHP_VER:-8.3}"
 NODE_VER="${NODE_VER:-22}"
 NVM_DIR="${NVM_DIR:-/opt/nvm}"
 DB_PASSWORD="${DB_PASSWORD:-}"
+MAIL_PROVIDER="${MAIL_PROVIDER:-}"      # log | postmark | smtp (prompted if blank)
 MAIL_HOST="${MAIL_HOST:-}"
 MAIL_PORT="${MAIL_PORT:-}"
 MAIL_USER="${MAIL_USER:-}"
 MAIL_PASS="${MAIL_PASS:-}"
+MAIL_FROM_ADDRESS="${MAIL_FROM_ADDRESS:-}"
+MAIL_ENCRYPTION="${MAIL_ENCRYPTION:-}"
+POSTMARK_API_KEY="${POSTMARK_API_KEY:-}"
 ADMIN_EMAIL="${ADMIN_EMAIL:-}"
 BACKUP_ARCHIVE_PASSWORD="${BACKUP_ARCHIVE_PASSWORD:-}"
 
@@ -326,13 +337,38 @@ ensure_db_password() {
     fi
 }
 ensure_mail_config() {
-    if [[ -z "$MAIL_HOST" && -z "${_MAIL_PROMPTED:-}" ]]; then
-        prompt MAIL_HOST "SMTP host (blank → mail log driver)" ""
-        prompt MAIL_PORT "SMTP port"                           "587"
-        prompt MAIL_USER "SMTP username"                       "noreply@${DOMAIN}"
-        prompt MAIL_PASS "SMTP password"                       "" secret
-        _MAIL_PROMPTED=1
+    # Three outbound paths:
+    #   log      → mail goes to storage/logs/laravel.log, nothing sent.
+    #   postmark → Laravel's native postmark transport via HTTP API. No SMTP
+    #              plumbing, just the server token. Recommended for production.
+    #   smtp     → generic SMTP (any provider or self-hosted MTA).
+    # $MAIL_PROVIDER can be pre-set in env to bypass the interactive picker.
+    [[ -n "${_MAIL_PROMPTED:-}" ]] && return
+
+    if [[ -z "${MAIL_PROVIDER:-}" ]]; then
+        prompt MAIL_PROVIDER "Mail provider [log/postmark/smtp]" "log"
     fi
+
+    case "$MAIL_PROVIDER" in
+        postmark)
+            prompt POSTMARK_API_KEY "Postmark server API token" "" secret
+            prompt MAIL_FROM_ADDRESS "Outbound From: address" "notifications@${DOMAIN}"
+            ;;
+        smtp)
+            prompt MAIL_HOST "SMTP host"                                 "smtp.example.com"
+            prompt MAIL_PORT "SMTP port"                                 "587"
+            prompt MAIL_USER "SMTP username"                             "noreply@${DOMAIN}"
+            prompt MAIL_PASS "SMTP password"                             "" secret
+            prompt MAIL_FROM_ADDRESS "Outbound From: address"            "${MAIL_USER:-noreply@${DOMAIN}}"
+            ;;
+        log|"")
+            MAIL_PROVIDER="log"
+            ;;
+        *)
+            die "MAIL_PROVIDER must be one of: log, postmark, smtp (got '${MAIL_PROVIDER}')"
+            ;;
+    esac
+    _MAIL_PROMPTED=1
 }
 ensure_backup_password() {
     if [[ -z "$BACKUP_ARCHIVE_PASSWORD" ]]; then
@@ -556,6 +592,10 @@ step_env() {
         session_secure="false"
     fi
 
+    # ensure_mail_config already ran (via env step preamble) — $MAIL_PROVIDER
+    # is one of log|postmark|smtp at this point.
+    local mailer="${MAIL_PROVIDER:-log}"
+
     env_set APP_NAME             "\"${DISPLAY_NAME}\""
     env_set APP_ENV              "$app_env"
     env_set APP_DEBUG            "$app_debug"
@@ -601,13 +641,30 @@ step_env() {
     # (config/database.php) so queued jobs land on REDIS_QUEUE_DB.
     env_set REDIS_QUEUE_CONNECTION "queue"
 
+    # Mail transport — shape depends on $MAIL_PROVIDER (log/postmark/smtp).
+    # From-address is common to all. Postmark's native transport bypasses
+    # SMTP entirely (uses the HTTP API via POSTMARK_API_KEY) so host/port/
+    # user/pass stay unset on that path. Config / services.php already has
+    # the postmark block that reads POSTMARK_API_KEY.
     env_set MAIL_MAILER          "$mailer"
-    env_set MAIL_HOST            "${MAIL_HOST:-127.0.0.1}"
-    env_set MAIL_PORT            "${MAIL_PORT:-2525}"
-    env_set MAIL_USERNAME        "${MAIL_USER:-null}"
-    env_set MAIL_PASSWORD        "${MAIL_PASS:-null}"
-    env_set MAIL_FROM_ADDRESS    "\"${MAIL_USER:-noreply@${DOMAIN}}\""
     env_set MAIL_FROM_NAME       '"${APP_NAME}"'
+    env_set MAIL_FROM_ADDRESS    "\"${MAIL_FROM_ADDRESS:-noreply@${DOMAIN}}\""
+
+    case "$mailer" in
+        postmark)
+            env_set POSTMARK_API_KEY "$POSTMARK_API_KEY"
+            ;;
+        smtp)
+            env_set MAIL_HOST            "$MAIL_HOST"
+            env_set MAIL_PORT            "${MAIL_PORT:-587}"
+            env_set MAIL_USERNAME        "${MAIL_USER:-null}"
+            env_set MAIL_PASSWORD        "${MAIL_PASS:-null}"
+            env_set MAIL_ENCRYPTION      "${MAIL_ENCRYPTION:-tls}"
+            ;;
+        log)
+            # Nothing else to set; laravel.log captures the raw message.
+            ;;
+    esac
 
     env_set LOG_CHANNEL          "stack"
     env_set LOG_STACK            "single"
