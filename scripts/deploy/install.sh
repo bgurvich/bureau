@@ -589,9 +589,13 @@ step_permissions() {
         parent="$(dirname "$parent")"
     done
 
-    # Add bureau to www-data group so it can read .env (640 owner+group)
-    # and write to storage via group perms. Idempotent.
+    # Add bureau + the install user to www-data so both can read .env
+    # (640 owner+group) and write storage via group perms. Idempotent.
+    # The install user joining www-data is what lets manual `chgrp
+    # www-data` work without sudo — the deploy script uses sudo anyway,
+    # but ad-hoc repair (ls -la, chmod, chgrp) is friendlier this way.
     sudo usermod -a -G www-data "$APP_USER" 2>/dev/null || true
+    sudo usermod -a -G www-data "$install_user" 2>/dev/null || true
 
     sudo chown -R "${install_user}:www-data" "$APP_DIR"
 
@@ -792,9 +796,26 @@ step_artisan() {
         info "Database has ${user_count} user(s) — skipping seed."
     fi
 
+    # Pin setgid + group on the cache parents BEFORE artisan writes.
+    # Without setgid on bootstrap/cache the cached config.php et al are
+    # born owned install_user:install_user (the deploy user's primary
+    # group) — php-fpm runs as www-data and "Permission denied" on the
+    # require(bootstrap/cache/config.php) during bootstrap, which fires
+    # before Laravel's logger initialises so nothing lands in
+    # laravel.log. Setting setgid here makes every fresh file inherit
+    # www-data as its group, which is what www-data needs to read it.
+    sudo chgrp -R www-data "${APP_DIR}/storage" "${APP_DIR}/bootstrap/cache"
+    sudo chmod g+rwxs "${APP_DIR}/storage/framework" "${APP_DIR}/bootstrap/cache"
+    sudo find "${APP_DIR}/storage" "${APP_DIR}/bootstrap/cache" -type d -exec chmod g+s {} +
+
     $art config:cache --quiet || true
     $art view:cache   --quiet || true
     $art event:cache  --quiet || true
+
+    # Post-write normalisation — the files picked up the right group via
+    # setgid, but we also want consistent perms (group-readable,
+    # world-unreadable) so www-data reads and nobody else does.
+    sudo find "${APP_DIR}/bootstrap/cache" "${APP_DIR}/storage/framework" -type f -exec chmod ug+rw,o-rwx {} +
 
     sudo systemctl reload "php${PHP_VER}-fpm" 2>/dev/null || true
     success "Caches warmed (FPM reloaded)."
@@ -995,16 +1016,17 @@ UNIT
     # this, deploy.sh either prompts for a password mid-run (interactive)
     # or silently skips the reload (non-interactive). Scoped to only
     # these units so we're not handing out broad root.
+    local install_user="${SUDO_USER:-$USER}"
     local php_fpm_unit
     php_fpm_unit=$(systemctl list-units --type=service --no-pager --plain \
         | awk '/php.*fpm/ {print $1}' | head -1)
     php_fpm_unit="${php_fpm_unit:-php${PHP_VER}-fpm.service}"
     sudo tee "/etc/sudoers.d/${APP_NAME}-deploy" > /dev/null <<SUDO
-${INSTALL_USER} ALL=(root) NOPASSWD: /bin/systemctl reload ${php_fpm_unit}, /bin/systemctl reload ${QUEUE_UNIT}, /bin/systemctl restart ${QUEUE_UNIT}
+${install_user} ALL=(root) NOPASSWD: /bin/systemctl reload ${php_fpm_unit}, /bin/systemctl reload ${QUEUE_UNIT}, /bin/systemctl restart ${QUEUE_UNIT}
 SUDO
     sudo chmod 440 "/etc/sudoers.d/${APP_NAME}-deploy"
     sudo visudo -cf "/etc/sudoers.d/${APP_NAME}-deploy" > /dev/null \
-        && success "sudoers rule: ${INSTALL_USER} can reload ${php_fpm_unit} + ${QUEUE_UNIT} without a password." \
+        && success "sudoers rule: ${install_user} can reload ${php_fpm_unit} + ${QUEUE_UNIT} without a password." \
         || { sudo rm -f "/etc/sudoers.d/${APP_NAME}-deploy"; die "sudoers rule failed visudo -c; rolled back"; }
 }
 
