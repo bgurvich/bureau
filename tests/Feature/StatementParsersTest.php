@@ -100,6 +100,63 @@ TXT;
         ->and($amounts)->not->toContain(16287.02);
 });
 
+it('Wells Fargo checking PDF parser merges multi-line transaction descriptions', function () {
+    // Regression: long descriptions wrap onto a second row with no date
+    // and no money column. The old parser skipped continuation lines
+    // entirely, so the full description ("... 1 Gurvich Boris") was
+    // never captured on the transaction.
+    $text = <<<'TXT'
+Wells Fargo Bank
+Statement Period 01/01/2026 - 01/31/2026
+Account ending in 1234
+Beginning balance on 1/1  $3,050.63
+Ending balance on 1/31  $13,087.02
+
+                                                                      Deposits/    Withdrawals/    Ending daily
+Date   Description                                                    Additions    Subtractions    balance
+1/25   Uni021-Unirgy Ll Dirdep 012518                                   9,548.91                      13,787.02
+       1 Gurvich Boris
+1/26   Direct Dep Acme Corp Payroll                                     2,500.00                      16,287.02
+       Period ending 01/25
+TXT;
+
+    $stmt = (new WellsFargoCheckingStatementParser)->parse($text);
+    expect(count($stmt->transactions))->toBe(2);
+
+    $descs = array_map(fn ($t) => $t->description, $stmt->transactions);
+    expect($descs[0])->toContain('Uni021-Unirgy Ll Dirdep 012518')
+        ->and($descs[0])->toContain('1 Gurvich Boris')
+        ->and($descs[1])->toContain('Direct Dep Acme Corp Payroll')
+        ->and($descs[1])->toContain('Period ending 01/25');
+});
+
+it('Wells Fargo checking PDF parser header-anchors columns so withdrawals stay negative', function () {
+    // Regression: cluster-based classification misfired when the
+    // deposit column's amount-end happened to sit close to the
+    // withdrawal column's amount-end (short descriptions squeezing
+    // the layout). Header anchoring ignores token positions and
+    // trusts the "Deposits/Additions | Withdrawals/Subtractions"
+    // header line, so a withdrawal that right-aligns even a few
+    // characters inside the deposits column still gets the
+    // withdrawal range bound.
+    $text = <<<'TXT'
+Wells Fargo Bank
+                                                          Deposits/  Withdrawals/  Ending daily
+Date   Description                                        Additions  Subtractions  balance
+1/05   Electric bill                                                      120.50
+1/06   Water bill                                                          45.00
+1/10   Refund                                              15.00
+TXT;
+
+    $stmt = (new WellsFargoCheckingStatementParser)->parse($text);
+    $amounts = array_map(fn ($t) => $t->amount, $stmt->transactions);
+
+    expect(count($stmt->transactions))->toBe(3)
+        ->and($amounts)->toContain(-120.50)
+        ->and($amounts)->toContain(-45.00)
+        ->and($amounts)->toContain(15.00);
+});
+
 it('Wells Fargo checking PDF parser reads amount, not running balance', function () {
     // Regression: the row regex anchored to the last money token on the
     // line, so when WF printed "date description amount running_balance"

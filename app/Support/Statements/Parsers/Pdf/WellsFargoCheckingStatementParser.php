@@ -77,48 +77,158 @@ final class WellsFargoCheckingStatementParser implements StatementParser
         //   (b) Activity Summary — one table with three columns:
         //       Deposits/Additions | Withdrawals/Subtractions |
         //       Ending daily balance. pdftotext -layout preserves the
-        //       horizontal positions, so we cluster money-token end
-        //       offsets across all transaction rows into three columns
-        //       and classify each row's amount by which column it sits in.
+        //       horizontal positions; we prefer anchoring to the header
+        //       line ("Deposits... Withdrawals... Ending...") because
+        //       it's robust to sparse data, and fall back to clustering
+        //       token end-offsets when the header isn't recognisable.
         //
         // We detect (b) first because it's unambiguous when it matches;
         // (a) is the fallback for simple layouts without aligned columns.
         $candidates = $this->gatherCandidateRows($lines);
-        $columns = $this->detectThreeColumnLayout($candidates);
+        $bounds = $this->columnBoundsFromHeader($lines)
+            ?? $this->columnBoundsFromClustering($candidates);
 
-        return $columns !== null
-            ? $this->extractByColumns($candidates, $columns, $assumeYear)
+        return $bounds !== null
+            ? $this->extractByColumns($candidates, $bounds, $assumeYear)
             : $this->extractBySections($lines, $assumeYear);
     }
 
     /**
-     * Pull every line that looks like a transaction row (date prefix +
-     * at least one money-shaped token). Each entry carries the parsed
-     * money tokens with their end-character offsets, which the column
-     * clusterer uses to figure out where deposits / withdrawals /
-     * balance align.
+     * Boundaries are exclusive upper limits: a token at position P is in
+     * column i if $bounds[i-1] <= P < $bounds[i] (with $bounds[-1] = 0).
+     *   bounds[0] = end of Deposits column
+     *   bounds[1] = end of Withdrawals column
+     *   bounds[2] = end of Balance column (effectively the line length)
+     * Same shape from header-anchoring OR clustering so the classifier
+     * below doesn't care how we got them.
      *
      * @param  array<int, string>  $lines
-     * @return array<int, array{line: string, tokens: array<int, array{text: string, end: int}>}>
+     * @return array{0: int, 1: int, 2: int}|null
+     */
+    private function columnBoundsFromHeader(array $lines): ?array
+    {
+        $anchors = $this->detectColumnsFromHeader($lines);
+        if ($anchors === null) {
+            return null;
+        }
+
+        // Header gives column START positions — tokens in column i are
+        // the money values that right-align somewhere between the
+        // column's start and the NEXT column's start. So the upper
+        // bound of each column is the start of the one after it.
+        return [$anchors[1], $anchors[2], PHP_INT_MAX];
+    }
+
+    /**
+     * @param  array<int, array{line: string, tokens: array<int, array{text: string, end: int}>, continuation: array<int, string>}>  $candidates
+     * @return array{0: int, 1: int, 2: int}|null
+     */
+    private function columnBoundsFromClustering(array $candidates): ?array
+    {
+        $centers = $this->detectThreeColumnLayout($candidates);
+        if ($centers === null) {
+            return null;
+        }
+
+        // Clustering gives column CENTER positions (end-of-token
+        // averages). Boundaries go at the midpoints between adjacent
+        // centers, and the Balance column extends to the right edge.
+        return [
+            (int) floor(($centers[0] + $centers[1]) / 2),
+            (int) floor(($centers[1] + $centers[2]) / 2),
+            PHP_INT_MAX,
+        ];
+    }
+
+    /**
+     * Anchor columns to the header line — "Deposits" / "Withdrawals" /
+     * "Ending" or "balance", left-to-right. Returns three positions
+     * (start-of-column markers) used as classification anchors. Null if
+     * the statement doesn't look like an Activity Summary layout.
+     *
+     * @param  array<int, string>  $lines
+     * @return array{0: int, 1: int, 2: int}|null
+     */
+    private function detectColumnsFromHeader(array $lines): ?array
+    {
+        foreach ($lines as $line) {
+            // Same line must contain Deposits + Withdrawals. Balance
+            // header word is often on the same line ("Ending daily
+            // balance") but sometimes wraps to a second line — we take
+            // the first of "Ending" / "balance" we find past Withdrawals.
+            $dep = stripos($line, 'Deposits');
+            $wd = stripos($line, 'Withdrawals');
+            if ($dep === false || $wd === false || $dep >= $wd) {
+                continue;
+            }
+            $bal = false;
+            foreach (['Ending', 'balance', 'Balance'] as $candidate) {
+                $p = stripos($line, $candidate, $wd + strlen('Withdrawals'));
+                if ($p !== false) {
+                    $bal = $p;
+                    break;
+                }
+            }
+            if ($bal === false) {
+                continue;
+            }
+
+            return [$dep, $wd, $bal];
+        }
+
+        return null;
+    }
+
+    /**
+     * Pull every line that looks like a transaction row (date prefix +
+     * at least one money-shaped token). WF checking sometimes wraps a
+     * long description onto a SECOND line with no date and no money —
+     * those lines belong to the previous transaction and are captured
+     * in $continuation so extractByColumns can append them to the
+     * description. An intermediate blank line, a header row, or a line
+     * that starts with a date all close the continuation window for
+     * the previous row.
+     *
+     * @param  array<int, string>  $lines
+     * @return array<int, array{line: string, tokens: array<int, array{text: string, end: int}>, continuation: array<int, string>}>
      */
     private function gatherCandidateRows(array $lines): array
     {
         $out = [];
         foreach ($lines as $line) {
-            if (! preg_match('/^\s*\d{1,2}\/\d{1,2}\s/', $line)) {
+            // Transaction-start line — date prefix + at least one money
+            // token right-aligned somewhere on the line.
+            if (preg_match('/^\s*\d{1,2}\/\d{1,2}\s/', $line)
+                && preg_match_all('/-?\$?[\d,]+\.\d{2}/', $line, $m, PREG_OFFSET_CAPTURE)
+                && $m[0] !== []) {
+                $tokens = [];
+                foreach ($m[0] as $hit) {
+                    $tokens[] = ['text' => $hit[0], 'end' => $hit[1] + strlen($hit[0])];
+                }
+                $out[] = ['line' => $line, 'tokens' => $tokens, 'continuation' => []];
+
                 continue;
             }
-            if (! preg_match_all('/-?\$?[\d,]+\.\d{2}/', $line, $m, PREG_OFFSET_CAPTURE)) {
+
+            // Blank / whitespace-only — close any pending continuation.
+            if (trim($line) === '') {
                 continue;
             }
-            if ($m[0] === []) {
+            // Header-ish lines (column titles, section dividers) are
+            // anything that mentions "Deposits" or "Withdrawals" or
+            // "Balance" without a money token — skip them.
+            if (preg_match('/Deposits|Withdrawals|Ending|Balance/i', $line)
+                && ! preg_match('/\d{1,2}\/\d{1,2}/', $line)) {
                 continue;
             }
-            $tokens = [];
-            foreach ($m[0] as $hit) {
-                $tokens[] = ['text' => $hit[0], 'end' => $hit[1] + strlen($hit[0])];
+            // Line with no date and no money → continuation text for
+            // the previous row if we have one. Cap at three extension
+            // lines so a runaway footer block can't be swallowed.
+            if (! empty($out) && ! preg_match('/^\s*\d{1,2}\/\d{1,2}\s/', $line)) {
+                if (count($out[count($out) - 1]['continuation']) < 3) {
+                    $out[count($out) - 1]['continuation'][] = trim($line);
+                }
             }
-            $out[] = ['line' => $line, 'tokens' => $tokens];
         }
 
         return $out;
@@ -190,13 +300,13 @@ final class WellsFargoCheckingStatementParser implements StatementParser
     }
 
     /**
-     * @param  array<int, array{line: string, tokens: array<int, array{text: string, end: int}>}>  $candidates
-     * @param  array{0: int, 1: int, 2: int}  $columns
+     * @param  array<int, array{line: string, tokens: array<int, array{text: string, end: int}>, continuation: array<int, string>}>  $candidates
+     * @param  array{0: int, 1: int, 2: int}  $bounds
      * @return array<int, ParsedTransaction>
      */
-    private function extractByColumns(array $candidates, array $columns, int $assumeYear): array
+    private function extractByColumns(array $candidates, array $bounds, int $assumeYear): array
     {
-        [$depEnd, $wdEnd, $balEnd] = $columns;
+        [$depHigh, $wdHigh, $balHigh] = $bounds;
         $rows = [];
         foreach ($candidates as $cand) {
             $line = $cand['line'];
@@ -208,23 +318,26 @@ final class WellsFargoCheckingStatementParser implements StatementParser
                 continue;
             }
 
-            // The transaction amount is the leftmost money token whose
-            // end-offset lands in the deposit OR withdrawal column — any
-            // token clustered on the balance column is the running
-            // balance and doesn't belong in the amount field.
+            // Classify each token by which column range its end-offset
+            // falls into: deposit column < depHigh, withdrawal column
+            // [depHigh, wdHigh), balance column [wdHigh, balHigh). The
+            // first money token that isn't in the balance column is
+            // the transaction amount; the balance token (if any) feeds
+            // the runningBalance field.
             $amountToken = null;
+            $amountColumn = null;       // 'dep' | 'wd'
             $balanceToken = null;
             foreach ($cand['tokens'] as $tok) {
-                $dBal = abs($tok['end'] - $balEnd);
-                $dDep = abs($tok['end'] - $depEnd);
-                $dWd = abs($tok['end'] - $wdEnd);
-                if ($dBal < $dDep && $dBal < $dWd) {
+                $col = $tok['end'] < $depHigh ? 'dep'
+                    : ($tok['end'] < $wdHigh ? 'wd' : 'bal');
+                if ($col === 'bal') {
                     $balanceToken = $tok;
 
                     continue;
                 }
                 if ($amountToken === null) {
                     $amountToken = $tok;
+                    $amountColumn = $col;
                 }
             }
             if ($amountToken === null) {
@@ -235,14 +348,23 @@ final class WellsFargoCheckingStatementParser implements StatementParser
             if ($amount === null) {
                 continue;
             }
-            $isDeposit = abs($amountToken['end'] - $depEnd) <= abs($amountToken['end'] - $wdEnd);
-            if (! $isDeposit && $amount > 0) {
+            if ($amountColumn === 'wd' && $amount > 0) {
                 $amount = -$amount;
+            }
+
+            // Merge continuation lines into the description. Collapse
+            // runs of whitespace so reconstructed strings read cleanly
+            // even when pdftotext-layout padded each fragment with
+            // columnar whitespace.
+            $description = trim($m[2]);
+            if (! empty($cand['continuation'])) {
+                $description = trim($description.' '.implode(' ', $cand['continuation']));
+                $description = (string) preg_replace('/\s+/', ' ', $description);
             }
 
             $rows[] = new ParsedTransaction(
                 occurredOn: $date,
-                description: trim($m[2]),
+                description: $description,
                 amount: $amount,
                 runningBalance: $balanceToken !== null ? self::money($balanceToken['text']) : null,
                 rawRow: trim($line),
