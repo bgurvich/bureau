@@ -22,7 +22,12 @@
 #
 # Available steps (in order):
 #   packages, mariadb, app-user, permissions, env, composer, frontend,
-#   artisan, storage-link, nginx, ssl, queue-worker, scheduler, firewall.
+#   artisan, storage-link, owner, nginx, ssl, queue-worker, scheduler,
+#   firewall.
+#
+# `--only owner` is the password-reset / owner-change hatch for an
+# already-provisioned box: prompts, writes SEED_OWNER_* to .env, and
+# updates the live user in-place.
 #
 # firewall is off unless you pass `--only firewall`. Everything else runs
 # by default.
@@ -123,6 +128,11 @@ for _arg in "$@"; do
         echo "  POSTMARK_WEBHOOK_USER / _PASSWORD                # inbound-webhook basic-auth pair (auto-gen if blank)"
         echo "  MAIL_HOST/PORT/USER/PASS/ENCRYPTION            # when MAIL_PROVIDER=smtp"
         echo "  MAIL_FROM_ADDRESS  = notifications@\${DOMAIN}"
+        echo
+        echo "Owner (owner step — prompted if not set):"
+        echo "  OWNER_EMAIL        = owner@\${DOMAIN}"
+        echo "  OWNER_NAME         = Owner"
+        echo "  OWNER_PASSWORD     = <24-char random if blank>"
         echo
         echo "Example: APP_NAME=myapp DOMAIN=myapp.example.com bash install.sh"
         echo "Example: MAIL_PROVIDER=postmark POSTMARK_API_KEY=xxx bash install.sh --only env"
@@ -267,6 +277,9 @@ MAIL_ENCRYPTION="${MAIL_ENCRYPTION:-}"
 POSTMARK_API_KEY="${POSTMARK_API_KEY:-}"
 POSTMARK_WEBHOOK_USER="${POSTMARK_WEBHOOK_USER:-}"
 POSTMARK_WEBHOOK_PASSWORD="${POSTMARK_WEBHOOK_PASSWORD:-}"
+OWNER_EMAIL="${OWNER_EMAIL:-}"
+OWNER_NAME="${OWNER_NAME:-}"
+OWNER_PASSWORD="${OWNER_PASSWORD:-}"
 ADMIN_EMAIL="${ADMIN_EMAIL:-}"
 BACKUP_ARCHIVE_PASSWORD="${BACKUP_ARCHIVE_PASSWORD:-}"
 
@@ -800,6 +813,64 @@ step_storage_link() {
     fi
 }
 
+step_owner() {
+    # App owner account — the first user created by DatabaseSeeder when the
+    # users table is empty. Prompting here does double duty:
+    #   Fresh install: writes SEED_OWNER_* in .env before step_artisan runs,
+    #                  so db:seed picks up the operator's chosen creds
+    #                  (vs baking "owner@bureau.homes / change-me").
+    #   Re-run:        DB already has the owner user; prompts default from
+    #                  whatever's in .env now, updates the live user in-place
+    #                  so this doubles as a "change the admin password" hatch.
+    step "App owner account"
+    local install_user="${SUDO_USER:-$USER}"
+
+    local cur_email cur_name cur_pass
+    cur_email="$(env_read SEED_OWNER_EMAIL)"
+    cur_name="$(env_read SEED_OWNER_NAME)"
+    cur_pass="$(env_read SEED_OWNER_PASSWORD)"
+
+    prompt OWNER_EMAIL "App owner email"    "${cur_email:-owner@${DOMAIN}}"
+    prompt OWNER_NAME  "App owner name"     "${cur_name:-Owner}"
+
+    # Auto-generate a strong default password on first run. Re-run keeps the
+    # existing value unless the operator types a new one.
+    local default_pw="$cur_pass"
+    [[ -z "$default_pw" ]] && default_pw="$(openssl rand -base64 24 | tr -d '/=+\n' | head -c 24)"
+    prompt OWNER_PASSWORD "App owner password" "$default_pw" secret
+
+    env_set SEED_OWNER_EMAIL    "$OWNER_EMAIL"
+    env_set SEED_OWNER_NAME     "\"${OWNER_NAME}\""
+    env_set SEED_OWNER_PASSWORD "$OWNER_PASSWORD"
+
+    # If the DB + users table exist and a user already lives there, update it
+    # in-place so existing sessions stay valid (email/name/password change
+    # without a re-seed). Skip silently on a fresh install — db:seed will
+    # create the user from the .env values in the artisan step.
+    if sudo -u "$install_user" \
+        PREV_EMAIL="$cur_email" \
+        NEW_EMAIL="$OWNER_EMAIL" \
+        NEW_NAME="$OWNER_NAME" \
+        NEW_PASSWORD="$OWNER_PASSWORD" \
+        php "${APP_DIR}/artisan" tinker --execute='
+            if (! \Schema::hasTable("users")) { echo "no-table"; return; }
+            $prev = getenv("PREV_EMAIL");
+            $u = ($prev ? \App\Models\User::where("email", $prev)->first() : null)
+                ?? \App\Models\User::orderBy("id")->first();
+            if (! $u) { echo "no-user"; return; }
+            $u->forceFill([
+                "email"    => getenv("NEW_EMAIL"),
+                "name"     => getenv("NEW_NAME"),
+                "password" => \Illuminate\Support\Facades\Hash::make(getenv("NEW_PASSWORD")),
+            ])->save();
+            echo "updated:" . $u->id;
+        ' 2>/dev/null | tail -1 | grep -q "^updated:"; then
+        success "Owner '${OWNER_EMAIL}' updated in-place (existing user)."
+    else
+        info "No existing owner user — .env updated; db:seed will create it on the artisan step."
+    fi
+}
+
 step_nginx() {
     step "Nginx configuration"
     command -v nginx &>/dev/null || die "nginx not installed — run step 'packages' first."
@@ -959,6 +1030,7 @@ run_step composer     step_composer
 run_step frontend     step_frontend
 run_step artisan      step_artisan
 run_step storage-link step_storage_link
+run_step owner        step_owner
 run_step nginx        step_nginx
 run_step ssl          step_ssl
 run_step queue-worker step_queue_worker
@@ -984,4 +1056,5 @@ if [[ ${#ONLY_STEPS[@]} -eq 0 ]]; then
     echo "    MariaDB:  ${DB_NAME} / ${DB_USER} / ${DB_PASSWORD}"
     echo "    Backup:   ${BACKUP_ARCHIVE_PASSWORD}"
     echo "    Mail:     ${MAIL_HOST:-(log driver)}${MAIL_HOST:+:${MAIL_PORT} / ${MAIL_USER}}"
+    [[ -n "$OWNER_EMAIL" ]] && echo "    Owner:    ${OWNER_EMAIL} / ${OWNER_PASSWORD}"
 fi
