@@ -61,6 +61,7 @@ class DatabaseSeeder extends Seeder
 
             $this->call(StarterCategoriesSeeder::class);
             $this->call(SystemCategoriesSeeder::class);
+            $this->call(SystemMediaFoldersSeeder::class);
         });
     }
 }

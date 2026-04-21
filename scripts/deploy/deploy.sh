@@ -221,6 +221,16 @@ echo -e "${BOLD}── Database ────────────────
 php artisan migrate --force
 ok "migrations applied"
 
+# System seeders — idempotent per-household baselines the app expects
+# to always be present (categories the effective-rate engine looks up
+# by slug, canonical Media folders the capture + import surfaces route
+# into). firstOrCreate throughout so re-running on every deploy leaves
+# existing rows alone. User-facing or demo seeders intentionally stay
+# out — DemoDataSeeder must never touch a real install.
+php artisan db:seed --class="Database\\Seeders\\SystemCategoriesSeeder"   --force
+php artisan db:seed --class="Database\\Seeders\\SystemMediaFoldersSeeder" --force
+ok "system seeders applied"
+
 # ── Cache & optimisation ─────────────────────────────────
 echo ""
 echo -e "${BOLD}── Cache & optimisation ─────────────────────────────────${RESET}"
