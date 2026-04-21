@@ -208,6 +208,13 @@ ok "migrations applied"
 # ── Cache & optimisation ─────────────────────────────────
 echo ""
 echo -e "${BOLD}── Cache & optimisation ─────────────────────────────────${RESET}"
+# Flush every compiled artefact before rebuilding. Without this, a new
+# composer dep (class added since the last cache) or a new Blade view
+# path can silently 500 because the cached bootstrap file still points
+# at the old class map — and the failure happens before Laravel's
+# logger initialises, so nothing lands in storage/logs/laravel.log.
+php artisan optimize:clear
+ok "php artisan optimize:clear (flushed config + route + view + event + cache)"
 php artisan optimize
 ok "php artisan optimize (config + routes + views + events cached)"
 
