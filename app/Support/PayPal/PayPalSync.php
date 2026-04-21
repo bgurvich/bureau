@@ -28,7 +28,7 @@ class PayPalSync
 {
     private const WINDOW_DAYS = 30;
 
-    public function sync(Integration $integration): int
+    public function sync(Integration $integration, ?CarbonImmutable $fromOverride = null): int
     {
         $household = $integration->household;
         if (! $household) {
@@ -49,9 +49,17 @@ class PayPalSync
             return 0;
         }
 
-        $cursor = isset($settings['cursor']) && is_string($settings['cursor']) && $settings['cursor'] !== ''
-            ? CarbonImmutable::parse($settings['cursor'])
-            : CarbonImmutable::now()->subMonths(3);  // sensible default for new integrations
+        // $fromOverride wins over the stored cursor — used by paypal:sync
+        // --from= for historical backfill. The cursor still advances to
+        // "now" after the run, so subsequent scheduled syncs walk
+        // forward without re-pulling.
+        if ($fromOverride !== null) {
+            $cursor = $fromOverride;
+        } else {
+            $cursor = isset($settings['cursor']) && is_string($settings['cursor']) && $settings['cursor'] !== ''
+                ? CarbonImmutable::parse($settings['cursor'])
+                : CarbonImmutable::now()->subMonths(3);  // sensible default for new integrations
+        }
         $now = CarbonImmutable::now();
 
         $created = 0;
