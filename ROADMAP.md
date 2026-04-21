@@ -194,6 +194,7 @@ Ordered by ROI for the big-picture goal.
     - **Explicit non-goal**: cloud vision APIs (Claude/GPT-4V/Gemini) as the default — only opt-in per-document when the user declassifies.
 6. 🧭 **Email ingestion beyond Postmark** — Gmail API (OAuth) for existing-history scanning; IMAP/JMAP for Fastmail.
 7. 🧭 **Bank CSV/OFX import** — eliminate manual transaction entry. Plaid/SaltEdge as a later, heavier step.
+    - 💡 **Client-side batching for large statement drops** — backfilling 7 × 12 = 84 PDFs hits PHP's `max_file_uploads=20` cap. Chunk the picked FileList client-side into batches of ~15, POST each via Livewire sequentially with a "batch 3 of 6" progress indicator, then compose the full parsed state once all batches land. Non-atomic by design: if batch 4 fails, batches 1–3 stay imported and the UI offers a "retry remaining" affordance rather than rolling everything back.
 8. 🧭 **Automations / rules engine** — "when transaction matches merchant Y, auto-category Z"; "when contract expires in 30 days, create task"; event-driven side effects.
 9. 🧭 **Dashboards (per-domain radars + one unified "state of affairs")** — the primary UX. Drill-downs come off the dashboard.
 10. 🧭 **Timeline view** ("what happened on this date last year") — across all domains.
