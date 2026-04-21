@@ -82,8 +82,16 @@ final class WellsFargoCheckingStatementParser implements StatementParser
 
                 continue;
             }
-            // Match "M/D  description  123.45" or "M/D  description  -123.45"
-            if (preg_match('/^\s*(\d{1,2}\/\d{1,2})\s+(.+?)\s{2,}([\-0-9,\.]+)\s*$/', $line, $m)) {
+            // WF checking rows usually print TWO trailing money values:
+            //   "M/D  description  amount  running_balance"
+            // Anchoring to the last number captured the balance instead of
+            // the amount — that's the bug we're fixing here. Capture the
+            // amount as the first money-shaped token after the description,
+            // and let the optional trailing running-balance column be
+            // consumed but discarded. Requires .dd so we don't accidentally
+            // latch onto a bare integer inside the description.
+            $pattern = '/^\s*(\d{1,2}\/\d{1,2})\s+(.+?)\s{2,}(-?\$?[\d,]+\.\d{2})(?:\s+-?\$?[\d,]+\.\d{2})?\s*$/';
+            if (preg_match($pattern, $line, $m)) {
                 $date = $this->parseMonthDay($m[1], $assumeYear);
                 $amount = self::money($m[3]);
                 if ($date === null || $amount === null) {

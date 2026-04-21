@@ -54,6 +54,40 @@ it('Wells Fargo checking PDF parser recognizes and extracts', function () {
         ->and($amounts)->toContain(-75.50);
 });
 
+it('Wells Fargo checking PDF parser reads amount, not running balance', function () {
+    // Regression: the row regex anchored to the last money token on the
+    // line, so when WF printed "date description amount running_balance"
+    // the parser captured the balance as the transaction amount. This
+    // fixture mirrors the real PDF layout where each row carries both.
+    $text = <<<'TXT'
+    Wells Fargo Bank
+    Statement Period 03/01/2026 - 03/31/2026
+    Account ending in 1234
+    Beginning balance on 3/1  $1,000.00
+    Ending balance on 3/31  $1,425.00
+
+    Deposits and Other Additions
+    3/05  Payroll ABC Company  500.00  1,500.00
+    3/15  Transfer from savings  250.00  1,750.00
+
+    Withdrawals and Other Subtractions
+    3/10  Rent landlord  250.00  1,500.00
+    3/20  Grocery store  75.00  1,425.00
+    TXT;
+
+    $stmt = (new WellsFargoCheckingStatementParser)->parse($text);
+    $amounts = array_map(fn ($t) => $t->amount, $stmt->transactions);
+
+    expect(count($stmt->transactions))->toBe(4)
+        ->and($amounts)->toContain(500.00)
+        ->and($amounts)->toContain(250.00)
+        ->and($amounts)->toContain(-250.00)
+        ->and($amounts)->toContain(-75.00)
+        ->and($amounts)->not->toContain(1500.00)
+        ->and($amounts)->not->toContain(1750.00)
+        ->and($amounts)->not->toContain(1425.00);
+});
+
 it('Wells Fargo credit PDF parser signs charges negative', function () {
     $text = <<<'TXT'
     Wells Fargo Credit Card Statement
