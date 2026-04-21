@@ -147,6 +147,58 @@ it('re-imports a statement whose transactions were manually wiped', function () 
         ->and(Media::where('hash', '!=', '')->count())->toBe(1);
 });
 
+it('persists the statement running balance onto each Transaction row', function () {
+    // For statements that print "Ending daily balance" per row (WF
+    // checking Activity Summary layout), the balance comes off the
+    // parser on ParsedTransaction::runningBalance, rides through the
+    // Livewire $parsed.rows[*].closing_balance payload, and lands in
+    // transactions.closing_balance — giving reconciliation a truth
+    // oracle per row without needing to reconstruct it from scratch.
+    //
+    // We bypass upload + parse here (PDF extraction needs a real binary
+    // we don't ship as a fixture) and drive the persist path directly
+    // by injecting a ready-state into the component.
+    authedInHousehold();
+    $account = Account::create(['type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
+
+    $rows = [
+        ['occurred_on' => '2026-01-22', 'description' => 'WF Home Mtg Auto Pay', 'amount' => -907.62, 'closing_balance' => 4238.11],
+        ['occurred_on' => '2026-01-23', 'description' => 'Direct Dep Acme Payroll', 'amount' => 2500.00, 'closing_balance' => 6738.11],
+        ['occurred_on' => '2026-01-25', 'description' => 'Uni021-Unirgy Ll Dirdep', 'amount' => 9548.91, 'closing_balance' => 16287.02],
+        ['occurred_on' => '2026-01-30', 'description' => 'ATM Withdrawal', 'amount' => -200.00, 'closing_balance' => 16087.02],
+    ];
+    $parsed = ['f1' => [
+        'name' => 'wf.pdf',
+        'status' => 'ready',
+        'hash' => str_repeat('a', 64),
+        'bank_slug' => 'wellsfargo_checking',
+        'bank_label' => 'Wells Fargo — Checking',
+        'import_source' => 'statement:wellsfargo_checking',
+        'account_last4' => '1234',
+        'period_start' => '2026-01-01',
+        'period_end' => '2026-01-31',
+        'opening' => 3050.63,
+        'closing' => 15737.02,
+        'disk_path' => 'statements/fake.pdf',
+        'mime' => 'application/pdf',
+        'size' => 1,
+        'rows' => $rows,
+    ]];
+
+    Livewire::test('statements-import')
+        ->set('parsed', $parsed)
+        ->set('accountFor', ['f1' => $account->id])
+        ->set('selected', ['f1' => array_fill(0, count($rows), true)])
+        ->call('importFile', 'f1');
+
+    $byDate = Transaction::orderBy('occurred_on')->get()->keyBy(fn ($t) => $t->occurred_on->toDateString());
+    expect($byDate->count())->toBe(4)
+        ->and((float) $byDate['2026-01-22']->closing_balance)->toBe(4238.11)
+        ->and((float) $byDate['2026-01-23']->closing_balance)->toBe(6738.11)
+        ->and((float) $byDate['2026-01-25']->closing_balance)->toBe(16287.02)
+        ->and((float) $byDate['2026-01-30']->closing_balance)->toBe(16087.02);
+});
+
 it('attaches the uploaded file as Media with role=statement on every created Transaction', function () {
     authedInHousehold();
     $account = Account::create(['type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);

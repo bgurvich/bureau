@@ -19,6 +19,7 @@ class Transaction extends Model
     protected $casts = [
         'occurred_on' => 'date',
         'amount' => 'decimal:4',
+        'closing_balance' => 'decimal:4',
     ];
 
     /** @return BelongsTo<Account, $this> */

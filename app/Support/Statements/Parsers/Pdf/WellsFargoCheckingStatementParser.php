@@ -213,15 +213,19 @@ final class WellsFargoCheckingStatementParser implements StatementParser
             // token clustered on the balance column is the running
             // balance and doesn't belong in the amount field.
             $amountToken = null;
+            $balanceToken = null;
             foreach ($cand['tokens'] as $tok) {
                 $dBal = abs($tok['end'] - $balEnd);
                 $dDep = abs($tok['end'] - $depEnd);
                 $dWd = abs($tok['end'] - $wdEnd);
                 if ($dBal < $dDep && $dBal < $dWd) {
-                    continue; // balance column
+                    $balanceToken = $tok;
+
+                    continue;
                 }
-                $amountToken = $tok;
-                break;
+                if ($amountToken === null) {
+                    $amountToken = $tok;
+                }
             }
             if ($amountToken === null) {
                 continue;
@@ -240,6 +244,7 @@ final class WellsFargoCheckingStatementParser implements StatementParser
                 occurredOn: $date,
                 description: trim($m[2]),
                 amount: $amount,
+                runningBalance: $balanceToken !== null ? self::money($balanceToken['text']) : null,
                 rawRow: trim($line),
             );
         }

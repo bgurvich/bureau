@@ -344,6 +344,7 @@ class extends Component
                 'occurred_on' => $t->occurredOn->toDateString(),
                 'description' => $t->description,
                 'amount' => $t->amount,
+                'closing_balance' => $t->runningBalance,
             ];
         }
 
@@ -575,6 +576,7 @@ class extends Component
                         'occurred_on' => $row['occurred_on'],
                         'amount' => $row['amount'],
                         'currency' => Account::find($accountId)?->currency ?? 'USD',
+                        'closing_balance' => $row['closing_balance'] ?? null,
                         'description' => $row['description'],
                         'counterparty_contact_id' => $counterpartyId,
                         'status' => 'cleared',
