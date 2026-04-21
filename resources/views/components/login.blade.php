@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\User;
+use App\Support\IntendedUrl;
 use App\Support\LoginRecorder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
@@ -38,6 +39,8 @@ class extends Component
         LoginRecorder::success(LoginRecorder::METHOD_PASSWORD, Auth::user());
         session()->regenerate();
 
+        IntendedUrl::dropMobileShell();
+
         return redirect()->intended(route('dashboard'));
     }
 
@@ -53,6 +56,8 @@ class extends Component
         Auth::login($user);
         LoginRecorder::success(LoginRecorder::METHOD_PASSWORD, $user);
         session()->regenerate();
+
+        IntendedUrl::dropMobileShell();
 
         return redirect()->intended(route('dashboard'));
     }

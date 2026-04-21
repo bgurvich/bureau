@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Support\IntendedUrl;
 use App\Support\LoginRecorder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
@@ -73,6 +74,8 @@ final class SocialLoginController extends Controller
         Auth::login($user, remember: true);
         request()->session()->regenerate();
         LoginRecorder::success('social:'.$provider, $user);
+
+        IntendedUrl::dropMobileShell();
 
         return redirect()->intended(route('dashboard'));
     }

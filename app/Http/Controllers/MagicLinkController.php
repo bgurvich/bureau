@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Mail\MagicLinkMail;
 use App\Models\User;
+use App\Support\IntendedUrl;
 use App\Support\LoginRecorder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -75,6 +76,8 @@ final class MagicLinkController extends Controller
         if (is_string($redirect) && str_starts_with($redirect, '/') && ! str_starts_with($redirect, '//')) {
             return redirect($redirect);
         }
+
+        IntendedUrl::dropMobileShell();
 
         return redirect()->intended(route('dashboard'));
     }

@@ -697,10 +697,25 @@ document.addEventListener('alpine:init', () => {
     );
 });
 
-// PWA service worker registration — previously an inline <script> in the
-// mobile layout. Deferred to 'load' so it can't delay first paint.
+// PWA service worker registration — only on the mobile layout, which is
+// the only place a <link rel="manifest"> is emitted. Registering on every
+// page polluted the session's `url.intended`: the SW install pre-fetches
+// /m for its shell cache, that unauthenticated GET bounced through auth
+// middleware which saved /m as the intended URL, and `redirect()->intended`
+// then sent desktop users to /m after login. Gating on the manifest keeps
+// the PWA installable from mobile without poisoning desktop sign-ins.
 if ('serviceWorker' in navigator) {
+    const mobile = !!document.querySelector('link[rel="manifest"]');
     window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js').catch(() => {});
+        if (mobile) {
+            navigator.serviceWorker.register('/sw.js').catch(() => {});
+        } else {
+            // Desktop page: remove any SW previously registered by an earlier
+            // build so users who installed it before this fix stop getting
+            // redirected to /m after login.
+            navigator.serviceWorker.getRegistrations()
+                .then((regs) => Promise.all(regs.map((r) => r.unregister())))
+                .catch(() => {});
+        }
     });
 }
