@@ -84,9 +84,25 @@ class extends Component
             };
             return r;
         },
-        start(locale) {
+        async start(locale) {
             if (!this.supported) { return; }
             this.errorMessage = '';
+
+            // SpeechRecognition on Chrome/Edge fails silently with
+            // 'not-allowed' if no microphone permission prompt has
+            // fired for this origin. Explicitly request audio first
+            // so the OS / browser surfaces the prompt; only then
+            // instantiate the recognizer. Stop the MediaStream
+            // immediately since SpeechRecognition opens its own.
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                stream.getTracks().forEach(t => t.stop());
+            } catch (e) {
+                this.errorMessage = '{{ __('Microphone permission denied.') }}';
+                this.want = false;
+                return;
+            }
+
             this.want = true;
             try { this.rec = this.build(locale); this.rec.start(); }
             catch (e) { this.want = false; this.errorMessage = e.message || String(e); }
@@ -95,7 +111,7 @@ class extends Component
             this.want = false;
             if (this.rec) { try { this.rec.stop(); } catch (e) {} }
         },
-        toggle(locale) { this.want ? this.stop() : this.start(locale); }
+        async toggle(locale) { this.want ? this.stop() : await this.start(locale); }
      }">
     <header class="pt-2">
         <h1 class="text-lg font-semibold text-neutral-100">{{ __('New note') }}</h1>
