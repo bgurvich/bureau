@@ -211,15 +211,15 @@ echo -e "${BOLD}── Cache & optimisation ────────────
 php artisan optimize
 ok "php artisan optimize (config + routes + views + events cached)"
 
-# Some files under storage/framework/{views,cache} are written by php-fpm
-# at runtime (Livewire view cache, session files, compiled Blade) and end
-# up owned by www-data. The deploy user can update their contents via the
-# shared group, but chmod requires ownership — so filter to files we own
-# to avoid aborting the deploy on "Operation not permitted". Files we
-# don't own were either seeded by install.sh with correct perms or
-# inherit them via the setgid directory bit.
-find storage bootstrap/cache -user "$(id -un)" -exec chmod ug+rwX,o-rwx {} +
-ok "storage/ + bootstrap/cache/ → ug+rwX,o-rwx (scoped to files we own)"
+# Scope the post-optimize chmod to the two trees `php artisan optimize`
+# actually writes to. `storage/app/` is runtime user data (uploads,
+# backups, livewire-tmp) — those subdirs are created by www-data with
+# perms the deploy user can't traverse, so a blanket `find storage` trips
+# over "Permission denied" before it gets anywhere useful. Filter to
+# files we own too, because chmod requires ownership and runtime-created
+# files under storage/framework belong to www-data.
+find storage/framework bootstrap/cache -user "$(id -un)" -exec chmod ug+rwX,o-rwx {} +
+ok "storage/framework + bootstrap/cache → ug+rwX,o-rwx (scoped to files we own)"
 
 # ── Restart services ─────────────────────────────────────
 echo ""
