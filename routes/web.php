@@ -64,6 +64,7 @@ Route::middleware(['auth', 'preferences', 'household'])->group(function () {
     Route::livewire('/profile', 'profile')->name('profile');
     Route::livewire('/settings', 'settings-index')->name('settings');
     Route::livewire('/finance', 'finance-overview')->name('fiscal.overview');
+    Route::livewire('/ledger', 'ledger-hub')->name('fiscal.ledger');
     Route::livewire('/accounts', 'accounts-index')->name('fiscal.accounts');
     Route::livewire('/transactions', 'transactions-index')->name('fiscal.transactions');
     Route::livewire('/bills', 'bills-index')->name('fiscal.recurring');

@@ -53,8 +53,7 @@
                             ],
                             __('Money') => [
                                 [__('Overview'), 'fiscal.overview', 'pie'],
-                                [__('Accounts'), 'fiscal.accounts', 'wallet'],
-                                [__('Transactions'), 'fiscal.transactions', 'swap'],
+                                [__('Ledger'), 'fiscal.ledger', 'wallet'],
                                 [__('Bills & Income'), 'fiscal.recurring', 'receipt'],
                                 [__('Reconcile'), 'reconcile', 'check-square'],
                                 [__('Subscriptions'), 'fiscal.subscriptions', 'key'],
@@ -64,7 +63,6 @@
                                 [__('Tag rules'), 'fiscal.tag_rules', 'note'],
                                 [__('Savings goals'), 'fiscal.savings_goals', 'check-square'],
                                 [__('Inbox'), 'fiscal.inbox', 'note'],
-                                [__('Import statements'), 'fiscal.import.statements', 'swap'],
                                 [__('Bookkeeper'), 'bookkeeper', 'file-signature'],
                             ],
                             __('Life') => [
