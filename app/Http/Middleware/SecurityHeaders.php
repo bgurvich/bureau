@@ -15,7 +15,9 @@ use Symfony\Component\HttpFoundation\Response;
  * - X-Content-Type-Options: nosniff prevents MIME-type guessing.
  * - Referrer-Policy: strict-origin-when-cross-origin leaks only the origin
  *   to third parties, never the full path.
- * - Permissions-Policy: disables sensors Bureau doesn't use.
+ * - Permissions-Policy: grants the first-party app access to microphone
+ *   + camera (mobile voice note + photo capture) via `(self)`; disables
+ *   every other sensor Bureau doesn't use.
  * - Cross-Origin-Opener-Policy: same-origin isolates the page from popups
  *   opened by/to other origins.
  * - Content-Security-Policy: locks script/style/connect sources to 'self';
@@ -42,13 +44,22 @@ class SecurityHeaders
         $response->headers->set('X-Content-Type-Options', 'nosniff');
         $response->headers->set('Referrer-Policy', 'strict-origin-when-cross-origin');
         $response->headers->set('Cross-Origin-Opener-Policy', 'same-origin');
+        // `(self)` allows the top-level same-origin document to request
+        // the capability (first-party mobile capture flows need it —
+        // voice-note dictation uses microphone via SpeechRecognition +
+        // getUserMedia, and capture-photo/post use camera via
+        // <input capture>). `()` fully blocks it and — this bit us —
+        // causes Chrome to reject getUserMedia synchronously WITHOUT
+        // even surfacing a permission prompt, so no per-site entry
+        // ever appears for the user to flip. Sensors we truly don't
+        // use stay at `()`.
         $response->headers->set('Permissions-Policy', implode(', ', [
             'accelerometer=()',
-            'camera=()',
+            'camera=(self)',
             'geolocation=()',
             'gyroscope=()',
             'magnetometer=()',
-            'microphone=()',
+            'microphone=(self)',
             'payment=()',
             'usb=()',
         ]));

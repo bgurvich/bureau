@@ -10,7 +10,13 @@ it('applies security headers on the login page', function () {
         ->and($response->headers->get('X-Content-Type-Options'))->toBe('nosniff')
         ->and($response->headers->get('Referrer-Policy'))->toBe('strict-origin-when-cross-origin')
         ->and($response->headers->get('Cross-Origin-Opener-Policy'))->toBe('same-origin')
-        ->and($response->headers->get('Permissions-Policy'))->toContain('camera=()')
+        // camera + microphone granted to the first-party app so the
+        // mobile capture flows can request them; truly unused sensors
+        // stay fully disabled.
+        ->and($response->headers->get('Permissions-Policy'))->toContain('camera=(self)')
+        ->and($response->headers->get('Permissions-Policy'))->toContain('microphone=(self)')
+        ->and($response->headers->get('Permissions-Policy'))->toContain('geolocation=()')
+        ->and($response->headers->get('Permissions-Policy'))->toContain('usb=()')
         ->and($response->headers->get('Content-Security-Policy'))->toContain("frame-ancestors 'self'")
         ->and($response->headers->get('Content-Security-Policy'))->toContain("object-src 'self'")
         ->and($response->headers->has('X-Powered-By'))->toBeFalse();
