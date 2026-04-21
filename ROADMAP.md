@@ -93,6 +93,7 @@ Status legend: ✅ in v1 schema · 🏗 v1 wiring (post-schema) · 🧭 deferred
 - ✅ **Inventory quantity** — `inventory_items.quantity` (unsigned int, default 1); shown as `× N` on the drill-down list.
 - ✅ **Inventory container** — free-text `inventory_items.container` column for the third location tier; shown as `property / room / container`. Dedicated `inventory_containers` table deferred until shared labels matter.
 - ✅ asset_valuations (polymorphic — property + vehicle + inventory participate in net-worth)
+- 💡 `domains` — owned DNS/web domains (name, registrar, registered_on, expires_on, auto_renew, nameservers, annual_cost, registrant_contact_id, notes). Expiring domains feed the attention radar like any other dated asset. When shipped, sits on the Assets hub alongside Properties / Vehicles / Inventory / Online accounts.
 
 ### Identity & legal
 - ✅ Documents (passport / license / ID / will / POA / insurance — with `expires_on` feeding attention radar)

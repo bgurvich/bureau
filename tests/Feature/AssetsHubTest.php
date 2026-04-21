@@ -11,7 +11,8 @@ it('renders the assets hub with the Properties tab by default', function () {
         ->assertSet('tab', 'properties')
         ->assertSee(__('Properties'))
         ->assertSee(__('Vehicles'))
-        ->assertSee(__('Inventory'));
+        ->assertSee(__('Inventory'))
+        ->assertSee(__('Online accounts'));
 });
 
 it('switches between asset tabs', function () {
@@ -22,6 +23,8 @@ it('switches between asset tabs', function () {
         ->assertSet('tab', 'vehicles')
         ->call('setTab', 'inventory')
         ->assertSet('tab', 'inventory')
+        ->call('setTab', 'online_accounts')
+        ->assertSet('tab', 'online_accounts')
         ->call('setTab', 'properties')
         ->assertSet('tab', 'properties');
 });
