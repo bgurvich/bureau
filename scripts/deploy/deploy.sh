@@ -232,6 +232,17 @@ ok "php artisan optimize (config + routes + views + events cached)"
 # files we own too, because chmod requires ownership and runtime-created
 # files under storage/framework belong to www-data.
 find storage/framework bootstrap/cache -user "$(id -un)" -exec chmod ug+rwX,o-rwx {} +
+# Also hand the group to www-data so php-fpm can read the cache files
+# optimize just wrote. Without this, a 640 config.php owned by
+# moshe:moshe is invisible to www-data and every request 500s with
+# "require(bootstrap/cache/config.php): Permission denied" — and the
+# failure lands before Laravel's logger initialises, so laravel.log
+# stays empty while nginx's error.log captures the stack trace.
+if getent group www-data >/dev/null 2>&1; then
+    find storage/framework bootstrap/cache -user "$(id -un)" -exec chgrp www-data {} + 2>/dev/null \
+        && ok "storage/framework + bootstrap/cache → group=www-data" \
+        || warn "chgrp to www-data failed — add the deploy user to that group: sudo usermod -aG www-data $(id -un)"
+fi
 ok "storage/framework + bootstrap/cache → ug+rwX,o-rwx (scoped to files we own)"
 
 # ── Restart services ─────────────────────────────────────
