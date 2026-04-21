@@ -625,7 +625,8 @@ class extends Component
     public function importAll(): void
     {
         $totalCreated = 0;
-        $totalSkipped = 0;
+        $totalSkippedDup = 0;
+        $totalSkippedInvalid = 0;
         $needAccount = 0;
         foreach (array_keys($this->parsed) as $fileId) {
             if (($this->parsed[$fileId]['status'] ?? null) !== 'ready') {
@@ -638,7 +639,9 @@ class extends Component
             }
             $created = $this->persistFile($fileId);
             $totalCreated += $created;
-            $totalSkipped += ($this->parsed[$fileId]['skipped_count'] ?? 0);
+            $reasons = $this->parsed[$fileId]['skip_reasons'] ?? [];
+            $totalSkippedDup += ($reasons['duplicate'] ?? 0);
+            $totalSkippedInvalid += ($reasons['invalid'] ?? 0);
         }
 
         // Collapse cross-account debit/credit pairs into Transfer records.
@@ -649,8 +652,13 @@ class extends Component
             $pairedTransfers = app(TransferPairing::class)->pair($household);
         }
 
-        $parts = [];
-        $parts[] = __(':c transactions created, :s skipped.', ['c' => $totalCreated, 's' => $totalSkipped]);
+        $parts = [__(':c transactions created.', ['c' => $totalCreated])];
+        if ($totalSkippedDup > 0) {
+            $parts[] = __(':n skipped as duplicates (same date+amount+account already on file).', ['n' => $totalSkippedDup]);
+        }
+        if ($totalSkippedInvalid > 0) {
+            $parts[] = __(':n skipped with missing date or amount.', ['n' => $totalSkippedInvalid]);
+        }
         if ($pairedTransfers > 0) {
             $parts[] = __(':p transfer pair(s) linked.', ['p' => $pairedTransfers]);
         }
@@ -673,16 +681,28 @@ class extends Component
 
         $media = $this->persistMedia($fileId);
         $created = 0;
-        $skipped = 0;
+        // Skip reasons tracked per-file so the review card can explain
+        // exactly why a row didn't land instead of an opaque count.
+        $skipReasons = [
+            'duplicate' => 0,  // (account_id, external_id) unique-index collision
+            'invalid' => 0,    // row missing / malformed date or amount
+        ];
 
         // Pre-scan: build a fingerprint → Contact id map. Existing contacts
         // get matched, and descriptions that repeat ≥2 times in this batch
         // become new Contacts (kind=org) so future imports auto-link.
         $contactMap = $this->buildContactMap($state['rows']);
 
-        DB::transaction(function () use ($fileId, $state, $accountId, $media, $contactMap, &$created, &$skipped) {
+        DB::transaction(function () use ($fileId, $state, $accountId, $media, $contactMap, &$created, &$skipReasons) {
             foreach ($state['rows'] as $i => $row) {
                 if (! ($this->selected[$fileId][$i] ?? false)) {
+                    continue;
+                }
+                $rawDate = $row['occurred_on'] ?? null;
+                $rawAmount = $row['amount'] ?? null;
+                if (! is_string($rawDate) || $rawDate === '' || ! is_numeric($rawAmount)) {
+                    $skipReasons['invalid']++;
+
                     continue;
                 }
                 $externalId = $this->externalIdFor($accountId, $row);
@@ -691,8 +711,8 @@ class extends Component
                 try {
                     $txn = Transaction::create([
                         'account_id' => $accountId,
-                        'occurred_on' => $row['occurred_on'],
-                        'amount' => $row['amount'],
+                        'occurred_on' => $rawDate,
+                        'amount' => $rawAmount,
                         'currency' => Account::find($accountId)?->currency ?? 'USD',
                         'closing_balance' => $row['closing_balance'] ?? null,
                         'description' => $row['description'],
@@ -704,8 +724,8 @@ class extends Component
                 } catch (\Illuminate\Database\QueryException $e) {
                     // Unique-constraint collision (account_id, external_id) —
                     // row was imported by a concurrent request or a prior
-                    // import we missed in the dedup scan. Count + continue.
-                    $skipped++;
+                    // import we missed in the dedup scan.
+                    $skipReasons['duplicate']++;
 
                     continue;
                 }
@@ -717,8 +737,16 @@ class extends Component
             }
         });
 
+        $skipped = array_sum($skipReasons);
         $this->parsed[$fileId]['created_count'] = ($this->parsed[$fileId]['created_count'] ?? 0) + $created;
         $this->parsed[$fileId]['skipped_count'] = ($this->parsed[$fileId]['skipped_count'] ?? 0) + $skipped;
+        $this->parsed[$fileId]['skip_reasons'] = array_merge(
+            $this->parsed[$fileId]['skip_reasons'] ?? ['duplicate' => 0, 'invalid' => 0],
+            [
+                'duplicate' => ($this->parsed[$fileId]['skip_reasons']['duplicate'] ?? 0) + $skipReasons['duplicate'],
+                'invalid' => ($this->parsed[$fileId]['skip_reasons']['invalid'] ?? 0) + $skipReasons['invalid'],
+            ],
+        );
         if ($media) {
             $this->parsed[$fileId]['media_id'] = $media->id;
         }
@@ -1000,28 +1028,20 @@ class extends Component
     @endif
 
     @if (! empty($parsed))
-        {{-- Full-screen busy overlay while importAll / importFile / any
-             per-row commit is running. Persisting rows is synchronous and
-             can take several seconds per file (hundreds of transactions
-             + transfer-pairing + duplicate detection), so a page-covering
-             status makes the wait legible instead of a frozen UI. --}}
-        <div wire:loading.flex wire:target="importAll,importFile"
-             role="status" aria-live="polite"
-             class="fixed inset-0 z-50 flex flex-col items-center justify-center gap-2 bg-neutral-950/80 text-sm font-medium text-emerald-200 backdrop-blur-sm">
-            <svg class="h-8 w-8 animate-spin text-emerald-400" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" opacity="0.25"/>
-                <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
-            </svg>
-            <span>{{ __('Importing transactions…') }}</span>
-            <span class="text-[11px] font-normal text-emerald-300/70">{{ __('Pairing transfers and flagging duplicates as we go.') }}</span>
-        </div>
-
         <div class="flex items-center justify-between gap-3">
             <span class="text-xs text-neutral-500">{{ __(':n file(s) ready to review', ['n' => count($parsed)]) }}</span>
             <div class="flex gap-2">
+                {{-- Button is the status surface while importAll /
+                     importFile is running — disabled + inline spinner,
+                     no full-viewport overlay. --}}
                 <button type="button" wire:click="importAll"
                         wire:loading.attr="disabled" wire:target="importAll,importFile"
-                        class="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300 disabled:cursor-wait disabled:opacity-60">
+                        class="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300 disabled:cursor-wait disabled:opacity-60">
+                    <svg wire:loading wire:target="importAll,importFile"
+                         class="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" opacity="0.35"/>
+                        <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+                    </svg>
                     <span wire:loading.remove wire:target="importAll,importFile">{{ __('Import all selected') }}</span>
                     <span wire:loading wire:target="importAll,importFile">{{ __('Importing…') }}</span>
                 </button>
@@ -1163,7 +1183,12 @@ class extends Component
                                 <button type="button" wire:click="importFile('{{ $fileId }}')"
                                         wire:loading.attr="disabled" wire:target="importAll,importFile"
                                         @disabled(! $accountId || $selCount === 0)
-                                        class="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300 disabled:cursor-wait disabled:opacity-40">
+                                        class="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300 disabled:cursor-wait disabled:opacity-40">
+                                    <svg wire:loading wire:target="importFile('{{ $fileId }}')"
+                                         class="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                        <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" opacity="0.35"/>
+                                        <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+                                    </svg>
                                     <span wire:loading.remove wire:target="importFile('{{ $fileId }}')">{{ __('Import :n transactions', ['n' => $selCount]) }}</span>
                                     <span wire:loading wire:target="importFile('{{ $fileId }}')">{{ __('Importing…') }}</span>
                                 </button>
@@ -1171,6 +1196,19 @@ class extends Component
 
                             @if (! empty($state['created_count']))
                                 <p class="text-[11px] text-emerald-300">{{ __(':n imported from this file', ['n' => $state['created_count']]) }}</p>
+                            @endif
+                            @php($reasons = $state['skip_reasons'] ?? null)
+                            @if ($reasons && (($reasons['duplicate'] ?? 0) + ($reasons['invalid'] ?? 0)) > 0)
+                                <p class="text-[11px] text-amber-300">
+                                    {{ __('Skipped: ') }}
+                                    @if (($reasons['duplicate'] ?? 0) > 0)
+                                        {{ __(':n duplicate (same date+amount+account already on file)', ['n' => $reasons['duplicate']]) }}
+                                    @endif
+                                    @if (($reasons['duplicate'] ?? 0) > 0 && ($reasons['invalid'] ?? 0) > 0) · @endif
+                                    @if (($reasons['invalid'] ?? 0) > 0)
+                                        {{ __(':n invalid (missing date or amount)', ['n' => $reasons['invalid']]) }}
+                                    @endif
+                                </p>
                             @endif
                         </div>
                     @elseif ($state['status'] === 'already_imported')

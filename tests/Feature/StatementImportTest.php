@@ -148,6 +148,57 @@ it('re-imports a statement whose transactions were manually wiped', function () 
         ->and(Media::where('hash', '!=', '')->count())->toBe(1);
 });
 
+it('tracks and surfaces skip reasons (duplicate vs invalid) per file', function () {
+    authedInHousehold();
+    $account = Account::create(['type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
+
+    // Pre-existing transaction whose external_id will collide with the
+    // first imported row → counted as "duplicate". externalIdFor uses
+    // sha1(account|date|description|amount.2f) so match that shape.
+    $existingRow = ['occurred_on' => '2026-02-01', 'description' => 'Payroll', 'amount' => 1500.00];
+    $externalId = sha1(implode('|', [
+        $account->id, $existingRow['occurred_on'], $existingRow['description'], number_format($existingRow['amount'], 2, '.', ''),
+    ]));
+    Transaction::create([
+        'account_id' => $account->id,
+        'occurred_on' => $existingRow['occurred_on'],
+        'amount' => $existingRow['amount'],
+        'currency' => 'USD',
+        'description' => $existingRow['description'],
+        'status' => 'cleared',
+        'external_id' => $externalId,
+    ]);
+
+    $parsed = ['f1' => [
+        'name' => 'stmt.pdf', 'status' => 'ready', 'hash' => str_repeat('s', 64),
+        'bank_slug' => 'wellsfargo_checking', 'bank_label' => 'WF',
+        'import_source' => 'statement:wellsfargo_checking',
+        'account_last4' => null, 'period_start' => null, 'period_end' => null,
+        'opening' => null, 'closing' => null, 'detected_year' => 2026,
+        'disk_path' => 'x', 'mime' => 'application/pdf', 'size' => 1,
+        'rows' => [
+            // This row will collide with the pre-existing transaction.
+            $existingRow + ['closing_balance' => null],
+            // Valid row — imports fine.
+            ['occurred_on' => '2026-02-05', 'description' => 'Rent', 'amount' => -1200.00, 'closing_balance' => null],
+            // Invalid row — missing date.
+            ['occurred_on' => '', 'description' => 'Broken', 'amount' => -50.00, 'closing_balance' => null],
+        ],
+    ]];
+
+    $c = Livewire::test('statements-import')
+        ->set('parsed', $parsed)
+        ->set('accountFor', ['f1' => $account->id])
+        ->set('selected', ['f1' => [true, true, true]])
+        ->call('importAll');
+
+    $reasons = $c->get('parsed')['f1']['skip_reasons'];
+    expect($reasons['duplicate'])->toBe(1)
+        ->and($reasons['invalid'])->toBe(1)
+        ->and($c->get('bulkMessage'))->toContain('1 skipped as duplicates')
+        ->and($c->get('bulkMessage'))->toContain('1 skipped with missing date');
+});
+
 it('applies a per-file year override to every row', function () {
     authedInHousehold();
 
