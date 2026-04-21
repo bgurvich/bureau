@@ -164,8 +164,6 @@ POSTMARK_WEBHOOK_PASSWORD=…
 
 ### Outbound (sending)
 
-Only if you're not using another SMTP provider. Postmark issues per-server API tokens.
-
 1. Postmark → **Servers → <your server> → API Tokens** → copy a **Server API token**.
 2. `.env`:
 
@@ -176,7 +174,7 @@ MAIL_FROM_ADDRESS=notifications@bureau.homes
 MAIL_FROM_NAME=Bureau
 ```
 
-Verify the sender domain via Postmark's DKIM/Return-Path records, or the first send will bounce.
+**DNS records (SPF + DKIM + DMARC + Return-Path) are mandatory** — without them the first send bounces or spam-folders. Full walk-through with provider alternatives in [`docs/ops/outbound-email.md`](../ops/outbound-email.md).
 
 ---
 
