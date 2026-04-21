@@ -15,10 +15,13 @@ beforeEach(function () {
 it('renders the photo capture page for an authed user', function () {
     authedInHousehold();
 
+    // The page merged with /capture/post into a single unified
+    // surface; the header is now "Capture" with a kind picker.
     $this->get(route('mobile.capture.photo'))
         ->assertOk()
-        ->assertSee(__('Photo or scan'))
-        ->assertSee(__('Tap to capture'));
+        ->assertSee(__('Capture'))
+        ->assertSee(__('Receipt'))
+        ->assertSee(__('Tap to capture'), false);
 });
 
 it('saves a captured photo as Media and dispatches OCR', function () {

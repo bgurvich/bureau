@@ -291,6 +291,14 @@ new class extends Component
 
     public string $contact_address_country = '';
 
+    /**
+     * Multi-line regex list (one per line) that the import + vendor
+     * re-resolver test against transaction descriptions. First hit
+     * across any Contact's patterns assigns the row — so renames of
+     * display_name don't break vendor matching.
+     */
+    public string $contact_match_patterns = '';
+
     // note
     public bool $pinned = false;
 
@@ -1553,6 +1561,7 @@ new class extends Component
         $phones = $c->phones ?? [];
         $this->phone = is_array($phones) ? implode(', ', $phones) : (string) $phones;
         $this->notes = $c->notes ?? '';
+        $this->contact_match_patterns = (string) ($c->match_patterns ?? '');
 
         // Addresses is a JSON array of address objects on Contact; surface the
         // first one into the five structured fields the form edits. Saving
@@ -2102,6 +2111,7 @@ new class extends Component
             'contact_address_postcode' => 'nullable|string|max:32',
             'contact_address_country' => 'nullable|string|max:100',
             'notes' => 'nullable|string|max:5000',
+            'contact_match_patterns' => 'nullable|string|max:5000',
         ]);
 
         $addressParts = array_filter([
@@ -2127,6 +2137,7 @@ new class extends Component
             'phones' => $this->splitList($data['phone']),
             'addresses' => $addresses,
             'notes' => $data['notes'] ?: null,
+            'match_patterns' => trim((string) ($data['contact_match_patterns'] ?? '')) ?: null,
         ], fn ($v) => $v !== null);
 
         // always-present booleans should NOT be filtered out when false

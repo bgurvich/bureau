@@ -53,13 +53,16 @@ final class VendorReresolver
             });
 
         // Pre-pass 2: fingerprint every Contact once so per-row
-        // lookups are O(1), and cache (display_name, organization) by
-        // id for the auto-vs-manual heuristic below.
+        // lookups are O(1); cache (display_name, organization,
+        // match_patterns) by id for the auto-vs-manual heuristic and
+        // the explicit-patterns lookup below.
         $contactByFingerprint = [];
-        /** @var array<int, array{display_name: string, organization: string}> */
+        /** @var array<int, array{display_name: string, organization: string, match_patterns: string}> */
         $contactById = [];
-        Contact::query()->select(['id', 'display_name', 'organization'])
-            ->chunk(500, function ($chunk) use (&$contactByFingerprint, &$contactById) {
+        /** @var array<int, array{0: int, 1: string}> [contact_id, pattern] pairs, walked per row */
+        $matchPatternList = [];
+        Contact::query()->select(['id', 'display_name', 'organization', 'match_patterns'])
+            ->chunk(500, function ($chunk) use (&$contactByFingerprint, &$contactById, &$matchPatternList) {
                 foreach ($chunk as $c) {
                     foreach ([$c->display_name, $c->organization] as $candidate) {
                         if (! is_string($candidate) || $candidate === '') {
@@ -73,7 +76,11 @@ final class VendorReresolver
                     $contactById[(int) $c->id] = [
                         'display_name' => is_string($c->display_name) ? $c->display_name : '',
                         'organization' => is_string($c->organization) ? $c->organization : '',
+                        'match_patterns' => is_string($c->match_patterns) ? $c->match_patterns : '',
                     ];
+                    foreach (self::parsePatterns((string) $c->match_patterns) as $p) {
+                        $matchPatternList[] = [(int) $c->id, $p];
+                    }
                 }
             });
 
@@ -83,11 +90,28 @@ final class VendorReresolver
             ->select(['id', 'description', 'counterparty_contact_id'])
             ->chunkById(500, function ($chunk) use (
                 &$summary, &$fingerprintCounts, &$rowFingerprints,
-                &$contactByFingerprint, &$contactById
+                &$contactByFingerprint, &$contactById, &$matchPatternList
             ) {
                 foreach ($chunk as $t) {
                     $newFp = $rowFingerprints[(int) $t->id] ?? '';
                     $currentId = $t->counterparty_contact_id !== null ? (int) $t->counterparty_contact_id : null;
+                    $descLower = mb_strtolower((string) $t->description);
+
+                    // Explicit match_patterns always win — user has
+                    // declared "this contact owns descriptions like
+                    // X". First hit in the list is assigned; list
+                    // order is Contact insertion order which the user
+                    // controls by row-adding patterns in the inspector.
+                    $matchedByPattern = self::firstPatternMatch($descLower, $matchPatternList);
+                    if ($matchedByPattern !== null) {
+                        if ($currentId !== $matchedByPattern) {
+                            Transaction::whereKey($t->id)->update(['counterparty_contact_id' => $matchedByPattern]);
+                            $summary['matched_existing']++;
+                            $summary['touched']++;
+                        }
+
+                        continue;
+                    }
 
                     // Manual-assignment guard: a counterparty is
                     // treated as "auto-set" (safe to re-resolve) when
@@ -98,7 +122,6 @@ final class VendorReresolver
                     // neither substring is present, the user picked
                     // the contact deliberately and we back off.
                     if ($currentId !== null && isset($contactById[$currentId])) {
-                        $descLower = mb_strtolower((string) $t->description);
                         $name = mb_strtolower($contactById[$currentId]['display_name']);
                         $org = mb_strtolower($contactById[$currentId]['organization']);
                         $auto = ($name !== '' && str_contains($descLower, $name))
@@ -142,14 +165,24 @@ final class VendorReresolver
                     // with no match stay/go to null counterparty.
                     if (($fingerprintCounts[$newFp] ?? 0) >= 2) {
                         $humanized = self::humanize((string) $t->description);
+                        // Seed match_patterns with the fingerprint so
+                        // later renames of the display_name don't
+                        // detach the rows from this contact on the
+                        // next re-resolve — the pattern persists.
                         $contact = Contact::create([
                             'kind' => 'org',
                             'display_name' => $humanized !== '' ? $humanized : $newFp,
                             'is_vendor' => true,
+                            'match_patterns' => $newFp,
                         ]);
                         $newId = (int) $contact->id;
                         $contactByFingerprint[$newFp] = $newId;
-                        $contactDisplayFp[$newId] = self::fingerprint($contact->display_name);
+                        $contactById[$newId] = [
+                            'display_name' => (string) $contact->display_name,
+                            'organization' => '',
+                            'match_patterns' => $newFp,
+                        ];
+                        $matchPatternList[] = [$newId, $newFp];
 
                         Transaction::whereKey($t->id)->update(['counterparty_contact_id' => $newId]);
                         $summary['created']++;
@@ -199,5 +232,69 @@ final class VendorReresolver
         $joined = implode(' ', array_slice($meaningful, 0, 3));
 
         return ucwords(mb_strtolower($joined));
+    }
+
+    /**
+     * Parse the multi-line match_patterns textarea into a list of
+     * trimmed, non-empty regex bodies. Empty / blank lines skipped.
+     *
+     * @return array<int, string>
+     */
+    public static function parsePatterns(string $raw): array
+    {
+        $lines = preg_split('/\r?\n/', $raw) ?: [];
+        $out = [];
+        foreach ($lines as $line) {
+            $trim = trim($line);
+            if ($trim !== '') {
+                $out[] = $trim;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Walk every Contact's match_patterns once and return a flat list
+     * of (contact_id, pattern) pairs. Insertion order is preserved —
+     * firstPatternMatch() returns the first hit.
+     *
+     * @return array<int, array{0: int, 1: string}>
+     */
+    public static function patternList(): array
+    {
+        $out = [];
+        Contact::query()->select(['id', 'match_patterns'])
+            ->whereNotNull('match_patterns')
+            ->chunk(500, function ($chunk) use (&$out) {
+                foreach ($chunk as $c) {
+                    foreach (self::parsePatterns((string) $c->match_patterns) as $p) {
+                        $out[] = [(int) $c->id, $p];
+                    }
+                }
+            });
+
+        return $out;
+    }
+
+    /**
+     * Test every (contact_id, pattern) pair against a lowercased
+     * description and return the first matching contact_id. Null if
+     * no pattern hits. Matching is case-insensitive via the 'i' flag
+     * so plain-substring patterns ("costco") work the same as
+     * anchored regex.
+     *
+     * @param  array<int, array{0: int, 1: string}>  $pairs
+     */
+    public static function firstPatternMatch(string $descLower, array $pairs): ?int
+    {
+        foreach ($pairs as [$id, $pattern]) {
+            $result = @preg_match('#'.str_replace('#', '\#', $pattern).'#iu', $descLower);
+            if ($result === 1) {
+                return $id;
+            }
+        }
+
+        return null;
     }
 }

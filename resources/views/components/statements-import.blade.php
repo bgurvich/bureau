@@ -8,6 +8,7 @@ use App\Support\DescriptionNormalizer;
 use App\Support\Formatting;
 use App\Support\MediaFolders;
 use App\Support\ProjectionMatcher;
+use App\Support\VendorReresolver;
 use App\Support\Statements\ParsedStatement;
 use App\Support\Statements\ParserRegistry;
 use App\Support\TransferPairing;
@@ -696,7 +697,12 @@ class extends Component
         // become new Contacts (kind=org) so future imports auto-link.
         $contactMap = $this->buildContactMap($state['rows']);
 
-        DB::transaction(function () use ($fileId, $state, $accountId, $media, $contactMap, &$created, &$skipReasons) {
+        // Also load explicit Contact match_patterns — these bypass the
+        // fingerprint logic so renamed contacts stay linked to their
+        // descriptions.
+        $patternList = VendorReresolver::patternList();
+
+        DB::transaction(function () use ($fileId, $state, $accountId, $media, $contactMap, $patternList, &$created, &$skipReasons) {
             foreach ($state['rows'] as $i => $row) {
                 if (! ($this->selected[$fileId][$i] ?? false)) {
                     continue;
@@ -709,8 +715,15 @@ class extends Component
                     continue;
                 }
                 $externalId = $this->externalIdFor($accountId, $row);
-                $fingerprint = $this->descriptionFingerprint((string) $row['description']);
-                $counterpartyId = $contactMap[$fingerprint] ?? null;
+                // Explicit match_patterns on any Contact win over the
+                // fingerprint lookup — user has declared "this contact
+                // owns rows like X" and renamed contacts stay linked.
+                $descLower = mb_strtolower((string) $row['description']);
+                $counterpartyId = VendorReresolver::firstPatternMatch($descLower, $patternList);
+                if ($counterpartyId === null) {
+                    $fingerprint = $this->descriptionFingerprint((string) $row['description']);
+                    $counterpartyId = $contactMap[$fingerprint] ?? null;
+                }
                 try {
                     $txn = Transaction::create([
                         'account_id' => $accountId,
@@ -805,9 +818,25 @@ class extends Component
         }
 
         $existing = $this->contactFingerprints();
+        $patternList = VendorReresolver::patternList();
+        $patternNamesById = Contact::query()
+            ->whereIn('id', array_unique(array_column($patternList, 0)))
+            ->pluck('display_name', 'id');
 
         $out = [];
         foreach ($rows as $idx => $row) {
+            // Pattern match wins — shows the contact name it'll link to.
+            $descLower = mb_strtolower((string) ($row['description'] ?? ''));
+            $patternHitId = VendorReresolver::firstPatternMatch($descLower, $patternList);
+            if ($patternHitId !== null) {
+                $out[$idx] = [
+                    'status' => 'existing',
+                    'label' => (string) ($patternNamesById[$patternHitId] ?? ''),
+                ];
+
+                continue;
+            }
+
             $fp = $fingerprints[$idx] ?? '';
             if ($fp === '') {
                 $out[$idx] = ['status' => 'skip', 'label' => '—'];
@@ -911,6 +940,10 @@ class extends Component
                     'kind' => 'org',
                     'display_name' => $this->humanizeDescription($originals[$fp] ?? $fp),
                     'is_vendor' => true,
+                    // Seed the explicit match pattern with the
+                    // fingerprint so future renames of display_name
+                    // don't detach this contact from its transactions.
+                    'match_patterns' => $fp,
                 ]);
                 $map[$fp] = $contact->id;
                 // Seed the lookup so subsequent fingerprints in this same

@@ -131,6 +131,53 @@ it('clears a stale auto-counterparty when the row\'s new fingerprint no longer m
         ->and($summary['cleared'])->toBe(1);
 });
 
+it('survives a rename of the auto-created vendor via match_patterns', function () {
+    authedInHousehold();
+    $account = reresolverAccount();
+
+    // First run auto-creates a vendor with seeded match_patterns.
+    foreach (['Purchase authorized on 07/30 Costco #1', 'Purchase authorized on 08/02 Costco #2'] as $desc) {
+        Transaction::create([
+            'account_id' => $account->id,
+            'occurred_on' => '2026-07-30',
+            'amount' => -10,
+            'currency' => 'USD',
+            'description' => $desc,
+            'status' => 'cleared',
+        ]);
+    }
+
+    $h = CurrentHousehold::get();
+    $h->forceFill(['data' => ['vendor_ignore_patterns' => 'purchase authorized on \d+/\d+']])->save();
+    VendorReresolver::run();
+
+    $auto = Contact::orderByDesc('id')->first();
+    expect($auto->match_patterns)->not->toBeNull();
+    $autoId = $auto->id;
+
+    // User renames the auto-created contact — display_name is now
+    // "Costco" (or whatever they want) but match_patterns stays.
+    $auto->forceFill(['display_name' => 'Costco Renamed'])->save();
+
+    // Add a THIRD transaction with the same vendor pattern — the
+    // import flow would call into VendorReresolver::firstPatternMatch
+    // when building the counterparty map. Re-run resolver too.
+    Transaction::create([
+        'account_id' => $account->id,
+        'occurred_on' => '2026-09-02',
+        'amount' => -10,
+        'currency' => 'USD',
+        'description' => 'Purchase authorized on 09/02 Costco #3',
+        'status' => 'cleared',
+    ]);
+    VendorReresolver::run();
+
+    // All three transactions must still point at the renamed (now
+    // single) contact — no new auto-contact spawned.
+    expect(Contact::count())->toBe(1)
+        ->and(Transaction::where('counterparty_contact_id', $autoId)->count())->toBe(3);
+});
+
 it('does not touch a row whose counterparty already matches its current fingerprint', function () {
     authedInHousehold();
     $account = reresolverAccount();
