@@ -98,7 +98,20 @@ class extends Component
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 stream.getTracks().forEach(t => t.stop());
             } catch (e) {
-                this.errorMessage = '{{ __('Microphone permission denied.') }}';
+                // Differentiate the common failure modes. A cached
+                // NotAllowedError is the usual sticky case — the
+                // browser won't re-prompt until the user resets site
+                // permissions, so spell out how to do that.
+                const name = e && e.name ? e.name : '';
+                if (name === 'NotAllowedError' || name === 'SecurityError') {
+                    this.errorMessage = '{{ __('Microphone blocked for this site. Tap the lock/shield in the address bar → Site settings → allow Microphone, then try again.') }}';
+                } else if (name === 'NotFoundError' || name === 'OverconstrainedError') {
+                    this.errorMessage = '{{ __('No microphone found.') }}';
+                } else if (name === 'NotReadableError') {
+                    this.errorMessage = '{{ __('Microphone is in use by another app. Close it and try again.') }}';
+                } else {
+                    this.errorMessage = '{{ __('Could not start the microphone.') }} ' + (name ? '(' + name + ')' : '');
+                }
                 this.want = false;
                 return;
             }

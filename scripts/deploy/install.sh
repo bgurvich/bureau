@@ -517,6 +517,19 @@ step_packages() {
     sudo systemctl enable --now "php${PHP_VER}-fpm"
     sudo systemctl enable --now nginx
 
+    # Tune php-fpm upload limits — Livewire photo captures cap at 20MB per
+    # file, and Postmark inbound can carry multi-page PDF scans. Default
+    # upload_max_filesize=2M silently drops real mobile photos; nginx is
+    # already at client_max_body_size=50M so PHP must match. Idempotent
+    # sed — only rewrites if the value still matches the distro default.
+    local php_ini="/etc/php/${PHP_VER}/fpm/php.ini"
+    if [[ -f "$php_ini" ]]; then
+        sudo sed -i 's/^upload_max_filesize *= *2M$/upload_max_filesize = 32M/' "$php_ini"
+        sudo sed -i 's/^post_max_size *= *8M$/post_max_size = 48M/' "$php_ini"
+        sudo sed -i 's/^memory_limit *= *128M$/memory_limit = 256M/' "$php_ini"
+        sudo systemctl reload "php${PHP_VER}-fpm" || true
+    fi
+
     success "Packages installed."
     info "Versions:"
     printf "  PHP:       %s\n" "$(php -v | head -1)"
