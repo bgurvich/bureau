@@ -41,21 +41,19 @@ class extends Component
         ];
     @endphp
 
-    <div role="tablist" aria-label="{{ __('Ledger sections') }}"
-         class="flex flex-wrap gap-1 rounded-lg border border-neutral-800 bg-neutral-900/60 p-1 text-xs">
+    <nav class="flex gap-1 border-b border-neutral-800" aria-label="{{ __('Ledger sections') }}">
         @foreach ($tabs as $key => $label)
             @php($active = $tab === $key)
             <button type="button"
                     wire:click="setTab('{{ $key }}')"
-                    role="tab"
                     id="ledger-tab-{{ $key }}"
-                    aria-selected="{{ $active ? 'true' : 'false' }}"
                     aria-controls="ledger-panel-{{ $key }}"
-                    class="rounded-md px-3 py-1.5 transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300 {{ $active ? 'bg-neutral-800 text-neutral-100' : 'text-neutral-400 hover:bg-neutral-800/50 hover:text-neutral-200' }}">
+                    @if ($active) aria-current="page" @endif
+                    class="-mb-px border-b-2 px-3 py-2 text-xs font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300 {{ $active ? 'border-neutral-100 text-neutral-100' : 'border-transparent text-neutral-500 hover:text-neutral-200' }}">
                 {{ $label }}
             </button>
         @endforeach
-    </div>
+    </nav>
 
     <div role="tabpanel"
          id="ledger-panel-{{ $tab }}"
