@@ -59,8 +59,7 @@
                                 [__('Subscriptions'), 'fiscal.subscriptions', 'key'],
                                 [__('Year over year'), 'fiscal.yoy', 'pie'],
                                 [__('Budgets'), 'fiscal.budgets', 'pie'],
-                                [__('Category rules'), 'fiscal.category_rules', 'note'],
-                                [__('Tag rules'), 'fiscal.tag_rules', 'note'],
+                                [__('Rules'), 'fiscal.rules', 'note'],
                                 [__('Savings goals'), 'fiscal.savings_goals', 'check-square'],
                                 [__('Inbox'), 'fiscal.inbox', 'note'],
                                 [__('Bookkeeper'), 'bookkeeper', 'file-signature'],
@@ -81,9 +80,7 @@
                                 [__('Insurance'), 'relationships.insurance', 'shield'],
                             ],
                             __('Assets') => [
-                                [__('Properties'), 'assets.properties', 'building'],
-                                [__('Vehicles'), 'assets.vehicles', 'car'],
-                                [__('Inventory'), 'assets.inventory', 'box'],
+                                [__('Assets'), 'assets.index', 'box'],
                             ],
                             __('Records') => [
                                 [__('Documents'), 'records.documents', 'file-text'],

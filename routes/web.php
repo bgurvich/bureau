@@ -73,6 +73,7 @@ Route::middleware(['auth', 'preferences', 'household'])->group(function () {
     Route::livewire('/budgets', 'budgets-index')->name('fiscal.budgets');
     Route::livewire('/category-rules', 'category-rules-index')->name('fiscal.category_rules');
     Route::livewire('/tag-rules', 'tag-rules-index')->name('fiscal.tag_rules');
+    Route::livewire('/rules', 'rules-hub')->name('fiscal.rules');
     Route::livewire('/savings-goals', 'savings-goals-index')->name('fiscal.savings_goals');
     Route::livewire('/import/statements', 'statements-import')->name('fiscal.import.statements');
     Route::livewire('/bookkeeper', 'bookkeeper')->name('bookkeeper');
@@ -92,6 +93,7 @@ Route::middleware(['auth', 'preferences', 'household'])->group(function () {
     Route::livewire('/properties', 'properties-index')->name('assets.properties');
     Route::livewire('/vehicles', 'vehicles-index')->name('assets.vehicles');
     Route::livewire('/inventory', 'inventory-index')->name('assets.inventory');
+    Route::livewire('/assets', 'assets-hub')->name('assets.index');
     Route::livewire('/health/providers', 'health-providers-index')->name('health.providers');
     Route::livewire('/health/prescriptions', 'prescriptions-index')->name('health.prescriptions');
     Route::livewire('/health/appointments', 'appointments-index')->name('health.appointments');
