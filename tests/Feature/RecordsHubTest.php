@@ -12,6 +12,7 @@ it('renders the records hub with the Documents tab by default', function () {
         ->assertSee(__('Documents'))
         ->assertSee(__('Media'))
         ->assertSee(__('Mail'))
+        ->assertSee(__('Post'))
         ->assertSee(__('Notes'))
         ->assertSee(__('Tags'));
 });
@@ -24,6 +25,8 @@ it('switches between records tabs', function () {
         ->assertSet('tab', 'media')
         ->call('setTab', 'mail')
         ->assertSet('tab', 'mail')
+        ->call('setTab', 'post')
+        ->assertSet('tab', 'post')
         ->call('setTab', 'notes')
         ->assertSet('tab', 'notes')
         ->call('setTab', 'tags')

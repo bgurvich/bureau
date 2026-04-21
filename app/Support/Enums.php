@@ -141,6 +141,29 @@ class Enums
     /**
      * @return array<string, string>
      */
+    /**
+     * Physical-mail classification — drives the filter dropdown and the
+     * Inspector select. Keep the list short; unspecified mail defaults
+     * to "other".
+     *
+     * @return array<string, string>
+     */
+    public static function physicalMailKinds(): array
+    {
+        return [
+            'letter' => __('Letter'),
+            'bill' => __('Bill'),
+            'package_slip' => __('Package slip'),
+            'legal' => __('Legal'),
+            'medical' => __('Medical'),
+            'ad' => __('Ad / junk'),
+            'other' => __('Other'),
+        ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
     public static function contactKinds(): array
     {
         return [

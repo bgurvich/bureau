@@ -12,6 +12,7 @@ use App\Models\InsurancePolicySubject;
 use App\Models\InventoryItem;
 use App\Models\Meeting;
 use App\Models\OnlineAccount;
+use App\Models\PhysicalMail;
 use App\Models\Note;
 use App\Models\Project;
 use App\Models\Property;
@@ -1051,6 +1052,7 @@ new class extends Component
             'inventory' => [InventoryItem::class, 'owner_user_id'],
             'document' => [Document::class, 'holder_user_id'],
             'note' => [Note::class, 'user_id'],
+            'physical_mail' => [PhysicalMail::class, null],
             'project' => [Project::class, 'user_id'],
             'online_account' => [OnlineAccount::class, 'user_id'],
             'checklist_template' => [\App\Models\ChecklistTemplate::class, 'user_id'],
@@ -1342,6 +1344,14 @@ new class extends Component
         $this->transfer_occurred_on = now()->toDateString();
         $this->transfer_currency = $currency;
 
+        // Physical mail defaults — received today, classified as "other"
+        // until the user picks a kind, no processed-at (belongs to the
+        // inbox flow).
+        $this->pm_received_on = now()->toDateString();
+        $this->pm_kind = 'other';
+        $this->pm_action_required = false;
+        $this->pm_processed_at = '';
+
         // Checklist defaults — daily routine starting today, two empty rows
         // so the user sees the repeater shape without having to hit "Add
         // item". Stored as a key-keyed map; insertion order = visual order.
@@ -1472,6 +1482,7 @@ new class extends Component
             'transaction' => $this->loadTransaction(),
             'contact' => $this->loadContact(),
             'note' => $this->loadNote(),
+            'physical_mail' => $this->loadPhysicalMail(),
             'bill' => $this->loadBill(),
             'document' => $this->loadDocument(),
             'meeting' => $this->loadMeeting(),
@@ -1563,6 +1574,31 @@ new class extends Component
         $this->pinned = (bool) $n->pinned;
         $this->private = (bool) $n->private;
         $this->subject_refs = $this->subjectRefsFrom($n);
+    }
+
+    // Physical-mail-specific inspector state. Uses the shared $title /
+    // $description fields for subject + summary so the Inspector's
+    // existing validation + admin partials keep working.
+    public string $pm_kind = 'other';
+
+    public string $pm_received_on = '';
+
+    public ?int $pm_sender_id = null;
+
+    public bool $pm_action_required = false;
+
+    public string $pm_processed_at = '';
+
+    private function loadPhysicalMail(): void
+    {
+        $m = PhysicalMail::findOrFail($this->id);
+        $this->title = (string) ($m->subject ?? '');
+        $this->description = (string) ($m->summary ?? '');
+        $this->pm_kind = (string) ($m->kind ?? 'other');
+        $this->pm_received_on = $m->received_on?->toDateString() ?? now()->toDateString();
+        $this->pm_sender_id = $m->sender_contact_id;
+        $this->pm_action_required = (bool) $m->action_required;
+        $this->pm_processed_at = $m->processed_at ? $m->processed_at->format('Y-m-d\TH:i') : '';
     }
 
     private function loadBill(): void
@@ -1802,6 +1838,7 @@ new class extends Component
                 'transaction' => $this->saveTransaction(),
                 'contact' => $this->saveContact(),
                 'note' => $this->saveNote(),
+                'physical_mail' => $this->savePhysicalMail(),
                 'bill' => $this->saveBill(),
                 'document' => $this->saveDocument(),
                 'meeting' => $this->saveMeeting(),
@@ -2210,6 +2247,38 @@ new class extends Component
             $this->id = $note->id;
         }
         $note->syncSubjects($this->parseSubjectRefs($this->subject_refs));
+    }
+
+    private function savePhysicalMail(): void
+    {
+        $data = $this->validate([
+            'title' => 'nullable|string|max:255',
+            'description' => 'nullable|string|max:5000',
+            'pm_kind' => ['required', Rule::in(array_keys(Enums::physicalMailKinds()))],
+            'pm_received_on' => 'required|date',
+            'pm_sender_id' => 'nullable|integer|exists:contacts,id',
+            'pm_action_required' => 'boolean',
+            'pm_processed_at' => 'nullable|date',
+        ]);
+
+        $payload = [
+            'subject' => trim((string) $data['title']) ?: null,
+            'summary' => trim((string) $data['description']) ?: null,
+            'kind' => $data['pm_kind'],
+            'received_on' => $data['pm_received_on'],
+            'sender_contact_id' => $data['pm_sender_id'] ?: null,
+            'action_required' => (bool) $data['pm_action_required'],
+            'processed_at' => $data['pm_processed_at']
+                ? CarbonImmutable::parse($data['pm_processed_at'])
+                : null,
+        ];
+
+        if ($this->id) {
+            PhysicalMail::findOrFail($this->id)->update($payload);
+        } else {
+            $m = PhysicalMail::create($payload);
+            $this->id = $m->id;
+        }
     }
 
     private function saveDocument(): void
@@ -3650,6 +3719,7 @@ new class extends Component
                 'transaction' => Transaction::findOrFail($this->id)->delete(),
                 'contact' => Contact::findOrFail($this->id)->delete(),
                 'note' => Note::findOrFail($this->id)->delete(),
+                'physical_mail' => PhysicalMail::findOrFail($this->id)->delete(),
                 'bill' => RecurringRule::findOrFail($this->id)->delete(),
                 'document' => Document::findOrFail($this->id)->delete(),
                 'meeting' => Meeting::findOrFail($this->id)->delete(),
@@ -3757,6 +3827,7 @@ new class extends Component
             'transaction' => __('transaction'),
             'contact' => __('contact'),
             'note' => __('note'),
+            'physical_mail' => __('post'),
             'bill' => __('bill'),
             'document' => __('document'),
             'meeting' => __('meeting'),
@@ -3890,6 +3961,7 @@ new class extends Component
                 @case('contact') @include('partials.inspector.forms.contact')        @break
                 @case('bill')    @include('partials.inspector.forms.bill')           @break
                 @case('note')    @include('partials.inspector.forms.note')           @break
+                @case('physical_mail') @include('partials.inspector.forms.physical_mail') @break
                 @case('document') @include('partials.inspector.forms.document')      @break
                 @case('meeting') @include('partials.inspector.forms.meeting')        @break
                 @case('project') @include('partials.inspector.forms.project')        @break

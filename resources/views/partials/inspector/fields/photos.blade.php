@@ -5,7 +5,7 @@
     // Allow attaching even before the record exists for types where create
     // via photo is meaningful — inventory is the only one today, matching
     // the mobile photo-first capture flow.
-    $allowCreateWithPhoto = in_array($this->type, ['inventory'], true);
+    $allowCreateWithPhoto = in_array($this->type, ['inventory', 'physical_mail'], true);
     $canAttach = $typeSupportsMedia && ($this->id || $allowCreateWithPhoto);
 @endphp
 @if ($canAttach)

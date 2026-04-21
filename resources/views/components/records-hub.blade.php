@@ -13,7 +13,7 @@ class extends Component
 
     public function setTab(string $tab): void
     {
-        if (in_array($tab, ['documents', 'media', 'mail', 'notes', 'tags'], true)) {
+        if (in_array($tab, ['documents', 'media', 'mail', 'post', 'notes', 'tags'], true)) {
             $this->tab = $tab;
         }
     }
@@ -31,6 +31,7 @@ class extends Component
             'documents' => __('Documents'),
             'media' => __('Media'),
             'mail' => __('Mail'),
+            'post' => __('Post'),
             'notes' => __('Notes'),
             'tags' => __('Tags'),
         ];
@@ -59,6 +60,9 @@ class extends Component
                 @break
             @case('mail')
                 <livewire:mail-index :key="'records-mail'" />
+                @break
+            @case('post')
+                <livewire:physical-mail-index :key="'records-post'" />
                 @break
             @case('notes')
                 <livewire:notes-index :key="'records-notes'" />

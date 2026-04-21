@@ -31,6 +31,7 @@
         __('Records') => [
             ['document', __('Document'), 'D'],
             ['online_account', __('Online account'), 'O'],
+            ['physical_mail', __('Post'), null],
             [null, __('Media / scan'), null],
         ],
         __('Health') => [
