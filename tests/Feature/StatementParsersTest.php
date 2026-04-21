@@ -54,26 +54,77 @@ it('Wells Fargo checking PDF parser recognizes and extracts', function () {
         ->and($amounts)->toContain(-75.50);
 });
 
+it('Wells Fargo checking PDF parser reads 3-column Activity Summary layout', function () {
+    // Regression: real WF checking PDFs render transactions as a single
+    // three-column table — Deposits/Additions | Withdrawals/Subtractions
+    // | Ending daily balance — with no "Deposits and Other Additions"
+    // section header. The old section-based signing flipped every
+    // unsigned amount to negative, so a $9,548.91 direct-deposit showed
+    // up as -9,548.91 on import. pdftotext -layout preserves column
+    // alignment: every deposit ends at col 82, every withdrawal at col
+    // 98, every balance at col 114 in this fixture. The column-aware
+    // parser clusters token end-positions and classifies by proximity.
+    $text = <<<'TXT'
+Wells Fargo Bank
+Statement Period 01/01/2026 - 01/31/2026
+Account ending in 1234
+Beginning balance on 1/1  $3,050.63
+Ending balance on 1/31  $13,087.02
+
+                                                                      Deposits/    Withdrawals/    Ending daily
+Date   Description                                                    Additions    Subtractions    balance
+1/22   WF Home Mtg Auto Pay 012218 0302976428 Boris                                      281.06
+1/22   WF Home Mtg Auto Pay 012218 0383322369 Boris                                      907.62        4,238.11
+1/23   Direct Dep Acme Corp Payroll 012318                              2,500.00                       6,738.11
+1/25   Uni021-Unirgy Ll Dirdep 012518 1 Gurvich Boris                   9,548.91                      16,287.02
+1/29   Passportservices Payment 180126 0226                                              350.00       15,937.02
+1/30   ATM Withdrawal 5555 Main St                                                       200.00       15,737.02
+TXT;
+
+    $stmt = (new WellsFargoCheckingStatementParser)->parse($text);
+    $amounts = array_map(fn ($t) => $t->amount, $stmt->transactions);
+
+    expect(count($stmt->transactions))->toBe(6)
+        // Withdrawals must stay negative.
+        ->and($amounts)->toContain(-281.06)
+        ->and($amounts)->toContain(-907.62)
+        ->and($amounts)->toContain(-350.00)
+        ->and($amounts)->toContain(-200.00)
+        // Deposits must stay positive — this is the primary regression.
+        ->and($amounts)->toContain(2500.00)
+        ->and($amounts)->toContain(9548.91)
+        ->and($amounts)->not->toContain(-2500.00)
+        ->and($amounts)->not->toContain(-9548.91)
+        // Running balances never land in the transaction amount.
+        ->and($amounts)->not->toContain(4238.11)
+        ->and($amounts)->not->toContain(16287.02);
+});
+
 it('Wells Fargo checking PDF parser reads amount, not running balance', function () {
     // Regression: the row regex anchored to the last money token on the
     // line, so when WF printed "date description amount running_balance"
     // the parser captured the balance as the transaction amount. This
-    // fixture mirrors the real PDF layout where each row carries both.
+    // fixture mirrors the 2-column (sectioned) layout with a running
+    // balance on every row. Column detection should NOT fire here —
+    // two tight clusters at different positions don't qualify as a
+    // three-column Activity Summary — and the section-based fallback
+    // picks up the signs from the "Deposits ..." / "Withdrawals ..."
+    // headers.
     $text = <<<'TXT'
-    Wells Fargo Bank
-    Statement Period 03/01/2026 - 03/31/2026
-    Account ending in 1234
-    Beginning balance on 3/1  $1,000.00
-    Ending balance on 3/31  $1,425.00
+Wells Fargo Bank
+Statement Period 03/01/2026 - 03/31/2026
+Account ending in 1234
+Beginning balance on 3/1  $1,000.00
+Ending balance on 3/31  $1,425.00
 
-    Deposits and Other Additions
-    3/05  Payroll ABC Company  500.00  1,500.00
-    3/15  Transfer from savings  250.00  1,750.00
+Deposits and Other Additions
+3/05   Payroll ABC Company                                            500.00     1,500.00
+3/15   Transfer from savings                                          250.00     1,750.00
 
-    Withdrawals and Other Subtractions
-    3/10  Rent landlord  250.00  1,500.00
-    3/20  Grocery store  75.00  1,425.00
-    TXT;
+Withdrawals and Other Subtractions
+3/10   Rent landlord                                                  250.00     1,500.00
+3/20   Grocery store                                                   75.00     1,425.00
+TXT;
 
     $stmt = (new WellsFargoCheckingStatementParser)->parse($text);
     $amounts = array_map(fn ($t) => $t->amount, $stmt->transactions);
