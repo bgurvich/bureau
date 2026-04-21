@@ -284,7 +284,18 @@ new class extends Component
         },
     }"
     @keydown.escape.window="if (open) $wire.close()"
-    @keydown.slash.window.prevent="if (!open && !['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName) && !document.activeElement?.isContentEditable) Livewire.dispatch('global-search-open')"
+    {{-- .prevent was the whole problem: Alpine runs it BEFORE the
+         inner guard, so every `/` key got preventDefault()'d even
+         while typing in a textarea (vendor ignore list, note body,
+         etc.). Inlined the preventDefault inside the guard so it
+         fires only when we actually handle the shortcut. --}}
+    @keydown.slash.window="
+        if (open) return;
+        const el = document.activeElement;
+        if (el && (['INPUT','TEXTAREA','SELECT'].includes(el.tagName) || el.isContentEditable)) return;
+        $event.preventDefault();
+        Livewire.dispatch('global-search-open');
+    "
 >
     <div x-show="open" x-cloak x-transition.opacity class="fixed inset-0 z-40 bg-black/70" aria-hidden="true"
          @click="$wire.close()"></div>
