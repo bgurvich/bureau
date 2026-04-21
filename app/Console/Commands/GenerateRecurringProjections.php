@@ -78,7 +78,11 @@ class GenerateRecurringProjections extends Command
     {
         $issuedOn = $date->toDateString();
         $offsetDays = max(0, (int) ($rule->due_offset_days ?? 0));
-        $dueDate = $date->addDays($offsetDays);
+        // Learned drift from match history — signed, bounded; shifts the
+        // due date without touching the RRULE anchor so the adjustment
+        // is reversible (set anchor_drift_days = null to disable).
+        $driftDays = (int) ($rule->anchor_drift_days ?? 0);
+        $dueDate = $date->addDays($offsetDays + $driftDays);
         $dueOn = $dueDate->toDateString();
         $isPast = $dueDate->lt(CarbonImmutable::today());
 

@@ -96,6 +96,10 @@ class ProjectionMatcher
                 'unmatched_at' => null,
             ])->save();
 
+            if ($projection->rule) {
+                ProjectionDriftDetector::nudgeIfNeeded($projection->rule);
+            }
+
             return ProjectionMatchResult::linked($projection);
         }
 
@@ -176,6 +180,8 @@ class ProjectionMatcher
             'matched_at' => now(),
             'autopay' => (bool) ($rule->autopay ?? false),
         ]);
+
+        ProjectionDriftDetector::nudgeIfNeeded($rule);
 
         return $projection;
     }

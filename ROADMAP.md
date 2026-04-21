@@ -314,7 +314,7 @@ Each has a target shape; listed in rough priority based on personal-admin load.
 
 ### Decisions & research
 - 💡 `decisions` (what, when, why, alternatives, outcome_review) — retrospective value.
-- 💡 `wishlists` (item, linked_url, target_price, price_history)
+- 💡 `wishlists` (item, linked_url, target_price, price_history) — when built, sits as a tab on the Records hub alongside Documents/Media/Mail/Notes/Tags/Post. Shape: `wishlists` (title, url, target_amount, target_currency, priority 1-3, state: open|bought|dropped, acquired_on, notes, HasMedia for product shots) + `wishlist_price_snapshots` (wishlist_id, amount, seen_on) so manual price-drop tracking flags rows where current<target. A bought wishlist can link to the matching Transaction to close the loop.
 
 ### "In case of" pack
 - ✅ `/in-case-of` derived view. Lists: documents with `in_case_of_pack=true`, online accounts flagged or `importance_tier=critical`, favorite contacts (with phones + emails), active accounts, active prescriptions. Print-friendly styling; "Print / save PDF" button. Empty state when nothing flagged.
