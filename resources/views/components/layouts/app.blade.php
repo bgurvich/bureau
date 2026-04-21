@@ -60,7 +60,6 @@
                                 [__('Budgets'), 'fiscal.budgets', 'pie'],
                                 [__('Rules'), 'fiscal.rules', 'note'],
                                 [__('Savings goals'), 'fiscal.savings_goals', 'check-square'],
-                                [__('Inbox'), 'fiscal.inbox', 'note'],
                             ],
                             __('Life') => [
                                 [__('Schedule'), 'life.schedule', 'calendar'],

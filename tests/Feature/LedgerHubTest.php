@@ -12,6 +12,7 @@ it('renders the ledger hub with the Accounts tab by default', function () {
         ->assertSee(__('Accounts'))
         ->assertSee(__('Transactions'))
         ->assertSee(__('Reconcile'))
+        ->assertSee(__('Inbox'))
         ->assertSee(__('Import statements'))
         ->assertSee(__('Bookkeeper'));
 });
@@ -24,6 +25,8 @@ it('switches the active tab via setTab', function () {
         ->assertSet('tab', 'transactions')
         ->call('setTab', 'reconcile')
         ->assertSet('tab', 'reconcile')
+        ->call('setTab', 'inbox')
+        ->assertSet('tab', 'inbox')
         ->call('setTab', 'import')
         ->assertSet('tab', 'import')
         ->call('setTab', 'bookkeeper')
