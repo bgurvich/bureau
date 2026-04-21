@@ -989,6 +989,23 @@ UNIT
     sudo systemctl enable "$QUEUE_UNIT"
     sudo systemctl restart "$QUEUE_UNIT"
     success "${QUEUE_UNIT}.service enabled and running (journalctl -u ${QUEUE_UNIT} -f)."
+
+    # Grant the deploy user passwordless `systemctl reload` for php-fpm +
+    # queue-worker + `systemctl restart` for the queue worker. Without
+    # this, deploy.sh either prompts for a password mid-run (interactive)
+    # or silently skips the reload (non-interactive). Scoped to only
+    # these units so we're not handing out broad root.
+    local php_fpm_unit
+    php_fpm_unit=$(systemctl list-units --type=service --no-pager --plain \
+        | awk '/php.*fpm/ {print $1}' | head -1)
+    php_fpm_unit="${php_fpm_unit:-php${PHP_VER}-fpm.service}"
+    sudo tee "/etc/sudoers.d/${APP_NAME}-deploy" > /dev/null <<SUDO
+${INSTALL_USER} ALL=(root) NOPASSWD: /bin/systemctl reload ${php_fpm_unit}, /bin/systemctl reload ${QUEUE_UNIT}, /bin/systemctl restart ${QUEUE_UNIT}
+SUDO
+    sudo chmod 440 "/etc/sudoers.d/${APP_NAME}-deploy"
+    sudo visudo -cf "/etc/sudoers.d/${APP_NAME}-deploy" > /dev/null \
+        && success "sudoers rule: ${INSTALL_USER} can reload ${php_fpm_unit} + ${QUEUE_UNIT} without a password." \
+        || { sudo rm -f "/etc/sudoers.d/${APP_NAME}-deploy"; die "sudoers rule failed visudo -c; rolled back"; }
 }
 
 step_scheduler() {

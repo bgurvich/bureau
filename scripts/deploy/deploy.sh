@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
 # Laravel — Production deploy
-# Usage: bash scripts/deploy/deploy.sh [--skip-build]
+# Usage: bash scripts/deploy/deploy.sh [--skip-build] [--force|-f]
 # Run from the repo root as the user that owns the checkout (typical after
 # install.sh: whoever ran it — e.g. `moshe` — owns the repo and can pull).
 # Reads APP_URL / DB_* from .env; auto-detects the php-fpm systemd unit.
@@ -31,8 +31,10 @@ usage() {
 [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]] && usage
 
 SKIP_BUILD=false
+FORCE=false
 for arg in "$@"; do
     [[ "$arg" == "--skip-build" ]] && SKIP_BUILD=true
+    [[ "$arg" == "--force" || "$arg" == "-f" ]] && FORCE=true
 done
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -54,8 +56,12 @@ echo -e "${BOLD}── Git pull ────────────────
 PULL_OUTPUT=$(git pull 2>&1)
 echo "$PULL_OUTPUT"
 if [[ "$PULL_OUTPUT" == "Already up to date." ]]; then
-    echo "No changes to deploy."
-    exit 0
+    if [[ "$FORCE" == true ]]; then
+        echo "No new commits, but --force was set — running the full deploy anyway."
+    else
+        echo "No changes to deploy. (Use --force to deploy anyway, e.g. after .env edits or a bad previous deploy.)"
+        exit 0
+    fi
 fi
 
 # ── Security checks ──────────────────────────────────────
@@ -231,13 +237,18 @@ ok "storage/framework + bootstrap/cache → ug+rwX,o-rwx (scoped to files we own
 # ── Restart services ─────────────────────────────────────
 echo ""
 echo -e "${BOLD}── Restart services ─────────────────────────────────────${RESET}"
+# reload needs root; use `sudo -n` so it fails loudly instead of prompting
+# for a password mid-deploy. install.sh installs a /etc/sudoers.d rule that
+# grants the deploy user passwordless reload for exactly these services.
 if command -v systemctl &>/dev/null; then
     PHP_FPM_UNIT=$(systemctl list-units --type=service --no-pager --plain \
         | awk '/php.*fpm/ {print $1}' | head -1)
     if [ -n "$PHP_FPM_UNIT" ]; then
-        systemctl reload "$PHP_FPM_UNIT" 2>/dev/null \
-            && ok "Reloaded $PHP_FPM_UNIT" \
-            || warn "Could not reload $PHP_FPM_UNIT — reload manually"
+        if sudo -n systemctl reload "$PHP_FPM_UNIT" 2>/dev/null; then
+            ok "Reloaded $PHP_FPM_UNIT"
+        else
+            warn "Could not reload $PHP_FPM_UNIT — add a sudoers rule: \"$(id -un) ALL=(root) NOPASSWD: /bin/systemctl reload $PHP_FPM_UNIT\""
+        fi
     else
         warn "No php-fpm systemd unit found"
     fi
