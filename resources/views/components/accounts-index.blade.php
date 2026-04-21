@@ -46,8 +46,8 @@ class extends Component
     public function accounts()
     {
         $typeOrder = [
-            'bank' => 0, 'credit' => 1, 'cash' => 2, 'investment' => 3,
-            'loan' => 4, 'mortgage' => 5, 'gift_card' => 6, 'prepaid' => 7,
+            'checking' => 0, 'savings' => 1, 'credit' => 2, 'cash' => 3, 'investment' => 4,
+            'loan' => 5, 'mortgage' => 6, 'gift_card' => 7, 'prepaid' => 8,
         ];
 
         $accounts = Account::with(['vendor:id,display_name', 'loanTerms:id,account_id,interest_rate,rate_type'])

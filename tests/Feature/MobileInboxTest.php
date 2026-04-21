@@ -48,7 +48,7 @@ it('surfaces unprocessed inventory and unprocessed OCR-extracted media', functio
 
 it('bulk-creates transactions from selected scans on mobile', function () {
     authedInHousehold();
-    $account = Account::create(['type' => 'bank', 'name' => 'Chase', 'currency' => 'USD', 'opening_balance' => 0]);
+    $account = Account::create(['type' => 'checking', 'name' => 'Chase', 'currency' => 'USD', 'opening_balance' => 0]);
     $m = mobileUnprocessedScan(['vendor' => 'Acme', 'amount' => 25.00, 'issued_on' => '2026-04-10']);
 
     Livewire::test('mobile.inbox')

@@ -114,7 +114,7 @@ it('creates a transaction', function () {
     authedInHousehold();
 
     $account = Account::create([
-        'type' => 'bank', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0,
+        'type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0,
     ]);
 
     Livewire::test('inspector')
@@ -136,7 +136,7 @@ it('creates a transaction', function () {
 it('surfaces a period-lock error instead of throwing', function () {
     authedInHousehold();
     $account = Account::create([
-        'type' => 'bank', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0,
+        'type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0,
     ]);
     PeriodLock::create(['locked_through' => '2026-03-31', 'locked_at' => now()]);
 
@@ -221,7 +221,7 @@ it('creates a one-off bill via the Bill form', function () {
     authedInHousehold();
 
     $account = Account::create([
-        'type' => 'bank', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0,
+        'type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0,
     ]);
 
     Livewire::test('inspector')
@@ -253,7 +253,7 @@ it('creates a one-off bill via the Bill form', function () {
 it('creates a recurring monthly bill via the Bill form', function () {
     authedInHousehold();
     $account = Account::create([
-        'type' => 'bank', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0,
+        'type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0,
     ]);
 
     Livewire::test('inspector')
@@ -279,7 +279,7 @@ it('mark-paid pre-fills the Transaction form from the projection', function () {
     authedInHousehold();
 
     $account = Account::create([
-        'type' => 'bank', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0,
+        'type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0,
     ]);
     $rule = RecurringRule::create([
         'kind' => 'bill', 'title' => 'Internet',
@@ -431,7 +431,7 @@ it('transfers ownership via the Admin picker', function () {
         ->users()->attach($spouse->id, ['role' => 'member', 'joined_at' => now()]);
 
     $account = Account::create([
-        'type' => 'bank', 'name' => 'Chase', 'currency' => 'USD',
+        'type' => 'checking', 'name' => 'Chase', 'currency' => 'USD',
         'opening_balance' => 500, 'user_id' => $me->id,
     ]);
 
@@ -449,7 +449,7 @@ it('releases ownership to Shared when the picker is cleared', function () {
     $me = authedInHousehold();
 
     $account = Account::create([
-        'type' => 'bank', 'name' => 'Joint Checking', 'currency' => 'USD',
+        'type' => 'checking', 'name' => 'Joint Checking', 'currency' => 'USD',
         'opening_balance' => 100, 'user_id' => $me->id,
     ]);
 
@@ -596,7 +596,7 @@ it('mark-paid save auto-matches the projection', function () {
     authedInHousehold();
 
     $account = Account::create([
-        'type' => 'bank', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0,
+        'type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0,
     ]);
     $rule = RecurringRule::create([
         'kind' => 'bill', 'title' => 'Phone',

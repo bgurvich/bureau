@@ -21,7 +21,7 @@ it('sums income, expense, and net for the current month', function () {
     authedInHousehold();
 
     $account = Account::create([
-        'type' => 'bank', 'name' => 'Main', 'currency' => 'USD',
+        'type' => 'checking', 'name' => 'Main', 'currency' => 'USD',
         'opening_balance' => 1000, 'include_in_net_worth' => true,
     ]);
 
@@ -101,7 +101,7 @@ it('groups net worth by account kind', function () {
     authedInHousehold();
 
     Account::create([
-        'type' => 'bank', 'name' => 'Checking', 'currency' => 'USD',
+        'type' => 'checking', 'name' => 'Checking', 'currency' => 'USD',
         'opening_balance' => 5000, 'include_in_net_worth' => true,
     ]);
     Account::create([
@@ -110,7 +110,7 @@ it('groups net worth by account kind', function () {
     ]);
 
     $this->get('/finance')
-        ->assertSee('Bank')
+        ->assertSee('Checking')
         ->assertSee('Credit')
         ->assertSee('$5,000.00')
         ->assertSee('-$800.00');

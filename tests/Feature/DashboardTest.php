@@ -36,7 +36,7 @@ it('money radar net worth reflects cleared transactions and transfers', function
     authedInHousehold();
 
     $account = Account::create([
-        'type' => 'bank', 'name' => 'Main', 'currency' => 'USD',
+        'type' => 'checking', 'name' => 'Main', 'currency' => 'USD',
         'opening_balance' => 1000, 'include_in_net_worth' => true, 'is_active' => true,
     ]);
 
@@ -60,7 +60,7 @@ it('surfaces a 30-day projected net + end-balance forecast tile', function () {
     $user = authedInHousehold();
 
     $account = Account::create([
-        'type' => 'bank', 'name' => 'Checking', 'currency' => 'USD',
+        'type' => 'checking', 'name' => 'Checking', 'currency' => 'USD',
         'opening_balance' => 1000, 'include_in_net_worth' => true, 'is_active' => true,
         'user_id' => $user->id,
     ]);

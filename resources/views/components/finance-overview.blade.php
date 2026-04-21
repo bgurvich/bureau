@@ -40,7 +40,7 @@ class extends Component
     public function netWorth(): array
     {
         $byKind = [
-            'bank' => 0.0, 'credit' => 0.0, 'cash' => 0.0, 'investment' => 0.0,
+            'checking' => 0.0, 'savings' => 0.0, 'credit' => 0.0, 'cash' => 0.0, 'investment' => 0.0,
             'loan' => 0.0, 'mortgage' => 0.0, 'gift_card' => 0.0, 'prepaid' => 0.0,
             'property' => 0.0, 'vehicle' => 0.0, 'inventory' => 0.0,
         ];

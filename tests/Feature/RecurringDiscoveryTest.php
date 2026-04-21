@@ -26,7 +26,7 @@ function seedNetflixRecurrence(Account $account, int $months = 7): void
 
 it('discovers a monthly recurring pattern from 7 months of Netflix charges', function () {
     $user = authedInHousehold();
-    $account = Account::create(['type' => 'bank', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
+    $account = Account::create(['type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
     seedNetflixRecurrence($account, 7);
 
     $household = $user->defaultHousehold;
@@ -43,7 +43,7 @@ it('discovers a monthly recurring pattern from 7 months of Netflix charges', fun
 
 it('rediscovery is idempotent and preserves dismissal state', function () {
     $user = authedInHousehold();
-    $account = Account::create(['type' => 'bank', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
+    $account = Account::create(['type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
     seedNetflixRecurrence($account, 7);
 
     $discovery = app(RecurringPatternDiscovery::class);
@@ -58,7 +58,7 @@ it('rediscovery is idempotent and preserves dismissal state', function () {
 
 it('skips patterns already covered by an active RecurringRule', function () {
     $user = authedInHousehold();
-    $account = Account::create(['type' => 'bank', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
+    $account = Account::create(['type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
     seedNetflixRecurrence($account, 7);
 
     // Pre-existing rule covers the same cadence + title fingerprint.
@@ -78,7 +78,7 @@ it('skips patterns already covered by an active RecurringRule', function () {
 
 it('requires at least 3 occurrences and 90-day span', function () {
     $user = authedInHousehold();
-    $account = Account::create(['type' => 'bank', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
+    $account = Account::create(['type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
     // Only 2 occurrences — insufficient
     seedNetflixRecurrence($account, 2);
 
@@ -88,7 +88,7 @@ it('requires at least 3 occurrences and 90-day span', function () {
 
 it('recurring:discover artisan command runs discovery and reports counts', function () {
     authedInHousehold();
-    $account = Account::create(['type' => 'bank', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
+    $account = Account::create(['type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
     seedNetflixRecurrence($account, 7);
 
     $this->artisan('recurring:discover')
@@ -99,7 +99,7 @@ it('recurring:discover artisan command runs discovery and reports counts', funct
 
 it('dismissing a discovery via the Bills card persists the state', function () {
     $user = authedInHousehold();
-    $account = Account::create(['type' => 'bank', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
+    $account = Account::create(['type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
     seedNetflixRecurrence($account, 7);
     app(RecurringPatternDiscovery::class)->discover($user->defaultHousehold);
 
@@ -111,7 +111,7 @@ it('dismissing a discovery via the Bills card persists the state', function () {
 
 it('acceptAsSubscription creates a RecurringRule and auto-creates a Subscription', function () {
     $user = authedInHousehold();
-    $account = Account::create(['type' => 'bank', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
+    $account = Account::create(['type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
     seedNetflixRecurrence($account, 7);
     app(RecurringPatternDiscovery::class)->discover($user->defaultHousehold);
 
@@ -125,7 +125,7 @@ it('acceptAsSubscription creates a RecurringRule and auto-creates a Subscription
 
 it('dismissAll marks every pending discovery dismissed', function () {
     $user = authedInHousehold();
-    $account = Account::create(['type' => 'bank', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
+    $account = Account::create(['type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
     seedNetflixRecurrence($account, 7);
     app(RecurringPatternDiscovery::class)->discover($user->defaultHousehold);
     expect(RecurringDiscovery::where('status', 'pending')->count())->toBeGreaterThan(0);

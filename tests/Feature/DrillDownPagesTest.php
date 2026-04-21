@@ -12,7 +12,7 @@ function seedForDrillDown(): User
     $user = authedInHousehold();
 
     $account = Account::create([
-        'type' => 'bank', 'name' => 'Chase Checking',
+        'type' => 'checking', 'name' => 'Chase Checking',
         'institution' => 'Chase', 'currency' => 'USD', 'opening_balance' => 500,
     ]);
 

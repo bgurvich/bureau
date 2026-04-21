@@ -7,8 +7,8 @@ use Livewire\Livewire;
 
 it('creates a transfer with both mirror transactions when no existing rows are picked', function () {
     authedInHousehold();
-    $from = Account::create(['type' => 'bank', 'name' => 'Checking', 'currency' => 'USD', 'opening_balance' => 0]);
-    $to = Account::create(['type' => 'bank', 'name' => 'Savings', 'currency' => 'USD', 'opening_balance' => 0]);
+    $from = Account::create(['type' => 'checking', 'name' => 'Checking', 'currency' => 'USD', 'opening_balance' => 0]);
+    $to = Account::create(['type' => 'savings', 'name' => 'Savings', 'currency' => 'USD', 'opening_balance' => 0]);
 
     Livewire::test('inspector')
         ->call('openInspector', 'transfer')
@@ -32,8 +32,8 @@ it('creates a transfer with both mirror transactions when no existing rows are p
 
 it('links existing unpaired transactions instead of duplicating them', function () {
     authedInHousehold();
-    $from = Account::create(['type' => 'bank', 'name' => 'Checking', 'currency' => 'USD', 'opening_balance' => 0]);
-    $to = Account::create(['type' => 'bank', 'name' => 'Savings', 'currency' => 'USD', 'opening_balance' => 0]);
+    $from = Account::create(['type' => 'checking', 'name' => 'Checking', 'currency' => 'USD', 'opening_balance' => 0]);
+    $to = Account::create(['type' => 'savings', 'name' => 'Savings', 'currency' => 'USD', 'opening_balance' => 0]);
 
     $debit = Transaction::create([
         'account_id' => $from->id, 'occurred_on' => '2026-04-15',
@@ -67,8 +67,8 @@ it('links existing unpaired transactions instead of duplicating them', function 
 
 it('creates the missing side when only one existing transaction is linked', function () {
     authedInHousehold();
-    $from = Account::create(['type' => 'bank', 'name' => 'Checking', 'currency' => 'USD', 'opening_balance' => 0]);
-    $to = Account::create(['type' => 'bank', 'name' => 'Savings', 'currency' => 'USD', 'opening_balance' => 0]);
+    $from = Account::create(['type' => 'checking', 'name' => 'Checking', 'currency' => 'USD', 'opening_balance' => 0]);
+    $to = Account::create(['type' => 'savings', 'name' => 'Savings', 'currency' => 'USD', 'opening_balance' => 0]);
     $debit = Transaction::create([
         'account_id' => $from->id, 'occurred_on' => '2026-04-15',
         'amount' => -100.00, 'currency' => 'USD', 'description' => 'Imported debit',
@@ -95,8 +95,8 @@ it('creates the missing side when only one existing transaction is linked', func
 
 it('rejects linking a transaction that is already part of another transfer', function () {
     authedInHousehold();
-    $from = Account::create(['type' => 'bank', 'name' => 'Checking', 'currency' => 'USD', 'opening_balance' => 0]);
-    $to = Account::create(['type' => 'bank', 'name' => 'Savings', 'currency' => 'USD', 'opening_balance' => 0]);
+    $from = Account::create(['type' => 'checking', 'name' => 'Checking', 'currency' => 'USD', 'opening_balance' => 0]);
+    $to = Account::create(['type' => 'savings', 'name' => 'Savings', 'currency' => 'USD', 'opening_balance' => 0]);
     $debit = Transaction::create([
         'account_id' => $from->id, 'occurred_on' => '2026-04-15',
         'amount' => -50.00, 'currency' => 'USD', 'description' => 'Debit', 'status' => 'cleared',
@@ -130,7 +130,7 @@ it('rejects linking a transaction that is already part of another transfer', fun
 
 it('rejects when from and to accounts are the same', function () {
     authedInHousehold();
-    $acct = Account::create(['type' => 'bank', 'name' => 'Checking', 'currency' => 'USD', 'opening_balance' => 0]);
+    $acct = Account::create(['type' => 'checking', 'name' => 'Checking', 'currency' => 'USD', 'opening_balance' => 0]);
 
     Livewire::test('inspector')
         ->call('openInspector', 'transfer')

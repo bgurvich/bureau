@@ -480,7 +480,7 @@ new class extends Component
     // account
     public string $account_name = '';
 
-    public string $account_type = 'bank';
+    public string $account_type = 'checking';
 
     public string $account_currency = 'USD';
 

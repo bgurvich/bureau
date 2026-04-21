@@ -33,7 +33,7 @@ class EffectiveRate
     {
         $side = match ($account->type) {
             'credit', 'loan', 'mortgage' => 'interest-paid',
-            'bank', 'cash', 'investment' => 'interest-earned',
+            'checking', 'savings', 'cash', 'investment' => 'interest-earned',
             default => null,
         };
 

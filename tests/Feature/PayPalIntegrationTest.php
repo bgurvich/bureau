@@ -29,7 +29,7 @@ function paypalIntegration(Account $account, array $overrides = []): Integration
 
 it('PayPalClient caches access_token and refreshes when expired', function () {
     $user = authedInHousehold();
-    $account = Account::create(['type' => 'bank', 'name' => 'PayPal', 'currency' => 'USD', 'opening_balance' => 0]);
+    $account = Account::create(['type' => 'checking', 'name' => 'PayPal', 'currency' => 'USD', 'opening_balance' => 0]);
     $integration = paypalIntegration($account);
 
     Http::fake([
@@ -46,7 +46,7 @@ it('PayPalClient caches access_token and refreshes when expired', function () {
 
 it('PayPalSync creates Transactions from reporting API rows', function () {
     $user = authedInHousehold();
-    $account = Account::create(['type' => 'bank', 'name' => 'PayPal', 'currency' => 'USD', 'opening_balance' => 0]);
+    $account = Account::create(['type' => 'checking', 'name' => 'PayPal', 'currency' => 'USD', 'opening_balance' => 0]);
     $integration = paypalIntegration($account, ['settings' => [
         'base_url' => 'https://api.paypal.test',
         'account_id' => $account->id,
@@ -92,7 +92,7 @@ it('PayPalSync creates Transactions from reporting API rows', function () {
 
 it('PayPalSync is idempotent — re-running does not duplicate', function () {
     $user = authedInHousehold();
-    $account = Account::create(['type' => 'bank', 'name' => 'PayPal', 'currency' => 'USD', 'opening_balance' => 0]);
+    $account = Account::create(['type' => 'checking', 'name' => 'PayPal', 'currency' => 'USD', 'opening_balance' => 0]);
     $integration = paypalIntegration($account, ['settings' => [
         'base_url' => 'https://api.paypal.test',
         'account_id' => $account->id,
@@ -122,8 +122,8 @@ it('PayPalSync is idempotent — re-running does not duplicate', function () {
 
 it('PayPalReconciliation links children to a bank row when subset sum matches', function () {
     $user = authedInHousehold();
-    $bankAccount = Account::create(['type' => 'bank', 'name' => 'Checking', 'currency' => 'USD', 'opening_balance' => 0]);
-    $paypalAccount = Account::create(['type' => 'bank', 'name' => 'PayPal', 'currency' => 'USD', 'opening_balance' => 0]);
+    $bankAccount = Account::create(['type' => 'checking', 'name' => 'Checking', 'currency' => 'USD', 'opening_balance' => 0]);
+    $paypalAccount = Account::create(['type' => 'checking', 'name' => 'PayPal', 'currency' => 'USD', 'opening_balance' => 0]);
 
     $bank = Transaction::create([
         'account_id' => $bankAccount->id, 'occurred_on' => '2026-04-05',
@@ -148,8 +148,8 @@ it('PayPalReconciliation links children to a bank row when subset sum matches', 
 
 it('PayPalReconciliation skips ambiguous matches (two subsets match)', function () {
     $user = authedInHousehold();
-    $bankAccount = Account::create(['type' => 'bank', 'name' => 'Checking', 'currency' => 'USD', 'opening_balance' => 0]);
-    $paypalAccount = Account::create(['type' => 'bank', 'name' => 'PayPal', 'currency' => 'USD', 'opening_balance' => 0]);
+    $bankAccount = Account::create(['type' => 'checking', 'name' => 'Checking', 'currency' => 'USD', 'opening_balance' => 0]);
+    $paypalAccount = Account::create(['type' => 'checking', 'name' => 'PayPal', 'currency' => 'USD', 'opening_balance' => 0]);
 
     $bank = Transaction::create([
         'account_id' => $bankAccount->id, 'occurred_on' => '2026-04-05',
@@ -170,7 +170,7 @@ it('PayPalReconciliation skips ambiguous matches (two subsets match)', function 
 
 it('PayPal webhook accepts a verified completed event and creates a Transaction', function () {
     $user = authedInHousehold();
-    $account = Account::create(['type' => 'bank', 'name' => 'PayPal', 'currency' => 'USD', 'opening_balance' => 0]);
+    $account = Account::create(['type' => 'checking', 'name' => 'PayPal', 'currency' => 'USD', 'opening_balance' => 0]);
     paypalIntegration($account, ['settings' => [
         'base_url' => 'https://api.paypal.test',
         'account_id' => $account->id,
@@ -207,7 +207,7 @@ it('PayPal webhook accepts a verified completed event and creates a Transaction'
 
 it('PayPal webhook rejects a failed signature verification', function () {
     $user = authedInHousehold();
-    $account = Account::create(['type' => 'bank', 'name' => 'PayPal', 'currency' => 'USD', 'opening_balance' => 0]);
+    $account = Account::create(['type' => 'checking', 'name' => 'PayPal', 'currency' => 'USD', 'opening_balance' => 0]);
     paypalIntegration($account, ['settings' => [
         'base_url' => 'https://api.paypal.test',
         'account_id' => $account->id,

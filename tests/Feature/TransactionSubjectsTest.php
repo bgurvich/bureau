@@ -9,7 +9,7 @@ use Livewire\Livewire;
 
 it('Transaction::syncSubjects + inverse relation Vehicle::linkedTransactions', function () {
     authedInHousehold();
-    $account = Account::create(['type' => 'bank', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
+    $account = Account::create(['type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
     $vehicle = Vehicle::create(['kind' => 'car', 'model' => 'Civic']);
 
     $txn = Transaction::create([
@@ -24,7 +24,7 @@ it('Transaction::syncSubjects + inverse relation Vehicle::linkedTransactions', f
 
 it('Inspector saves transaction subjects on create and reloads on edit', function () {
     authedInHousehold();
-    $account = Account::create(['type' => 'bank', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
+    $account = Account::create(['type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
     $vehicle = Vehicle::create(['kind' => 'car', 'model' => 'Civic']);
     $contract = Contract::create(['kind' => 'insurance', 'title' => 'Geico']);
 
@@ -52,7 +52,7 @@ it('Inspector saves transaction subjects on create and reloads on edit', functio
 
 it('Property::linkedTransactions surfaces all transactions linked to that property', function () {
     authedInHousehold();
-    $account = Account::create(['type' => 'bank', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
+    $account = Account::create(['type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
     $property = Property::create(['kind' => 'home', 'name' => 'Our house']);
 
     $rent = Transaction::create([

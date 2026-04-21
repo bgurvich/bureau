@@ -7,8 +7,8 @@ use App\Support\TransferPairing;
 
 it('pairs a debit and credit across accounts with matching magnitude and date', function () {
     $user = authedInHousehold();
-    $checking = Account::create(['type' => 'bank', 'name' => 'Checking', 'currency' => 'USD', 'opening_balance' => 0]);
-    $savings = Account::create(['type' => 'bank', 'name' => 'Savings', 'currency' => 'USD', 'opening_balance' => 0]);
+    $checking = Account::create(['type' => 'checking', 'name' => 'Checking', 'currency' => 'USD', 'opening_balance' => 0]);
+    $savings = Account::create(['type' => 'savings', 'name' => 'Savings', 'currency' => 'USD', 'opening_balance' => 0]);
 
     $debit = Transaction::create([
         'account_id' => $checking->id, 'occurred_on' => '2026-03-05',
@@ -31,9 +31,9 @@ it('pairs a debit and credit across accounts with matching magnitude and date', 
 
 it('does not pair when two credit candidates exist in the window (ambiguous)', function () {
     $user = authedInHousehold();
-    $checking = Account::create(['type' => 'bank', 'name' => 'Checking', 'currency' => 'USD', 'opening_balance' => 0]);
-    $savings = Account::create(['type' => 'bank', 'name' => 'Savings', 'currency' => 'USD', 'opening_balance' => 0]);
-    $other = Account::create(['type' => 'bank', 'name' => 'Other', 'currency' => 'USD', 'opening_balance' => 0]);
+    $checking = Account::create(['type' => 'checking', 'name' => 'Checking', 'currency' => 'USD', 'opening_balance' => 0]);
+    $savings = Account::create(['type' => 'savings', 'name' => 'Savings', 'currency' => 'USD', 'opening_balance' => 0]);
+    $other = Account::create(['type' => 'checking', 'name' => 'Other', 'currency' => 'USD', 'opening_balance' => 0]);
 
     Transaction::create(['account_id' => $checking->id, 'occurred_on' => '2026-03-05',
         'amount' => -500.00, 'currency' => 'USD', 'description' => 'debit', 'status' => 'cleared']);
@@ -47,8 +47,8 @@ it('does not pair when two credit candidates exist in the window (ambiguous)', f
 
 it('skips transactions already part of a Transfer', function () {
     $user = authedInHousehold();
-    $checking = Account::create(['type' => 'bank', 'name' => 'Checking', 'currency' => 'USD', 'opening_balance' => 0]);
-    $savings = Account::create(['type' => 'bank', 'name' => 'Savings', 'currency' => 'USD', 'opening_balance' => 0]);
+    $checking = Account::create(['type' => 'checking', 'name' => 'Checking', 'currency' => 'USD', 'opening_balance' => 0]);
+    $savings = Account::create(['type' => 'savings', 'name' => 'Savings', 'currency' => 'USD', 'opening_balance' => 0]);
 
     $debit = Transaction::create(['account_id' => $checking->id, 'occurred_on' => '2026-03-05',
         'amount' => -500.00, 'currency' => 'USD', 'description' => 'd', 'status' => 'cleared']);
@@ -66,8 +66,8 @@ it('skips transactions already part of a Transfer', function () {
 
 it('ignores pairs outside the ±3d date window', function () {
     $user = authedInHousehold();
-    $checking = Account::create(['type' => 'bank', 'name' => 'Checking', 'currency' => 'USD', 'opening_balance' => 0]);
-    $savings = Account::create(['type' => 'bank', 'name' => 'Savings', 'currency' => 'USD', 'opening_balance' => 0]);
+    $checking = Account::create(['type' => 'checking', 'name' => 'Checking', 'currency' => 'USD', 'opening_balance' => 0]);
+    $savings = Account::create(['type' => 'savings', 'name' => 'Savings', 'currency' => 'USD', 'opening_balance' => 0]);
 
     Transaction::create(['account_id' => $checking->id, 'occurred_on' => '2026-03-01',
         'amount' => -500.00, 'currency' => 'USD', 'description' => 'd', 'status' => 'cleared']);
@@ -79,8 +79,8 @@ it('ignores pairs outside the ±3d date window', function () {
 
 it('only pairs same-currency transactions in v1', function () {
     $user = authedInHousehold();
-    $checking = Account::create(['type' => 'bank', 'name' => 'USD Checking', 'currency' => 'USD', 'opening_balance' => 0]);
-    $euro = Account::create(['type' => 'bank', 'name' => 'EUR Savings', 'currency' => 'EUR', 'opening_balance' => 0]);
+    $checking = Account::create(['type' => 'checking', 'name' => 'USD Checking', 'currency' => 'USD', 'opening_balance' => 0]);
+    $euro = Account::create(['type' => 'savings', 'name' => 'EUR Savings', 'currency' => 'EUR', 'opening_balance' => 0]);
 
     Transaction::create(['account_id' => $checking->id, 'occurred_on' => '2026-03-05',
         'amount' => -500.00, 'currency' => 'USD', 'description' => 'd', 'status' => 'cleared']);
@@ -92,8 +92,8 @@ it('only pairs same-currency transactions in v1', function () {
 
 it('artisan transfers:pair runs the pairing and reports the count', function () {
     $user = authedInHousehold();
-    $a = Account::create(['type' => 'bank', 'name' => 'A', 'currency' => 'USD', 'opening_balance' => 0]);
-    $b = Account::create(['type' => 'bank', 'name' => 'B', 'currency' => 'USD', 'opening_balance' => 0]);
+    $a = Account::create(['type' => 'checking', 'name' => 'A', 'currency' => 'USD', 'opening_balance' => 0]);
+    $b = Account::create(['type' => 'checking', 'name' => 'B', 'currency' => 'USD', 'opening_balance' => 0]);
     Transaction::create(['account_id' => $a->id, 'occurred_on' => '2026-03-05',
         'amount' => -100.00, 'currency' => 'USD', 'description' => 'd', 'status' => 'cleared']);
     Transaction::create(['account_id' => $b->id, 'occurred_on' => '2026-03-06',

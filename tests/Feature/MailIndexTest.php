@@ -133,7 +133,7 @@ it('hides the Create shortcuts when a message already has linked records', funct
     ]);
     // Simulate an already-linked Transaction on the same media.
     $account = Account::create([
-        'type' => 'bank', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0, 'is_active' => true,
+        'type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0, 'is_active' => true,
     ]);
     $txn = Transaction::create([
         'account_id' => $account->id, 'occurred_on' => now()->toDateString(),

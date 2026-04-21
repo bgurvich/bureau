@@ -13,7 +13,7 @@ function setupForRollup(): Account
     authedInHousehold('Rollup');
 
     return Account::create([
-        'type' => 'bank', 'name' => 'Main', 'institution' => 'Chase',
+        'type' => 'checking', 'name' => 'Main', 'institution' => 'Chase',
         'currency' => 'USD', 'opening_balance' => 1000, 'include_in_net_worth' => true,
     ]);
 }

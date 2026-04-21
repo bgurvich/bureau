@@ -29,7 +29,7 @@ it('groups actionable items across domains', function () {
     ]);
 
     $account = Account::create([
-        'type' => 'bank', 'name' => 'Chase', 'currency' => 'USD', 'opening_balance' => 0,
+        'type' => 'checking', 'name' => 'Chase', 'currency' => 'USD', 'opening_balance' => 0,
     ]);
     Transaction::create([
         'account_id' => $account->id,

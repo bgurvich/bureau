@@ -93,7 +93,7 @@ it('auto-resolves category by suggestion name', function () {
 
 it('attaches the source Media to a saved bill with role=receipt', function () {
     authedInHousehold();
-    $account = Account::create(['type' => 'bank', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
+    $account = Account::create(['type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
     $m = ocrReadyMedia();
 
     Livewire::test('inspector')
@@ -110,7 +110,7 @@ it('attaches the source Media to a saved bill with role=receipt', function () {
 
 it('attaches the source Media to a saved transaction', function () {
     authedInHousehold();
-    $account = Account::create(['type' => 'bank', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
+    $account = Account::create(['type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
     $m = ocrReadyMedia([
         'kind' => 'receipt', 'vendor' => 'Shell', 'amount' => 45.12,
         'issued_on' => '2026-04-10', 'due_on' => null, 'tax_amount' => null,

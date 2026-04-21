@@ -61,7 +61,7 @@ it('MailMessage::processedRecords derives a created Bill from the attached scan'
 
 it('Inspector auto-mark cascades processed_at to the MailMessage', function () {
     [$mail, $media] = mailWithScan();
-    $account = Account::create(['type' => 'bank', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
+    $account = Account::create(['type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
 
     Livewire::test('inspector')
         ->call('openInspector', 'bill', null, $media->id)

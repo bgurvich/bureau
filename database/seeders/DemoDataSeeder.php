@@ -112,11 +112,11 @@ class DemoDataSeeder extends Seeder
 
         // ── Accounts ─────────────────────────────────────────────────────
         $checking = Account::create([
-            'type' => 'bank', 'name' => 'Chase Checking', 'institution' => 'Chase',
+            'type' => 'checking', 'name' => 'Chase Checking', 'institution' => 'Chase',
             'currency' => 'USD', 'opening_balance' => 5240.18,
         ]);
         $savings = Account::create([
-            'type' => 'bank', 'name' => 'Chase Savings', 'institution' => 'Chase',
+            'type' => 'savings', 'name' => 'Chase Savings', 'institution' => 'Chase',
             'currency' => 'USD', 'opening_balance' => 18750.00,
         ]);
         $amex = Account::create([

@@ -12,7 +12,7 @@ function makeBillSetup(): array
 {
     $user = authedInHousehold();
     $account = Account::create([
-        'type' => 'bank', 'name' => 'Chase', 'currency' => 'USD', 'opening_balance' => 0,
+        'type' => 'checking', 'name' => 'Chase', 'currency' => 'USD', 'opening_balance' => 0,
     ]);
 
     return [$user, $account];

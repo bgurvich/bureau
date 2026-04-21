@@ -19,7 +19,8 @@ class Enums
     public static function accountTypes(): array
     {
         return [
-            'bank' => __('Bank'),
+            'checking' => __('Checking'),
+            'savings' => __('Savings'),
             'credit' => __('Credit'),
             'cash' => __('Cash'),
             'investment' => __('Investment'),

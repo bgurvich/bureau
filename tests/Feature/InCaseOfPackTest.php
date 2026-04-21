@@ -29,11 +29,11 @@ it('renders the in-case-of pack with flagged + favorite records', function () {
     ]);
 
     Account::create([
-        'type' => 'bank', 'name' => 'Chase Checking', 'currency' => 'USD',
+        'type' => 'checking', 'name' => 'Chase Checking', 'currency' => 'USD',
         'opening_balance' => 1000, 'is_active' => true, 'external_code' => '****4421',
     ]);
     Account::create([
-        'type' => 'bank', 'name' => 'Old Closed', 'currency' => 'USD',
+        'type' => 'checking', 'name' => 'Old Closed', 'currency' => 'USD',
         'opening_balance' => 0, 'is_active' => false,
     ]);
 

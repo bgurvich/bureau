@@ -14,7 +14,7 @@ function setupForWorkbench(): Account
     authedInHousehold();
 
     return Account::create([
-        'type' => 'bank', 'name' => 'Chase', 'currency' => 'USD', 'opening_balance' => 0,
+        'type' => 'checking', 'name' => 'Chase', 'currency' => 'USD', 'opening_balance' => 0,
     ]);
 }
 

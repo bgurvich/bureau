@@ -10,7 +10,7 @@ function setupForRecurring(): array
 {
     $user = authedInHousehold('Rec Test');
     $account = Account::create([
-        'type' => 'bank', 'name' => 'Main', 'institution' => '—',
+        'type' => 'checking', 'name' => 'Main', 'institution' => '—',
         'currency' => 'USD', 'opening_balance' => 0,
     ]);
 

@@ -46,7 +46,7 @@ it('parses an uploaded Citi checking CSV and renders a review card', function ()
 
 it('flags already-imported rows after the user picks an account', function () {
     $user = authedInHousehold();
-    $account = Account::create(['type' => 'bank', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
+    $account = Account::create(['type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
     // Pre-existing row that will conflict on fuzzy amount+date match.
     Transaction::create([
         'account_id' => $account->id,
@@ -70,7 +70,7 @@ it('flags already-imported rows after the user picks an account', function () {
 
 it('imports selected rows and deterministic external_id prevents re-import duplicates', function () {
     authedInHousehold();
-    $account = Account::create(['type' => 'bank', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
+    $account = Account::create(['type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
 
     $file = UploadedFile::fake()->createWithContent('citi.csv', citiCheckingCsv());
     $c = Livewire::test('statements-import')->set('files', [$file]);
@@ -98,7 +98,7 @@ it('imports selected rows and deterministic external_id prevents re-import dupli
 
 it('attaches the uploaded file as Media with role=statement on every created Transaction', function () {
     authedInHousehold();
-    $account = Account::create(['type' => 'bank', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
+    $account = Account::create(['type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
 
     $file = UploadedFile::fake()->createWithContent('citi.csv', citiCheckingCsv());
     $c = Livewire::test('statements-import')->set('files', [$file]);
@@ -127,7 +127,7 @@ it('unrecognized file writes no Transactions and reports status', function () {
 
 it('auto-assigns the default account to every newly parsed file', function () {
     authedInHousehold();
-    $account = Account::create(['type' => 'bank', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
+    $account = Account::create(['type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
 
     $a = UploadedFile::fake()->createWithContent('citi-a.csv', citiCheckingCsv());
     $b = UploadedFile::fake()->createWithContent('citi-b.csv', citiCheckingCsv());
@@ -145,7 +145,7 @@ it('auto-assigns the default account to every newly parsed file', function () {
 
 it('retroactively applies a newly-picked default account to already-parsed cards without one', function () {
     authedInHousehold();
-    $account = Account::create(['type' => 'bank', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
+    $account = Account::create(['type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
 
     $file = UploadedFile::fake()->createWithContent('citi.csv', citiCheckingCsv());
 

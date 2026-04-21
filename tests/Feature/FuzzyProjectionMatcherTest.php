@@ -9,7 +9,7 @@ use App\Support\ProjectionMatcher;
 
 it('materializes a projection for a recurring rule when no exact projection exists', function () {
     authedInHousehold();
-    $account = Account::create(['type' => 'bank', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
+    $account = Account::create(['type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
     $contact = Contact::create(['kind' => 'org', 'display_name' => 'NETFLIX']);
     RecurringRule::create([
         'kind' => 'bill', 'title' => 'Netflix subscription',
@@ -40,7 +40,7 @@ it('materializes a projection for a recurring rule when no exact projection exis
 
 it('matches via description tokens when counterparty is absent', function () {
     authedInHousehold();
-    $account = Account::create(['type' => 'bank', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
+    $account = Account::create(['type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
     RecurringRule::create([
         'kind' => 'bill', 'title' => 'Spotify Premium',
         'amount' => -9.99, 'currency' => 'USD',
@@ -65,7 +65,7 @@ it('matches via description tokens when counterparty is absent', function () {
 
 it('amount band of ±10% is respected (12 vs 10 NOT matched)', function () {
     authedInHousehold();
-    $account = Account::create(['type' => 'bank', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
+    $account = Account::create(['type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
     RecurringRule::create([
         'kind' => 'bill', 'title' => 'Gym',
         'amount' => -10.00, 'currency' => 'USD',
@@ -90,7 +90,7 @@ it('amount band of ±10% is respected (12 vs 10 NOT matched)', function () {
 
 it('exact projection match still takes priority over fuzzy fallback', function () {
     authedInHousehold();
-    $account = Account::create(['type' => 'bank', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
+    $account = Account::create(['type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
     $rule = RecurringRule::create([
         'kind' => 'bill', 'title' => 'Rent',
         'amount' => -2000, 'currency' => 'USD',

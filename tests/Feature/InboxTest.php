@@ -90,7 +90,7 @@ it('creating a bill from a scan marks the media processed', function () {
     authedInHousehold();
     $m = unprocessedMedia();
     $account = Account::create([
-        'type' => 'bank', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0,
+        'type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0,
     ]);
 
     Livewire::test('inspector')
@@ -106,7 +106,7 @@ it('already-attached scans are excluded from the Inbox', function () {
     authedInHousehold();
     $m = unprocessedMedia();
     $account = Account::create([
-        'type' => 'bank', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0,
+        'type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0,
     ]);
 
     Livewire::test('inspector')
@@ -155,7 +155,7 @@ it('MailIngester sets media.source=mail on attachments it persists', function ()
 
 it('bulk-creates transactions from selected scans with per-scan extraction', function () {
     authedInHousehold();
-    $account = Account::create(['type' => 'bank', 'name' => 'Chase', 'currency' => 'USD', 'opening_balance' => 0]);
+    $account = Account::create(['type' => 'checking', 'name' => 'Chase', 'currency' => 'USD', 'opening_balance' => 0]);
     $m1 = unprocessedMedia(['vendor' => 'Acme', 'amount' => 25.00, 'issued_on' => '2026-04-10', 'tax_amount' => 1.50]);
     $m2 = unprocessedMedia(['vendor' => 'Beta', 'amount' => 12.34, 'issued_on' => '2026-04-11', 'tax_amount' => null]);
     // No amount → must be skipped

@@ -11,7 +11,7 @@ function setupForLock(): array
 {
     $user = authedInHousehold();
     $account = Account::create([
-        'type' => 'bank', 'name' => 'Chase', 'institution' => 'Chase',
+        'type' => 'checking', 'name' => 'Chase', 'institution' => 'Chase',
         'currency' => 'USD', 'opening_balance' => 0,
     ]);
 
@@ -118,7 +118,7 @@ it('releases the constraint when the lock is unlocked', function () {
 it('applies to transfers as well', function () {
     [, , $account] = setupForLock();
     $savings = Account::create([
-        'type' => 'bank', 'name' => 'Savings', 'currency' => 'USD', 'opening_balance' => 0,
+        'type' => 'savings', 'name' => 'Savings', 'currency' => 'USD', 'opening_balance' => 0,
     ]);
 
     PeriodLock::create(['locked_through' => '2026-03-31', 'locked_at' => now()]);

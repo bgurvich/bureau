@@ -12,7 +12,7 @@ function setupForExport(): array
     $household = CurrentHousehold::get();
 
     $account = Account::create([
-        'type' => 'bank', 'name' => 'Chase Checking', 'external_code' => '1000',
+        'type' => 'checking', 'name' => 'Chase Checking', 'external_code' => '1000',
         'institution' => 'Chase', 'currency' => 'USD', 'opening_balance' => 1000,
     ]);
 

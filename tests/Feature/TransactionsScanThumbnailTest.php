@@ -10,7 +10,7 @@ function txnAccount(): Account
     authedInHousehold();
 
     return Account::create([
-        'type' => 'bank', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0,
+        'type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0,
     ]);
 }
 
