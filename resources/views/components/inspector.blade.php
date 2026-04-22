@@ -273,30 +273,8 @@ new class extends Component
 
     public string $contract_cancellation_email = '';
 
-    // property
-    public string $property_kind = 'home';
-
-    public string $property_name = '';
-
-    public string $property_address_line1 = '';
-
-    public string $property_address_city = '';
-
-    public string $property_address_region = '';
-
-    public string $property_address_postcode = '';
-
-    public string $property_acquired_on = '';
-
-    public string $property_purchase_price = '';
-
-    public string $property_purchase_currency = 'USD';
-
-    public string $property_size_value = '';
-
-    public string $property_size_unit = 'sqft';
-
-    public string $property_disposed_on = '';
+    // property extracted to App\Livewire\Inspector\PropertyForm;
+    // the shell hosts the child via @livewire in the render switch.
 
     // pet — extracted into App\Livewire\Inspector\PetForm. The shell
     // hosts the child based on $type and talks to it through events:
@@ -1209,7 +1187,6 @@ new class extends Component
         $this->due_at = now()->addDay()->startOfHour()->format('Y-m-d\TH:i');
         $this->currency = $currency;
         $this->contract_monthly_cost_currency = $currency;
-        $this->property_purchase_currency = $currency;
         $this->inventory_cost_currency = $currency;
         $this->insurance_premium_currency = $currency;
         $this->insurance_coverage_currency = $currency;
@@ -1365,7 +1342,6 @@ new class extends Component
             'document' => $this->loadDocument(),
             'contract' => $this->loadContract(),
             'insurance' => $this->loadInsurance(),
-            'property' => $this->loadProperty(),
             // pet / pet_vaccination / pet_checkup all run as extracted
             // class-based components — they load + persist their own
             // state. The shell only manages open/close + parent id.
@@ -1529,28 +1505,7 @@ new class extends Component
             : '';
     }
 
-    private function loadProperty(): void
-    {
-        $p = Property::findOrFail($this->id);
-        $this->property_kind = $p->kind;
-        $this->property_name = $p->name;
-        $addr = is_array($p->address) ? $p->address : [];
-        $this->property_address_line1 = $addr['line1'] ?? '';
-        $this->property_address_city = $addr['city'] ?? '';
-        $this->property_address_region = $addr['region'] ?? '';
-        $this->property_address_postcode = $addr['postcode'] ?? '';
-        $this->property_acquired_on = $p->acquired_on?->toDateString() ?? '';
-        $this->property_purchase_price = $p->purchase_price !== null ? (string) $p->purchase_price : '';
-        $this->property_purchase_currency = $p->purchase_currency ?: 'USD';
-        $this->property_size_value = $p->size_value !== null ? (string) $p->size_value : '';
-        $this->property_size_unit = $p->size_unit ?: 'sqft';
-        $this->property_disposed_on = $p->disposed_on?->toDateString() ?? '';
-        $this->disposition = $p->disposition ?? '';
-        $this->sale_amount = $p->sale_amount !== null ? (string) $p->sale_amount : '';
-        $this->sale_currency = $p->sale_currency ?: $this->householdCurrency();
-        $this->buyer_contact_id = $p->buyer_contact_id;
-        $this->notes = $p->notes ?? '';
-    }
+    // loadProperty moved to App\Livewire\Inspector\PropertyForm.
 
     // loadVehicle moved to App\Livewire\Inspector\VehicleForm.
 
@@ -1595,7 +1550,7 @@ new class extends Component
         // persists on its own. The child fires `inspector-form-saved`
         // back and the shell's onFormSaved() listener closes the drawer.
         // Add a type to this array after extracting its child form.
-        $extractedTypes = ['pet', 'pet_vaccination', 'pet_checkup', 'time_entry', 'transfer', 'savings_goal', 'budget_cap', 'category_rule', 'tag_rule', 'reminder', 'subscription', 'online_account', 'meeting', 'domain', 'project', 'account', 'contact', 'appointment', 'vehicle'];
+        $extractedTypes = ['pet', 'pet_vaccination', 'pet_checkup', 'time_entry', 'transfer', 'savings_goal', 'budget_cap', 'category_rule', 'tag_rule', 'reminder', 'subscription', 'online_account', 'meeting', 'domain', 'project', 'account', 'contact', 'appointment', 'vehicle', 'property'];
         if (in_array($this->type, $extractedTypes, true)) {
             $this->dispatch('inspector-save');
 
@@ -1612,7 +1567,6 @@ new class extends Component
                 'document' => $this->saveDocument(),
                 'contract' => $this->saveContract(),
                 'insurance' => $this->saveInsurance(),
-                'property' => $this->saveProperty(),
                 // pet / pet_vaccination / pet_checkup are extracted; the
                 // $extractedTypes early-return above keeps them from
                 // reaching this match.
@@ -2195,59 +2149,7 @@ new class extends Component
         return [$class, ctype_digit($id) ? (int) $id : null];
     }
 
-    private function saveProperty(): void
-    {
-        $data = $this->validate([
-            'property_kind' => ['required', Rule::in(array_keys(Enums::propertyKinds()))],
-            'property_name' => 'required|string|max:255',
-            'property_address_line1' => 'nullable|string|max:255',
-            'property_address_city' => 'nullable|string|max:255',
-            'property_address_region' => 'nullable|string|max:64',
-            'property_address_postcode' => 'nullable|string|max:32',
-            'property_acquired_on' => 'nullable|date',
-            'property_purchase_price' => 'nullable|numeric',
-            'property_purchase_currency' => 'nullable|string|size:3',
-            'property_size_value' => 'nullable|numeric',
-            'property_size_unit' => ['nullable', Rule::in(array_keys(Enums::propertySizeUnits()))],
-            'property_disposed_on' => 'nullable|date',
-            'disposition' => ['nullable', Rule::in(array_keys(Enums::assetDispositions()))],
-            'sale_amount' => 'nullable|numeric',
-            'sale_currency' => 'nullable|string|size:3',
-            'buyer_contact_id' => 'nullable|integer|exists:contacts,id',
-            'notes' => 'nullable|string|max:5000',
-        ]);
-
-        $address = array_filter([
-            'line1' => $data['property_address_line1'] ?: null,
-            'city' => $data['property_address_city'] ?: null,
-            'region' => $data['property_address_region'] ?: null,
-            'postcode' => $data['property_address_postcode'] ?: null,
-        ]);
-
-        $payload = [
-            'kind' => $data['property_kind'],
-            'name' => $data['property_name'],
-            'address' => $address ?: null,
-            'acquired_on' => $data['property_acquired_on'] ?: null,
-            'purchase_price' => $data['property_purchase_price'] !== '' ? (float) $data['property_purchase_price'] : null,
-            'purchase_currency' => $data['property_purchase_currency'] ?: null,
-            'size_value' => $data['property_size_value'] !== '' ? (float) $data['property_size_value'] : null,
-            'size_unit' => $data['property_size_unit'] ?: null,
-            'disposed_on' => $data['property_disposed_on'] ?: null,
-            'disposition' => $data['disposition'] ?: null,
-            'sale_amount' => $data['sale_amount'] !== '' ? (float) $data['sale_amount'] : null,
-            'sale_currency' => $data['sale_currency'] ?: null,
-            'buyer_contact_id' => $data['buyer_contact_id'] ?: null,
-            'notes' => $data['notes'] ?: null,
-        ];
-
-        if ($this->id) {
-            Property::findOrFail($this->id)->update($payload);
-        } else {
-            $payload['primary_user_id'] = auth()->id();
-            $this->id = Property::create($payload)->id;
-        }
-    }
+    // saveProperty moved to App\Livewire\Inspector\PropertyForm.
 
     // saveVehicle moved to App\Livewire\Inspector\VehicleForm.
 
@@ -2961,7 +2863,9 @@ new class extends Component
                 @case('domain')
                     @livewire('inspector.domain-form', ['id' => $id], key('domain-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
                     @break
-                @case('property') @include('partials.inspector.forms.property')      @break
+                @case('property')
+                    @livewire('inspector.property-form', ['id' => $id], key('property-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
+                    @break
                 @case('vehicle')
                     @livewire('inspector.vehicle-form', ['id' => $id], key('vehicle-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
                     @break
