@@ -320,6 +320,7 @@ class extends Component
                  class="sticky top-0 z-10 space-y-2 rounded-t-xl border border-b-0 {{ $hasSelection ? 'border-emerald-800/50 bg-emerald-950/30' : 'border-neutral-800 bg-neutral-900/60' }} px-4 py-2 text-[11px]">
                 <div class="flex min-h-8 flex-wrap items-center gap-3">
                     <input type="checkbox"
+                           wire:key="inbox-select-all-{{ $selCount }}-{{ $itemCount }}-{{ $allChecked ? 1 : 0 }}"
                            wire:click="{{ $allChecked ? 'clearSelection' : 'selectAll' }}"
                            @checked($allChecked)
                            x-bind:indeterminate="{{ $someChecked ? 'true' : 'false' }}"

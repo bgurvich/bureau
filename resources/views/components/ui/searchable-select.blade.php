@@ -5,6 +5,12 @@
     'id' => null,
     'allowCreate' => false,
     'createMethod' => null,
+    // Opt-in: when set (e.g. "contact", "category"), the component renders
+    // a small pencil next to the trigger that opens the inspector for
+    // whichever option is currently selected. Gives every dropdown a
+    // consistent "edit the thing I just picked" affordance without each
+    // form having to wire it up by hand.
+    'editInspectorType' => null,
 ])
 
 @php
@@ -24,24 +30,44 @@
     @click.outside="close()"
     class="relative"
 >
-    <button
-        type="button"
-        x-ref="trigger"
-        @click="toggle()"
-        @keydown.enter.prevent="toggle()"
-        @keydown.space.prevent="toggle()"
-        @keydown.arrow-down.prevent="if (!open) toggle(); else move(1)"
-        @keydown.arrow-up.prevent="if (!open) toggle(); else move(-1)"
-        :aria-expanded="open.toString()"
-        aria-haspopup="listbox"
-        id="{{ $elementId }}"
-        class="flex w-full items-center justify-between rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-left text-sm text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300"
-    >
-        <span x-text="label || placeholder" :class="label ? 'text-neutral-100' : 'text-neutral-500'"></span>
-        <svg class="h-3 w-3 shrink-0 text-neutral-500" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-            <path d="M3 4.5 6 7.5 9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-    </button>
+    <div class="flex items-stretch gap-1">
+        <button
+            type="button"
+            x-ref="trigger"
+            @click="toggle()"
+            @keydown.enter.prevent="toggle()"
+            @keydown.space.prevent="toggle()"
+            @keydown.arrow-down.prevent="if (!open) toggle(); else move(1)"
+            @keydown.arrow-up.prevent="if (!open) toggle(); else move(-1)"
+            :aria-expanded="open.toString()"
+            aria-haspopup="listbox"
+            id="{{ $elementId }}"
+            class="flex min-w-0 flex-1 items-center justify-between rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-left text-sm text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300"
+        >
+            <span x-text="label || placeholder" :class="label ? 'text-neutral-100' : 'text-neutral-500'" class="truncate"></span>
+            <svg class="h-3 w-3 shrink-0 text-neutral-500" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                <path d="M3 4.5 6 7.5 9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+        </button>
+        @if ($editInspectorType)
+            {{-- Pencil → opens the inspector for the currently-selected option.
+                 Hidden when nothing is selected. Dispatches the same
+                 inspector-open event the rest of the app uses. --}}
+            <button
+                type="button"
+                x-show="value !== '' && value !== null"
+                x-cloak
+                @click.stop="$dispatch('subentity-edit-open', { type: @js($editInspectorType), id: isNaN(parseInt(value, 10)) ? value : parseInt(value, 10) })"
+                :aria-label="'{{ __('Edit selected') }}'"
+                title="{{ __('Edit selected') }}"
+                class="flex shrink-0 items-center justify-center rounded-md border border-neutral-700 bg-neutral-950 px-2 text-neutral-400 hover:text-neutral-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300"
+            >
+                <svg class="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <path d="M2 12.5V14h1.5l8.373-8.373-1.5-1.5L2 12.5zM13.707 3.793a1 1 0 0 0 0-1.414l-1.086-1.086a1 1 0 0 0-1.414 0l-1.293 1.293 2.5 2.5 1.293-1.293z" fill="currentColor"/>
+                </svg>
+            </button>
+        @endif
+    </div>
 
     <div
         x-show="open"

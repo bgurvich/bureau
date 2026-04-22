@@ -526,7 +526,13 @@ class extends Component
                 <thead class="border-b border-neutral-800 text-left">
                     <tr>
                         <th scope="col" class="w-10 px-3 py-2">
+                            {{-- wire:key forces Livewire to replace (not morph) the
+                                 input whenever select-state changes — browsers leave
+                                 the internal checked property stuck on the old value
+                                 otherwise, so bulk actions that drain the selection
+                                 leave the header box visually checked. --}}
                             <input type="checkbox"
+                                   wire:key="txn-select-all-{{ count($selected) }}-{{ count($visibleIds) }}-{{ $allVisibleSelected ? 1 : 0 }}"
                                    wire:click="{{ $allVisibleSelected ? 'deselectAllVisible' : 'selectAllVisible' }}"
                                    @checked($allVisibleSelected)
                                    x-bind:indeterminate="{{ $someVisibleSelected ? 'true' : 'false' }}"
@@ -547,17 +553,22 @@ class extends Component
                     @foreach ($this->transactions as $t)
                         @php($scan = $t->media->firstWhere('pivot.role', 'receipt') ?? $t->media->first())
                         @php($isSelected = in_array($t->id, $selected, true))
+                        {{-- Row-level wire:click opens the inspector. Inner controls
+                             (select checkbox, scan thumbnail link) use wire:click.stop
+                             so the row handler doesn't swallow their intent. --}}
                         <tr wire:key="txn-{{ $t->id }}"
-                            class="transition {{ $isSelected ? 'bg-amber-950/20' : 'hover:bg-neutral-800/30' }}">
+                            tabindex="0" role="button"
+                            wire:click="$dispatch('inspector-open', { type: 'transaction', id: {{ $t->id }} })"
+                            @keydown.enter.prevent="$wire.dispatch('inspector-open', { type: 'transaction', id: {{ $t->id }} })"
+                            class="cursor-pointer transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300 {{ $isSelected ? 'bg-amber-950/20' : 'hover:bg-neutral-800/30' }}">
                             <td class="px-3 py-2 align-middle">
                                 <input type="checkbox"
-                                       wire:click="toggleRow({{ $t->id }})"
+                                       wire:click.stop="toggleRow({{ $t->id }})"
                                        @checked($isSelected)
                                        aria-label="{{ __('Select transaction') }}"
                                        class="rounded border-neutral-700 bg-neutral-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
                             </td>
-                            <td wire:click="$dispatch('inspector-open', { type: 'transaction', id: {{ $t->id }} })"
-                                class="cursor-pointer px-2 py-2">
+                            <td class="px-2 py-2">
                                 @if ($scan)
                                     <a href="{{ route('records.media', ['focus' => $scan->id]) }}"
                                        wire:click.stop
@@ -571,22 +582,21 @@ class extends Component
                                     <span aria-hidden="true" class="block h-8 w-8 rounded border border-dashed border-neutral-800/60"></span>
                                 @endif
                             </td>
-                            @php($openExpr = "\$dispatch('inspector-open', { type: 'transaction', id: {$t->id} })")
-                            <td wire:click="{{ $openExpr }}" class="cursor-pointer px-3 py-2 text-xs text-neutral-400 tabular-nums">{{ Formatting::date($t->occurred_on) }}</td>
-                            <td wire:click="{{ $openExpr }}" class="cursor-pointer px-3 py-2 text-neutral-100">
+                            <td class="px-3 py-2 text-xs text-neutral-400 tabular-nums">{{ Formatting::date($t->occurred_on) }}</td>
+                            <td class="px-3 py-2 text-neutral-100">
                                 {{ $t->description ?? '—' }}
                                 @if ($t->reference_number ?? null)
                                     <span class="ml-2 text-[11px] text-neutral-500 tabular-nums">#{{ $t->reference_number }}</span>
                                 @endif
                                 <x-ui.tag-chips :tags="$t->tags" :active="$tagFilter" class="mt-1" />
                             </td>
-                            <td wire:click="{{ $openExpr }}" class="cursor-pointer px-3 py-2 text-xs text-neutral-400">{{ $t->counterparty?->display_name ?? '—' }}</td>
-                            <td wire:click="{{ $openExpr }}" class="cursor-pointer px-3 py-2 text-xs text-neutral-400">{{ $t->category?->name ?? '—' }}</td>
-                            <td wire:click="{{ $openExpr }}" class="cursor-pointer px-3 py-2 text-xs text-neutral-400">{{ $t->account?->name ?? '—' }}</td>
-                            <td wire:click="{{ $openExpr }}" class="cursor-pointer px-3 py-2 text-right tabular-nums {{ $t->amount >= 0 ? 'text-emerald-400' : 'text-rose-400' }}">
+                            <td class="px-3 py-2 text-xs text-neutral-400">{{ $t->counterparty?->display_name ?? '—' }}</td>
+                            <td class="px-3 py-2 text-xs text-neutral-400">{{ $t->category?->name ?? '—' }}</td>
+                            <td class="px-3 py-2 text-xs text-neutral-400">{{ $t->account?->name ?? '—' }}</td>
+                            <td class="px-3 py-2 text-right tabular-nums {{ $t->amount >= 0 ? 'text-emerald-400' : 'text-rose-400' }}">
                                 {{ ($t->amount >= 0 ? '+' : '').Formatting::money((float) $t->amount, $t->account?->currency ?? $this->currency) }}
                             </td>
-                            <td wire:click="{{ $openExpr }}" class="cursor-pointer px-3 py-2 text-[11px] uppercase tracking-wider {{ $t->status === 'cleared' ? 'text-neutral-500' : 'text-amber-400' }}">
+                            <td class="px-3 py-2 text-[11px] uppercase tracking-wider {{ $t->status === 'cleared' ? 'text-neutral-500' : 'text-amber-400' }}">
                                 {{ $t->status }}
                             </td>
                         </tr>

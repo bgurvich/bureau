@@ -78,6 +78,7 @@
                             ],
                             __('Health') => [
                                 [__('Health'), 'health.index', 'stethoscope'],
+                                [__('Pets'), 'pets.index', 'paw'],
                             ],
                         ];
                     @endphp
@@ -158,6 +159,11 @@
 
     @auth
         <livewire:inspector />
+        {{-- Modal-mode inspector listens on `subentity-edit-open` and
+             stacks above the primary drawer. Used by searchable-select's
+             edit pencil so editing a picked entity doesn't wipe the
+             parent form's state. --}}
+        <livewire:inspector :as-modal="true" key="inspector-modal" />
         <livewire:global-search />
     @endauth
 </body>
