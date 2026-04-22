@@ -110,6 +110,113 @@ it('imports selected rows and deterministic external_id prevents re-import dupli
     expect(Transaction::count())->toBe(3);
 });
 
+it('honors per-row counterparty_id_override set in the preview', function () {
+    authedInHousehold();
+    $account = Account::create(['type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
+    $chosen = Contact::create(['kind' => 'org', 'display_name' => 'Manual Pick']);
+
+    $file = UploadedFile::fake()->createWithContent('citi.csv', citiCheckingCsv());
+    $c = Livewire::test('statements-import')->set('files', [$file]);
+    $fileId = array_keys($c->get('parsed'))[0];
+
+    // Pin a specific counterparty on row 0 BEFORE importing.
+    $c->set("parsed.{$fileId}.rows.0.counterparty_id_override", $chosen->id);
+    $c->call('setAccount', $fileId, $account->id);
+    $c->call('importAll');
+
+    // Row 0's transaction links to the manually picked contact, not
+    // whatever the auto-detect would have produced.
+    $first = Transaction::orderBy('occurred_on')->first();
+    expect($first->counterparty_contact_id)->toBe($chosen->id);
+});
+
+it('persists edited description + amount from the preview into the imported transaction', function () {
+    authedInHousehold();
+    $account = Account::create(['type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
+
+    $file = UploadedFile::fake()->createWithContent('citi.csv', citiCheckingCsv());
+    $c = Livewire::test('statements-import')->set('files', [$file]);
+    $fileId = array_keys($c->get('parsed'))[0];
+
+    $c->set("parsed.{$fileId}.rows.0.description", 'Edited in preview');
+    $c->set("parsed.{$fileId}.rows.0.amount", '-99.99');
+    $c->call('setAccount', $fileId, $account->id);
+    $c->call('importAll');
+
+    $t = Transaction::where('description', 'Edited in preview')->first();
+    expect($t)->not->toBeNull()
+        ->and((float) $t->amount)->toBe(-99.99);
+});
+
+it('saveRow propagates vendor + pattern to every other row matching the pattern', function () {
+    authedInHousehold();
+    $chosen = Contact::create(['kind' => 'org', 'display_name' => 'Batch Vendor']);
+
+    $file = UploadedFile::fake()->createWithContent('citi.csv', citiCheckingCsv());
+    $c = Livewire::test('statements-import')->set('files', [$file]);
+    $fileId = array_keys($c->get('parsed'))[0];
+
+    // Citi fixture rows: 0=Direct Deposit, 1=Rent, 2=Groceries.
+    // Editing row 1 ("Rent") with pattern "rent" should propagate to
+    // row 1 itself (no-op) and any OTHER row matching "rent" in its
+    // description — none of the others do, so only row 1 has the
+    // override. Row 0 and 2 stay null.
+    $c->set("parsed.{$fileId}.rows.1.match_pattern", 'rent')
+        ->set("parsed.{$fileId}.rows.1.counterparty_id_override", $chosen->id)
+        ->call('editRow', $fileId, 1)
+        ->call('saveRow', $fileId, 1)
+        ->assertSet('editingRow', '');
+
+    $rows = $c->get("parsed.{$fileId}.rows");
+    expect($rows[0]['counterparty_id_override'])->toBeNull()
+        ->and($rows[1]['counterparty_id_override'])->toBe($chosen->id)
+        ->and($rows[2]['counterparty_id_override'])->toBeNull();
+
+    // Now edit row 0 (Direct Deposit) with pattern "e" which is in
+    // every description (Deposit, Rent, Groceries) → row 2 picks up
+    // the override. Row 1 already had an override — gets overwritten.
+    $c->set("parsed.{$fileId}.rows.0.match_pattern", 'e')
+        ->set("parsed.{$fileId}.rows.0.counterparty_id_override", $chosen->id)
+        ->call('editRow', $fileId, 0)
+        ->call('saveRow', $fileId, 0);
+
+    $rows = $c->get("parsed.{$fileId}.rows");
+    expect($rows[0]['counterparty_id_override'])->toBe($chosen->id)
+        ->and($rows[2]['counterparty_id_override'])->toBe($chosen->id);
+});
+
+it('editRow + cancelEdit flips the editing state without touching row data', function () {
+    authedInHousehold();
+
+    $file = UploadedFile::fake()->createWithContent('citi.csv', citiCheckingCsv());
+    $c = Livewire::test('statements-import')->set('files', [$file]);
+    $fileId = array_keys($c->get('parsed'))[0];
+
+    $c->call('editRow', $fileId, 0)
+        ->assertSet('editingRow', "{$fileId}:0")
+        ->call('cancelEdit')
+        ->assertSet('editingRow', '');
+});
+
+it('createCounterpartyForRow creates a Contact and sets the row override', function () {
+    authedInHousehold();
+
+    $file = UploadedFile::fake()->createWithContent('citi.csv', citiCheckingCsv());
+    $c = Livewire::test('statements-import')->set('files', [$file]);
+    $fileId = array_keys($c->get('parsed'))[0];
+    $path = "parsed.{$fileId}.rows.0.counterparty_id_override";
+
+    // Pretend the user typed a fresh vendor name in the dropdown and
+    // hit enter → the searchable-select would fire this.
+    $c->set("parsed.{$fileId}.rows.0.match_pattern", 'costco');
+    $c->call('createCounterpartyForRow', 'Costco Wholesale', $path);
+
+    $created = Contact::where('display_name', 'Costco Wholesale')->first();
+    expect($created)->not->toBeNull()
+        ->and($created->match_patterns)->toBe('costco')
+        ->and($c->get("parsed.{$fileId}.rows.0.counterparty_id_override"))->toBe($created->id);
+});
+
 it('re-imports a statement whose transactions were manually wiped', function () {
     // Regression: after DELETE FROM transactions; the Media row for a
     // previously imported statement lingered, and file-level dedup

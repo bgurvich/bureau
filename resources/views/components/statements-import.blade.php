@@ -361,6 +361,14 @@ class extends Component
                 'amount' => $t->amount,
                 'closing_balance' => $t->runningBalance,
                 'check_number' => $t->checkNumber,
+                // Per-row edits the user can apply in the preview
+                // before hitting Import. `counterparty_id_override`
+                // wins over the auto-detect path; `match_pattern`
+                // seeds match_patterns on any contact auto-created
+                // for this row's fingerprint and is editable so the
+                // user can tighten or broaden the match.
+                'counterparty_id_override' => null,
+                'match_pattern' => $this->descriptionFingerprint((string) $t->description),
             ];
         }
 
@@ -602,6 +610,109 @@ class extends Component
         }
     }
 
+    /**
+     * The one row currently in edit mode, keyed as "<fileId>:<index>".
+     * Empty = everything is read-only plain text. Rendering every
+     * row's inputs + searchable-select simultaneously was unusable
+     * past ~50 rows, so we show plain text by default and flip a
+     * single row into edit mode via the Edit button.
+     */
+    public string $editingRow = '';
+
+    public function editRow(string $fileId, int $i): void
+    {
+        if (isset($this->parsed[$fileId]['rows'][$i])) {
+            $this->editingRow = $fileId.':'.$i;
+        }
+    }
+
+    public function cancelEdit(): void
+    {
+        $this->editingRow = '';
+    }
+
+    /**
+     * Close the edit strip AND propagate the row's vendor + match
+     * pattern to every other row in the same file whose description
+     * matches the edited match_pattern (case-insensitive substring /
+     * regex). Rationale: user's mental model for editing a row is
+     * "fix this vendor and all similar ones" — doing it one-at-a-time
+     * would be tedious across a year of statements.
+     */
+    public function saveRow(string $fileId, int $i): void
+    {
+        if (isset($this->parsed[$fileId]['rows'][$i])) {
+            $source = $this->parsed[$fileId]['rows'][$i];
+            $pattern = trim((string) ($source['match_pattern'] ?? ''));
+            $overrideId = $source['counterparty_id_override'] ?? null;
+
+            if ($pattern !== '' && $overrideId !== null) {
+                foreach ($this->parsed[$fileId]['rows'] as $idx => $otherRow) {
+                    if ((string) $idx === (string) $i) {
+                        continue;
+                    }
+                    $descLower = mb_strtolower((string) ($otherRow['description'] ?? ''));
+                    $matched = @preg_match('#'.str_replace('#', '\#', $pattern).'#iu', $descLower) === 1;
+                    if (! $matched) {
+                        continue;
+                    }
+                    $this->parsed[$fileId]['rows'][$idx]['counterparty_id_override'] = $overrideId;
+                    $this->parsed[$fileId]['rows'][$idx]['match_pattern'] = $pattern;
+                }
+            }
+        }
+        $this->editingRow = '';
+    }
+
+    /**
+     * Inline vendor-creation from the searchable-select on a preview
+     * row. Writes the new contact id into the row's
+     * counterparty_id_override and seeds match_patterns from the
+     * row's match_pattern field so the pattern the user just typed
+     * (or the auto-filled fingerprint) becomes the new vendor's rule.
+     * Dispatches ss-option-added so the dropdown refreshes its label
+     * without a full re-render.
+     */
+    public function createCounterpartyForRow(string $name, string $modelKey): void
+    {
+        $name = trim($name);
+        if ($name === '' || ! str_starts_with($modelKey, 'parsed.')) {
+            return;
+        }
+        // Expect shape: parsed.<fileId>.rows.<index>.counterparty_id_override
+        $parts = explode('.', $modelKey);
+        if (count($parts) !== 5 || $parts[0] !== 'parsed' || $parts[2] !== 'rows' || $parts[4] !== 'counterparty_id_override') {
+            return;
+        }
+        [$fileId, $rowIndex] = [$parts[1], $parts[3]];
+        if (! isset($this->parsed[$fileId]['rows'][$rowIndex])) {
+            return;
+        }
+
+        $pattern = trim((string) ($this->parsed[$fileId]['rows'][$rowIndex]['match_pattern'] ?? ''));
+        $contact = Contact::create([
+            'kind' => 'org',
+            'display_name' => $name,
+            'is_vendor' => true,
+            'match_patterns' => $pattern !== '' ? $pattern : null,
+        ]);
+
+        $this->parsed[$fileId]['rows'][$rowIndex]['counterparty_id_override'] = (int) $contact->id;
+
+        $this->dispatch('ss-option-added',
+            model: $modelKey,
+            id: (int) $contact->id,
+            label: $contact->display_name,
+        );
+    }
+
+    /** @return \Illuminate\Database\Eloquent\Collection<int, Contact> */
+    #[Computed]
+    public function contactOptions(): \Illuminate\Database\Eloquent\Collection
+    {
+        return Contact::query()->orderBy('display_name')->get(['id', 'display_name']);
+    }
+
     public function dismissFile(string $fileId): void
     {
         if (isset($this->parsed[$fileId]['disk_path']) && ($this->parsed[$fileId]['media_id'] ?? null) === null) {
@@ -715,14 +826,22 @@ class extends Component
                     continue;
                 }
                 $externalId = $this->externalIdFor($accountId, $row);
-                // Explicit match_patterns on any Contact win over the
-                // fingerprint lookup — user has declared "this contact
-                // owns rows like X" and renamed contacts stay linked.
-                $descLower = mb_strtolower((string) $row['description']);
-                $counterpartyId = VendorReresolver::firstPatternMatch($descLower, $patternList);
-                if ($counterpartyId === null) {
-                    $fingerprint = $this->descriptionFingerprint((string) $row['description']);
-                    $counterpartyId = $contactMap[$fingerprint] ?? null;
+                // Counterparty resolution priority:
+                //   1. Per-row override (user picked / added in the
+                //      preview dropdown) — wins absolutely.
+                //   2. Pattern match against any Contact's declared
+                //      match_patterns.
+                //   3. Fingerprint map built by buildContactMap.
+                $counterpartyId = null;
+                if (! empty($row['counterparty_id_override'])) {
+                    $counterpartyId = (int) $row['counterparty_id_override'];
+                } else {
+                    $descLower = mb_strtolower((string) $row['description']);
+                    $counterpartyId = VendorReresolver::firstPatternMatch($descLower, $patternList);
+                    if ($counterpartyId === null) {
+                        $fingerprint = $this->descriptionFingerprint((string) $row['description']);
+                        $counterpartyId = $contactMap[$fingerprint] ?? null;
+                    }
                 }
                 try {
                     $txn = Transaction::create([
@@ -894,7 +1013,17 @@ class extends Component
     {
         $counts = [];
         $originals = [];
+        // Per-fingerprint user-edited match_pattern — used when
+        // auto-creating the Contact so the user's edit (if any)
+        // becomes the new vendor's pattern instead of the bare
+        // fingerprint.
+        $patternOverrides = [];
         foreach ($rows as $row) {
+            // Skip rows whose counterparty the user already pinned —
+            // buildContactMap shouldn't create extra contacts for them.
+            if (! empty($row['counterparty_id_override'])) {
+                continue;
+            }
             $fp = $this->descriptionFingerprint((string) $row['description']);
             if ($fp === '') {
                 continue;
@@ -902,6 +1031,16 @@ class extends Component
             $counts[$fp] = ($counts[$fp] ?? 0) + 1;
             if (! isset($originals[$fp])) {
                 $originals[$fp] = (string) $row['description'];
+            }
+            // First non-empty match_pattern wins for this fingerprint —
+            // subsequent rows in the same fingerprint group can still
+            // override their own counterparty via the dropdown if they
+            // disagree.
+            if (! isset($patternOverrides[$fp])) {
+                $override = trim((string) ($row['match_pattern'] ?? ''));
+                if ($override !== '') {
+                    $patternOverrides[$fp] = $override;
+                }
             }
         }
 
@@ -961,10 +1100,11 @@ class extends Component
                     'kind' => 'org',
                     'display_name' => $this->humanizeDescription($originals[$fp] ?? $fp),
                     'is_vendor' => true,
-                    // Seed the explicit match pattern with the
-                    // fingerprint so future renames of display_name
-                    // don't detach this contact from its transactions.
-                    'match_patterns' => $fp,
+                    // Prefer the user's edited match_pattern (from the
+                    // preview row) over the bare fingerprint so any
+                    // tightening/broadening they did before hitting
+                    // Import lands on the new vendor.
+                    'match_patterns' => $patternOverrides[$fp] ?? $fp,
                 ]);
                 $map[$fp] = $contact->id;
                 // Seed the lookup so subsequent fingerprints in this same
@@ -1066,6 +1206,21 @@ class extends Component
             {{ __('Drop PDF or CSV exports from Wells Fargo, Citi, Amex, or PayPal. Each file is parsed, deduped, and queued for review before anything hits your ledger.') }}
         </p>
     </header>
+
+    {{-- Inline vendor-ignore editor so filler patterns can be adjusted
+         mid-import without bouncing to /settings. Collapsed by default;
+         expand when a preview shows too much filler polluting vendor
+         matches. The "Re-resolve now" button inside also retroactively
+         re-assigns existing imports if the user fixes a rule. --}}
+    <details class="rounded-xl border border-neutral-800 bg-neutral-900/40 p-4 text-xs">
+        <summary class="cursor-pointer text-neutral-300">
+            {{ __('Vendor auto-detect · ignore list') }}
+            <span class="ml-1 text-neutral-600">{{ __('(edit without leaving this page)') }}</span>
+        </summary>
+        <div class="mt-3">
+            <livewire:vendor-ignore-editor />
+        </div>
+    </details>
 
     {{-- Default account picker — applied to every subsequent file AND to any
          already-uploaded card that hasn't had its account set yet. Saves the
@@ -1307,19 +1462,23 @@ class extends Component
                                 <table class="w-full text-xs">
                                     <thead class="text-neutral-500">
                                         <tr>
-                                            <th class="px-2 py-1.5"></th>
-                                            <th class="px-2 py-1.5 text-left">{{ __('Date') }}</th>
+                                            <th class="w-8 px-2 py-1.5"></th>
+                                            <th class="w-24 px-2 py-1.5 text-left">{{ __('Date') }}</th>
                                             <th class="px-2 py-1.5 text-left">{{ __('Description') }}</th>
-                                            <th class="px-2 py-1.5 text-left">{{ __('Vendor') }}</th>
-                                            <th class="px-2 py-1.5 text-right">{{ __('Amount') }}</th>
-                                            <th class="px-2 py-1.5"></th>
+                                            <th class="w-56 px-2 py-1.5 text-left">{{ __('Vendor') }}</th>
+                                            <th class="w-40 px-2 py-1.5 text-left">{{ __('Pattern') }}</th>
+                                            <th class="w-28 px-2 py-1.5 text-right">{{ __('Amount') }}</th>
+                                            <th class="w-20 px-2 py-1.5"></th>
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y divide-neutral-800/60">
                                         @foreach ($rows as $i => $row)
                                             @php($isDup = $dupForFile[$i] ?? false)
                                             @php($vp = $vendorPreview[$i] ?? ['status' => 'skip', 'label' => '—'])
-                                            <tr class="{{ $isDup ? 'opacity-60' : '' }}">
+                                            @php($isEditing = $editingRow === ($fileId.':'.$i))
+                                            @php($overrideId = $row['counterparty_id_override'] ?? null)
+                                            @php($vendorLabel = $overrideId ? ($this->contactOptions->firstWhere('id', (int) $overrideId)?->display_name ?? $vp['label']) : $vp['label'])
+                                            <tr wire:key="row-{{ $fileId }}-{{ $i }}" class="{{ $isDup ? 'opacity-60' : '' }}">
                                                 <td class="px-2 py-1 align-middle">
                                                     <input type="checkbox"
                                                            @checked($selForFile[$i] ?? false)
@@ -1328,24 +1487,78 @@ class extends Component
                                                            aria-label="{{ __('Select row') }}">
                                                 </td>
                                                 <td class="px-2 py-1 tabular-nums text-neutral-300">{{ $row['occurred_on'] }}</td>
-                                                <td class="px-2 py-1 text-neutral-100">{{ $row['description'] }}</td>
-                                                <td class="px-2 py-1 text-[11px]">
-                                                    @if ($vp['status'] === 'existing')
-                                                        <span class="text-neutral-300" title="{{ __('Matches an existing contact') }}">{{ $vp['label'] }}</span>
-                                                    @elseif ($vp['status'] === 'new')
-                                                        <span class="text-emerald-300" title="{{ __('Will auto-create — seen :n times in this file', ['n' => 2]) }}">+ {{ $vp['label'] }}</span>
-                                                    @else
-                                                        <span class="text-neutral-600">—</span>
-                                                    @endif
-                                                </td>
-                                                <td class="px-2 py-1 text-right tabular-nums {{ $row['amount'] >= 0 ? 'text-emerald-400' : 'text-neutral-100' }}">
-                                                    {{ Formatting::money((float) $row['amount'], $rowCurrency) }}
-                                                </td>
-                                                <td class="px-2 py-1">
-                                                    @if ($isDup)
-                                                        <span class="rounded bg-amber-900/40 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-amber-300">{{ __('already imported') }}</span>
-                                                    @endif
-                                                </td>
+                                                @if ($isEditing)
+                                                    <td class="px-2 py-1">
+                                                        <input wire:model="parsed.{{ $fileId }}.rows.{{ $i }}.description"
+                                                               type="text" autofocus
+                                                               aria-label="{{ __('Description') }}"
+                                                               class="w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-xs text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                                                    </td>
+                                                    <td class="px-2 py-1 text-[11px]">
+                                                        <x-ui.searchable-select
+                                                            id="cp-{{ $fileId }}-{{ $i }}"
+                                                            model="parsed.{{ $fileId }}.rows.{{ $i }}.counterparty_id_override"
+                                                            :options="['' => '— ' . __('auto') . ' —'] + $this->contactOptions->mapWithKeys(fn ($c) => [(string) $c->id => $c->display_name])->all()"
+                                                            :placeholder="__('— auto —')"
+                                                            allow-create
+                                                            create-method="createCounterpartyForRow" />
+                                                    </td>
+                                                    <td class="px-2 py-1">
+                                                        <input wire:model="parsed.{{ $fileId }}.rows.{{ $i }}.match_pattern"
+                                                               type="text"
+                                                               aria-label="{{ __('Match pattern') }}"
+                                                               placeholder="{{ __('auto') }}"
+                                                               class="w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1 font-mono text-[11px] text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                                                    </td>
+                                                    <td class="px-2 py-1 text-right tabular-nums">
+                                                        <input wire:model="parsed.{{ $fileId }}.rows.{{ $i }}.amount"
+                                                               type="number" step="0.01"
+                                                               aria-label="{{ __('Amount') }}"
+                                                               class="w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-right text-xs tabular-nums text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                                                    </td>
+                                                    <td class="px-2 py-1 text-right">
+                                                        <div class="inline-flex items-center gap-1">
+                                                            <button type="button" wire:click="saveRow('{{ $fileId }}', {{ $i }})"
+                                                                    class="rounded bg-emerald-600 px-2 py-0.5 text-[10px] font-medium text-emerald-50 hover:bg-emerald-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                                                                {{ __('Update') }}
+                                                            </button>
+                                                            <button type="button" wire:click="cancelEdit"
+                                                                    class="rounded border border-neutral-700 px-2 py-0.5 text-[10px] text-neutral-400 hover:text-neutral-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                                                                {{ __('Cancel') }}
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                @else
+                                                    <td class="px-2 py-1 text-neutral-100">{{ $row['description'] }}</td>
+                                                    <td class="px-2 py-1 text-[11px]">
+                                                        @if ($overrideId)
+                                                            <span class="text-amber-300" title="{{ __('User override') }}">{{ $vendorLabel }}</span>
+                                                        @elseif ($vp['status'] === 'existing')
+                                                            <span class="text-neutral-300" title="{{ __('Matches an existing contact') }}">{{ $vp['label'] }}</span>
+                                                        @elseif ($vp['status'] === 'new')
+                                                            <span class="text-emerald-300" title="{{ __('Will auto-create') }}">+ {{ $vp['label'] }}</span>
+                                                        @else
+                                                            <span class="text-neutral-600">—</span>
+                                                        @endif
+                                                    </td>
+                                                    <td class="px-2 py-1 font-mono text-[11px] text-neutral-500">
+                                                        {{ ($row['match_pattern'] ?? '') ?: '—' }}
+                                                    </td>
+                                                    <td class="px-2 py-1 text-right tabular-nums {{ $row['amount'] >= 0 ? 'text-emerald-400' : 'text-neutral-100' }}">
+                                                        {{ Formatting::money((float) $row['amount'], $rowCurrency) }}
+                                                    </td>
+                                                    <td class="px-2 py-1 text-right">
+                                                        <div class="inline-flex items-center gap-1">
+                                                            @if ($isDup)
+                                                                <span class="rounded bg-amber-900/40 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-amber-300">{{ __('dup') }}</span>
+                                                            @endif
+                                                            <button type="button" wire:click="editRow('{{ $fileId }}', {{ $i }})"
+                                                                    class="rounded px-2 py-0.5 text-[10px] text-neutral-500 hover:bg-neutral-800 hover:text-neutral-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                                                                {{ __('Edit') }}
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                @endif
                                             </tr>
                                         @endforeach
                                     </tbody>
