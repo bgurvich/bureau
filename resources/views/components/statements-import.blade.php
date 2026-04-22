@@ -1,9 +1,11 @@
 <?php
 
 use App\Models\Account;
+use App\Models\Category;
 use App\Models\Contact;
 use App\Models\Media;
 use App\Models\Transaction;
+use App\Support\CategorySourceMatcher;
 use App\Support\DescriptionNormalizer;
 use App\Support\Formatting;
 use App\Support\MediaFolders;
@@ -361,6 +363,11 @@ class extends Component
                 'amount' => $t->amount,
                 'closing_balance' => $t->runningBalance,
                 'check_number' => $t->checkNumber,
+                // Source-supplied category label (Costco's Category column,
+                // etc.). Matched at createTransactions() time against
+                // categories.match_patterns — kept here so the preview UI
+                // can surface the mapping before import.
+                'category_hint' => $t->categoryHint,
                 // Per-row edits the user can apply in the preview before
                 // hitting Import. `counterparty_id_override` wins over the
                 // auto-detect path; `match_pattern` is the *user's* edit
@@ -933,6 +940,12 @@ class extends Component
         // descriptions.
         $patternList = VendorReresolver::patternList();
 
+        // Category source-label patterns — used to map the statement's
+        // own Category column (e.g. Costco's "Merchandise") onto a
+        // household category. Loaded once so the per-row resolve is
+        // O(patterns) instead of O(patterns × rows).
+        $categoryPatternList = CategorySourceMatcher::patternList();
+
         // Pending pattern appends for existing vendors the user picked
         // explicitly (counterparty_id_override). Collected inside the row
         // loop, persisted in one pass afterwards so each contact gets a
@@ -941,7 +954,7 @@ class extends Component
         // @var array<int, array<int, string>>
         $pendingPatternAppends = [];
 
-        DB::transaction(function () use ($fileId, $state, $accountId, $media, $contactMap, $patternList, &$created, &$skipReasons, &$pendingPatternAppends) {
+        DB::transaction(function () use ($fileId, $state, $accountId, $media, $contactMap, $patternList, $categoryPatternList, &$created, &$skipReasons, &$pendingPatternAppends) {
             foreach ($state['rows'] as $i => $row) {
                 if (! ($this->selected[$fileId][$i] ?? false)) {
                     continue;
@@ -1004,6 +1017,17 @@ class extends Component
                 }
                 if ($media && ! $txn->media()->where('media.id', $media->id)->exists()) {
                     $txn->media()->attach($media->id, ['role' => 'statement']);
+                }
+                // Fall back to the statement's source-category label when
+                // nothing upstream (contact default, description rule)
+                // claimed the transaction. User-curated rules win; this
+                // is strictly fill-in.
+                $hint = $row['category_hint'] ?? null;
+                if ($hint !== null && $hint !== '' && $txn->fresh()?->category_id === null) {
+                    $catId = CategorySourceMatcher::match((string) $hint, $categoryPatternList);
+                    if ($catId !== null) {
+                        $txn->forceFill(['category_id' => $catId])->save();
+                    }
                 }
                 ProjectionMatcher::attempt($txn);
                 $created++;
@@ -1152,6 +1176,113 @@ class extends Component
         }
 
         return $out;
+    }
+
+    /**
+     * Distinct source-category labels emitted by this file's parser,
+     * each flagged as mapped (patterns on some category matched) or
+     * unmapped (user needs to decide). Feeds the "Category hints"
+     * panel on the preview so the user can seed `categories.match_patterns`
+     * with one click before import.
+     *
+     * @return array<int, array{label: string, count: int, status: string, category_id?: int, category_name?: string}>
+     */
+    public function categoryHintsForFile(string $fileId): array
+    {
+        $rows = (array) ($this->parsed[$fileId]['rows'] ?? []);
+        if ($rows === []) {
+            return [];
+        }
+
+        $counts = [];
+        foreach ($rows as $row) {
+            $label = trim((string) ($row['category_hint'] ?? ''));
+            if ($label === '') {
+                continue;
+            }
+            $counts[$label] = ($counts[$label] ?? 0) + 1;
+        }
+        if ($counts === []) {
+            return [];
+        }
+
+        $patternList = CategorySourceMatcher::patternList();
+        $categoryNames = Category::query()
+            ->whereIn('id', array_unique(array_column($patternList, 0)))
+            ->pluck('name', 'id');
+
+        $out = [];
+        foreach ($counts as $label => $n) {
+            $hit = CategorySourceMatcher::matchWithPattern($label, $patternList);
+            if ($hit !== null) {
+                [$catId] = $hit;
+                $out[] = [
+                    'label' => $label,
+                    'count' => $n,
+                    'status' => 'mapped',
+                    'category_id' => $catId,
+                    'category_name' => (string) ($categoryNames[$catId] ?? ''),
+                ];
+            } else {
+                $out[] = [
+                    'label' => $label,
+                    'count' => $n,
+                    'status' => 'unmapped',
+                ];
+            }
+        }
+
+        // Most-frequent first so the biggest wins sit at the top of the panel.
+        usort($out, fn ($a, $b) => $b['count'] <=> $a['count']);
+
+        return $out;
+    }
+
+    /**
+     * Append the source label to an existing category's match_patterns
+     * so this and future imports auto-map. Deduped case-insensitively.
+     */
+    public function mapCategoryHint(string $fileId, string $label, int $categoryId): void
+    {
+        $label = trim($label);
+        if ($label === '') {
+            return;
+        }
+        $category = Category::find($categoryId);
+        if (! $category) {
+            return;
+        }
+        $existing = CategorySourceMatcher::parsePatterns((string) ($category->match_patterns ?? ''));
+        $lower = array_map('mb_strtolower', $existing);
+        if (! in_array(mb_strtolower($label), $lower, true)) {
+            $existing[] = $label;
+            $category->forceFill(['match_patterns' => implode("\n", $existing)])->save();
+        }
+    }
+
+    /**
+     * Create a new household category with the source label both as its
+     * display name and as its first match pattern, so future imports
+     * auto-map. Used when the user decides no existing category fits.
+     */
+    public function createCategoryFromHint(string $fileId, string $label): void
+    {
+        $label = trim($label);
+        if ($label === '') {
+            return;
+        }
+        $slug = \Illuminate\Support\Str::slug($label) ?: 'cat-'.bin2hex(random_bytes(3));
+        $base = $slug;
+        $suffix = 0;
+        while (Category::where('slug', $suffix ? "{$base}-{$suffix}" : $base)->exists()) {
+            $suffix++;
+        }
+        Category::create([
+            'name' => $label,
+            'slug' => $suffix ? "{$base}-{$suffix}" : $base,
+            'kind' => 'expense',
+            'match_patterns' => $label,
+        ]);
     }
 
     /**
@@ -1368,6 +1499,19 @@ class extends Component
     public function accounts(): Collection
     {
         return Account::orderBy('name')->get(['id', 'name', 'currency', 'type']);
+    }
+
+    /**
+     * Categories list for the "map to existing" dropdown in the
+     * category-hints panel. Kept computed so the per-hint render doesn't
+     * re-query for each row.
+     *
+     * @return Collection<int, Category>
+     */
+    #[Computed]
+    public function categories(): Collection
+    {
+        return Category::orderBy('kind')->orderBy('name')->get(['id', 'name', 'kind', 'slug']);
     }
 };
 ?>
@@ -1630,7 +1774,48 @@ class extends Component
                                 </div>
                             </div>
 
+                            @php($categoryHints = $this->categoryHintsForFile($fileId))
+                            @if ($categoryHints)
+                                <div class="rounded-md border border-neutral-800 bg-neutral-950/60">
+                                    <div class="flex items-baseline justify-between border-b border-neutral-800 px-3 py-2">
+                                        <h3 class="text-[10px] font-medium uppercase tracking-wider text-neutral-500">
+                                            {{ __('Category hints from the statement') }}
+                                        </h3>
+                                        <span class="text-[11px] text-neutral-500">
+                                            {{ __('Mapped hints auto-categorize; seed patterns once and this list shrinks.') }}
+                                        </span>
+                                    </div>
+                                    <ul class="divide-y divide-neutral-800/60">
+                                        @foreach ($categoryHints as $hint)
+                                            <li class="flex flex-wrap items-center gap-3 px-3 py-2 text-sm">
+                                                <span class="font-medium text-neutral-200">{{ $hint['label'] }}</span>
+                                                <span class="text-[11px] text-neutral-500 tabular-nums">{{ $hint['count'] }}×</span>
+                                                @if ($hint['status'] === 'mapped')
+                                                    <span class="rounded bg-emerald-900/30 px-2 py-0.5 text-[11px] text-emerald-300">
+                                                        → {{ $hint['category_name'] }}
+                                                    </span>
+                                                @else
+                                                    <select x-on:change="if ($event.target.value) $wire.mapCategoryHint(@js($fileId), @js($hint['label']), parseInt($event.target.value, 10))"
+                                                            class="rounded-md border border-neutral-700 bg-neutral-950 px-2 py-1 text-sm text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                                                        <option value="">{{ __('— map to existing —') }}</option>
+                                                        @foreach ($this->categories as $c)
+                                                            <option value="{{ $c->id }}">{{ ucfirst($c->kind) }} · {{ $c->name }}</option>
+                                                        @endforeach
+                                                    </select>
+                                                    <button type="button"
+                                                            wire:click="createCategoryFromHint('{{ $fileId }}', @js($hint['label']))"
+                                                            class="rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-sm text-neutral-300 hover:border-neutral-600 hover:bg-neutral-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                                                        {{ __('Create new') }}
+                                                    </button>
+                                                @endif
+                                            </li>
+                                        @endforeach
+                                    </ul>
+                                </div>
+                            @endif
+
                             @php($vendorPreview = $this->vendorPreviewForFile($fileId))
+                            @php($hintByLabel = collect($categoryHints)->keyBy('label'))
                             <div class="overflow-x-auto rounded-md border border-neutral-800 bg-neutral-950/60">
                                 <table class="w-full text-xs">
                                     <thead class="text-neutral-500">
@@ -1685,7 +1870,7 @@ class extends Component
                                                                aria-label="{{ __('Description') }}"
                                                                class="w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-xs text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
                                                     </td>
-                                                    <td class="px-2 py-1 text-[11px]">
+                                                    <td class="px-2 py-1 text-xs">
                                                         <x-ui.searchable-select
                                                             id="cp-{{ $fileId }}-{{ $i }}"
                                                             model="parsed.{{ $fileId }}.rows.{{ $i }}.counterparty_id_override"
@@ -1702,7 +1887,7 @@ class extends Component
                                                                type="text"
                                                                aria-label="{{ __('Match pattern') }}"
                                                                placeholder="{{ $autoFp !== '' ? $autoFp : __('auto') }}"
-                                                               class="w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1 font-mono text-[11px] text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                                                               class="w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1 font-mono text-xs text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
                                                     </td>
                                                     <td class="px-2 py-1 text-right tabular-nums">
                                                         <input wire:model="parsed.{{ $fileId }}.rows.{{ $i }}.amount"
@@ -1725,8 +1910,25 @@ class extends Component
                                                         </div>
                                                     </td>
                                                 @else
-                                                    <td class="px-2 py-1 text-neutral-100">{{ $row['description'] }}</td>
-                                                    <td class="px-2 py-1 text-[11px]">
+                                                    <td class="px-2 py-1 text-neutral-100">
+                                                        {{ $row['description'] }}
+                                                        @php($rowHint = trim((string) ($row['category_hint'] ?? '')))
+                                                        @if ($rowHint !== '')
+                                                            @php($hintInfo = $hintByLabel->get($rowHint))
+                                                            @if ($hintInfo && $hintInfo['status'] === 'mapped')
+                                                                <span class="ml-2 rounded bg-emerald-900/30 px-1.5 py-0.5 text-[11px] text-emerald-300"
+                                                                      title="{{ __('Hint “:h” will map to :c', ['h' => $rowHint, 'c' => $hintInfo['category_name']]) }}">
+                                                                    → {{ $hintInfo['category_name'] }}
+                                                                </span>
+                                                            @else
+                                                                <span class="ml-2 rounded bg-neutral-800 px-1.5 py-0.5 text-[11px] text-neutral-400"
+                                                                      title="{{ __('Statement category hint — unmapped; use the Category hints panel to seed a pattern.') }}">
+                                                                    {{ $rowHint }}
+                                                                </span>
+                                                            @endif
+                                                        @endif
+                                                    </td>
+                                                    <td class="px-2 py-1">
                                                         @if ($overrideId)
                                                             <span class="text-amber-300" title="{{ __('User override') }}">{{ $vendorLabel }}</span>
                                                         @elseif ($vp['status'] === 'existing')
@@ -1737,7 +1939,7 @@ class extends Component
                                                             <span class="text-neutral-600">—</span>
                                                         @endif
                                                     </td>
-                                                    <td class="px-2 py-1 font-mono text-[11px] text-neutral-500">
+                                                    <td class="px-2 py-1 font-mono text-neutral-500">
                                                         @php($explicitPattern = trim((string) ($row['match_pattern'] ?? '')))
                                                         @php($autoPattern = $vp['matched_pattern'] ?? '')
                                                         @php($autoFp = $this->descriptionFingerprint((string) ($row['description'] ?? '')))

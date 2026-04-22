@@ -20,9 +20,10 @@ use App\Support\Statements\ParsedTransaction;
  * Bureau's credit-card convention is charges negative / refunds-and-
  * payments positive, which is what we emit.
  *
- * The Category column (Costco-only) is dropped — Bureau runs its own
- * category rules against transaction.description and Costco's taxonomy
- * doesn't map cleanly onto household categories.
+ * The Category column (Costco-only) is passed through as a
+ * `categoryHint` on ParsedTransaction so the import step can map it to
+ * a household category via `categories.match_patterns` without baking
+ * Costco's taxonomy into the transaction record itself.
  */
 final class CitiCreditCsvParser extends AbstractCsvStatementParser
 {
@@ -76,6 +77,7 @@ final class CitiCreditCsvParser extends AbstractCsvStatementParser
             description: $this->cell($row, ['Description']) ?? '',
             amount: $amount,
             rawRow: json_encode($row) ?: null,
+            categoryHint: $this->cell($row, ['Category']),
         );
     }
 }

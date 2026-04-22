@@ -6,7 +6,7 @@ it('skips preamble rows and locks onto the modal-column header', function () {
     // Shape mirrors Costco Anywhere Visa's "Year to date" export — a
     // "Time period of report:" metadata row + blank line before the
     // real column header.
-    $body = <<<CSV
+    $body = <<<'CSV'
 "Time period of report:","Jan. 01, 2026 (09:00 AM) to Apr. 22, 2026 (09:00 AM)"
 
 Date,Description,Debit,Credit,Category
