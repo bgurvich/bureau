@@ -34,13 +34,14 @@ it('persists a theme change', function () {
 
 it('rejects unknown theme values', function () {
     $user = authedAliceExample();
-    $user->forceFill(['theme' => 'system'])->save();
+    $user->forceFill(['theme' => 'light'])->save();
+    auth()->setUser($user->fresh());
 
     Livewire::test('user-menu')
         ->call('setTheme', 'tangerine')
-        ->assertSet('theme', 'system');
+        ->assertSet('theme', 'light');
 
-    expect($user->fresh()->theme)->toBe('system');
+    expect($user->fresh()->theme)->toBe('light');
 });
 
 it('persists the retro theme', function () {

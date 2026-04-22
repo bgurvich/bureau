@@ -49,10 +49,10 @@ function applyTheme(pref: ThemePref): void {
     }
 }
 
-applyTheme((root.dataset.theme as ThemePref) || 'system');
+applyTheme((root.dataset.theme as ThemePref) || 'dusk');
 
 media.addEventListener('change', () => {
-    if (((root.dataset.theme as ThemePref) || 'system') === 'system') {
+    if (((root.dataset.theme as ThemePref) || 'dusk') === 'system') {
         applyTheme('system');
     }
 });
@@ -63,7 +63,7 @@ media.addEventListener('change', () => {
 // dropped on every in-page navigation and the CSS falls back to the
 // :root dark default until the user hits reload.
 document.addEventListener('livewire:navigated', () => {
-    applyTheme((root.dataset.theme as ThemePref) || 'system');
+    applyTheme((root.dataset.theme as ThemePref) || 'dusk');
 });
 
 document.addEventListener('livewire:init', () => {
@@ -83,7 +83,7 @@ function extractTheme(payload: unknown): ThemePref {
             if (typeof first.theme === 'string') return first.theme as ThemePref;
         }
     }
-    return 'system';
+    return 'dusk';
 }
 
 // Keyboard shortcuts for the Inspector.

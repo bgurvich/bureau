@@ -26,7 +26,7 @@ class User extends Authenticatable implements WebAuthnAuthenticatable
         'date_format' => 'Y-m-d',
         'time_format' => 'H:i',
         'week_starts_on' => 0,
-        'theme' => 'system',
+        'theme' => 'dusk',
     ];
 
     protected function casts(): array

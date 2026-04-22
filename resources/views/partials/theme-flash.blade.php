@@ -4,7 +4,7 @@
 <script @if (app()->bound('csp.nonce')) nonce="{{ app('csp.nonce') }}" @endif>
     (function () {
         var r = document.documentElement;
-        var pref = r.dataset.theme || 'system';
+        var pref = r.dataset.theme || 'dusk';
         var resolved = pref === 'system'
             ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
             : pref;

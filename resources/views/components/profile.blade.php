@@ -30,7 +30,7 @@ new class extends Component
     public int $week_starts_on = 0;
 
     #[Validate('required|string|in:system,light,dark,dusk,retro')]
-    public string $theme = 'system';
+    public string $theme = 'dusk';
 
     #[Validate('required|string|size:3|alpha')]
     public string $household_default_currency = 'USD';
