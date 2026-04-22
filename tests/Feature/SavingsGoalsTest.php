@@ -16,8 +16,7 @@ it('page renders with empty state and a New goal button', function () {
 it('creates a savings goal via the inspector', function () {
     authedInHousehold();
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'savings_goal')
+    Livewire::test('inspector.savings-goal-form')
         ->set('savings_name', 'Emergency fund')
         ->set('savings_target_amount', '10000')
         ->set('savings_saved_amount', '3500')
@@ -49,8 +48,7 @@ it('edits a goal via the inspector', function () {
         'saved_amount' => 0, 'currency' => 'USD', 'state' => 'active',
     ]);
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'savings_goal', $g->id)
+    Livewire::test('inspector.savings-goal-form', ['id' => $g->id])
         ->set('savings_saved_amount', '75')
         ->call('save');
 

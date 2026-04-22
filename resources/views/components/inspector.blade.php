@@ -128,22 +128,8 @@ new class extends Component
 
     public string $reminder_notes = '';
 
-    // savings goal
-    public string $savings_name = '';
-
-    public string $savings_target_amount = '';
-
-    public string $savings_target_date = '';
-
-    public string $savings_starting_amount = '0';
-
-    public string $savings_saved_amount = '0';
-
-    public string $savings_currency = 'USD';
-
-    public string $savings_state = 'active';
-
-    public ?int $savings_account_id = null;
+    // savings_goal extracted to App\Livewire\Inspector\SavingsGoalForm;
+    // the shell hosts the child via @livewire in the render switch.
 
     // time_entry extracted to App\Livewire\Inspector\TimeEntryForm;
     // the shell hosts the child via @livewire in the render switch.
@@ -1438,7 +1424,6 @@ new class extends Component
         $this->account_currency = $currency;
         $this->sale_currency = $currency;
         $this->budget_currency = $currency;
-        $this->savings_currency = $currency;
         $this->subscription_currency = $currency;
         $this->issued_on = now()->toDateString();
         $this->due_on = now()->addDays(14)->toDateString();
@@ -1601,7 +1586,6 @@ new class extends Component
             'inventory' => $this->loadInventory(),
             'appointment' => $this->loadAppointment(),
             'reminder' => $this->loadReminder(),
-            'savings_goal' => $this->loadSavingsGoal(),
             'budget_cap' => $this->loadBudgetCap(),
             'category_rule' => $this->loadCategoryRule(),
             'tag_rule' => $this->loadTagRule(),
@@ -1948,7 +1932,7 @@ new class extends Component
         // persists on its own. The child fires `inspector-form-saved`
         // back and the shell's onFormSaved() listener closes the drawer.
         // Add a type to this array after extracting its child form.
-        $extractedTypes = ['pet', 'pet_vaccination', 'pet_checkup', 'time_entry', 'transfer'];
+        $extractedTypes = ['pet', 'pet_vaccination', 'pet_checkup', 'time_entry', 'transfer', 'savings_goal'];
         if (in_array($this->type, $extractedTypes, true)) {
             $this->dispatch('inspector-save');
 
@@ -1978,7 +1962,6 @@ new class extends Component
                 'inventory' => $this->saveInventory(),
                 'appointment' => $this->saveAppointment(),
                 'reminder' => $this->saveReminder(),
-                'savings_goal' => $this->saveSavingsGoal(),
                 'budget_cap' => $this->saveBudgetCap(),
                 'category_rule' => $this->saveCategoryRule(),
                 'tag_rule' => $this->saveTagRule(),
@@ -3113,49 +3096,7 @@ new class extends Component
         }
     }
 
-    // ── Savings goal ─────────────────────────────────────────────────────
-    private function loadSavingsGoal(): void
-    {
-        $g = \App\Models\SavingsGoal::findOrFail($this->id);
-        $this->savings_name = $g->name;
-        $this->savings_target_amount = (string) $g->target_amount;
-        $this->savings_target_date = $g->target_date?->toDateString() ?? '';
-        $this->savings_starting_amount = (string) $g->starting_amount;
-        $this->savings_saved_amount = (string) $g->saved_amount;
-        $this->savings_currency = $g->currency;
-        $this->savings_state = $g->state;
-        $this->savings_account_id = $g->account_id;
-    }
-
-    private function saveSavingsGoal(): void
-    {
-        $data = $this->validate([
-            'savings_name' => 'required|string|max:120',
-            'savings_target_amount' => 'required|numeric|min:0',
-            'savings_target_date' => 'nullable|date',
-            'savings_starting_amount' => 'nullable|numeric|min:0',
-            'savings_saved_amount' => 'nullable|numeric|min:0',
-            'savings_currency' => 'required|string|size:3|alpha',
-            'savings_state' => ['required', \Illuminate\Validation\Rule::in(['active', 'paused', 'achieved', 'abandoned'])],
-            'savings_account_id' => 'nullable|integer|exists:accounts,id',
-        ]);
-        $payload = [
-            'name' => $data['savings_name'],
-            'target_amount' => (float) $data['savings_target_amount'],
-            'target_date' => $data['savings_target_date'] ?: null,
-            'starting_amount' => (float) ($data['savings_starting_amount'] ?? 0),
-            'saved_amount' => (float) ($data['savings_saved_amount'] ?? 0),
-            'currency' => strtoupper($data['savings_currency']),
-            'state' => $data['savings_state'],
-            'account_id' => $data['savings_account_id'] ?: null,
-        ];
-
-        if ($this->id) {
-            \App\Models\SavingsGoal::findOrFail($this->id)->forceFill($payload)->save();
-        } else {
-            $this->id = \App\Models\SavingsGoal::forceCreate($payload)->id;
-        }
-    }
+    // savings_goal load/save moved to App\Livewire\Inspector\SavingsGoalForm.
 
     // ── Budget cap ───────────────────────────────────────────────────────
     public ?int $budget_category_id = null;
@@ -3981,7 +3922,9 @@ new class extends Component
                 @case('inventory') @include('partials.inspector.forms.inventory')    @break
                 @case('appointment') @include('partials.inspector.forms.appointment') @break
                 @case('reminder') @include('partials.inspector.forms.reminder') @break
-                @case('savings_goal') @include('partials.inspector.forms.savings_goal') @break
+                @case('savings_goal')
+                    @livewire('inspector.savings-goal-form', ['id' => $id], key('savings-goal-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
+                    @break
                 @case('budget_cap') @include('partials.inspector.forms.budget_cap') @break
                 @case('category_rule') @include('partials.inspector.forms.category_rule') @break
                 @case('tag_rule') @include('partials.inspector.forms.tag_rule') @break

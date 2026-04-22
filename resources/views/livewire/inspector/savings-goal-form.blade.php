@@ -53,5 +53,4 @@
             <option value="abandoned">{{ __('abandoned') }}</option>
         </select>
     </div>
-    @include('partials.inspector.fields.admin')
 </form>
