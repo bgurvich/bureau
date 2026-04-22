@@ -37,13 +37,12 @@ it('opens the picker via event', function () {
 it('creates a task', function () {
     authedInHousehold();
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'task')
+    Livewire::test('inspector.task-form')
         ->set('title', 'Renew passport')
         ->set('priority', 1)
         ->set('state', 'open')
         ->call('save')
-        ->assertSet('open', false);
+        ->assertHasNoErrors();
 
     expect(Task::count())->toBe(1);
     $t = Task::first();
@@ -59,8 +58,7 @@ it('edits an existing task', function () {
         'title' => 'Old', 'priority' => 3, 'state' => 'open',
     ]);
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'task', $task->id)
+    Livewire::test('inspector.task-form', ['id' => $task->id])
         ->assertSet('title', 'Old')
         ->set('title', 'Updated title')
         ->set('state', 'done')
@@ -166,8 +164,7 @@ it('deletes a task', function () {
 it('requires a title on task save', function () {
     authedInHousehold();
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'task')
+    Livewire::test('inspector.task-form')
         ->call('save')
         ->assertHasErrors(['title']);
 });

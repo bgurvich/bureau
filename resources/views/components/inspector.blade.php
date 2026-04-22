@@ -1328,7 +1328,6 @@ new class extends Component
     private function loadRecord(): void
     {
         match ($this->type) {
-            'task' => $this->loadTask(),
             'transaction' => $this->loadTransaction(),
             'bill' => $this->loadBill(),
             'document' => $this->loadDocument(),
@@ -1343,16 +1342,7 @@ new class extends Component
         };
     }
 
-    private function loadTask(): void
-    {
-        $t = Task::findOrFail($this->id);
-        $this->title = $t->title;
-        $this->description = $t->description ?? '';
-        $this->due_at = $t->due_at ? $t->due_at->format('Y-m-d\TH:i') : '';
-        $this->priority = (int) $t->priority;
-        $this->state = $t->state;
-        $this->subject_refs = $this->subjectRefsFrom($t);
-    }
+    // loadTask moved to App\Livewire\Inspector\TaskForm.
 
     private function loadTransaction(): void
     {
@@ -1511,7 +1501,7 @@ new class extends Component
         // persists on its own. The child fires `inspector-form-saved`
         // back and the shell's onFormSaved() listener closes the drawer.
         // Add a type to this array after extracting its child form.
-        $extractedTypes = ['pet', 'pet_vaccination', 'pet_checkup', 'time_entry', 'transfer', 'savings_goal', 'budget_cap', 'category_rule', 'tag_rule', 'reminder', 'subscription', 'online_account', 'meeting', 'domain', 'project', 'account', 'contact', 'appointment', 'vehicle', 'property', 'physical_mail', 'note'];
+        $extractedTypes = ['pet', 'pet_vaccination', 'pet_checkup', 'time_entry', 'transfer', 'savings_goal', 'budget_cap', 'category_rule', 'tag_rule', 'reminder', 'subscription', 'online_account', 'meeting', 'domain', 'project', 'account', 'contact', 'appointment', 'vehicle', 'property', 'physical_mail', 'note', 'task'];
         if (in_array($this->type, $extractedTypes, true)) {
             $this->dispatch('inspector-save');
 
@@ -1520,7 +1510,6 @@ new class extends Component
 
         try {
             match ($this->type) {
-                'task' => $this->saveTask(),
                 'transaction' => $this->saveTransaction(),
                 'bill' => $this->saveBill(),
                 'document' => $this->saveDocument(),
@@ -1593,34 +1582,7 @@ new class extends Component
         $model->forceFill([$userField => $newOwner])->save();
     }
 
-    private function saveTask(): void
-    {
-        $data = $this->validate([
-            'title' => 'required|string|max:255',
-            'description' => 'nullable|string|max:5000',
-            'due_at' => 'nullable|date',
-            'priority' => 'required|integer|between:1,5',
-            'state' => ['required', Rule::in(array_keys(Enums::taskStates()))],
-        ]);
-
-        $data['description'] = $data['description'] ?: null;
-        $data['due_at'] = $data['due_at'] ?: null;
-        if ($data['state'] === 'done' && $this->id) {
-            $data['completed_at'] = now();
-        } elseif ($data['state'] !== 'done') {
-            $data['completed_at'] = null;
-        }
-
-        if ($this->id) {
-            $task = Task::findOrFail($this->id);
-            $task->update($data);
-        } else {
-            $data['assigned_user_id'] = auth()->id();
-            $task = Task::create($data);
-            $this->id = $task->id;
-        }
-        $task->syncSubjects($this->parseSubjectRefs($this->subject_refs));
-    }
+    // saveTask moved to App\Livewire\Inspector\TaskForm.
 
     private function saveTransaction(): void
     {
@@ -2741,7 +2703,9 @@ new class extends Component
                         @include('partials.inspector.type-picker')
                     @endunless
                     @break
-                @case('task')    @include('partials.inspector.forms.task')           @break
+                @case('task')
+                    @livewire('inspector.task-form', ['id' => $id], key('task-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
+                    @break
                 @case('transaction') @include('partials.inspector.forms.transaction')@break
                 @case('contact')
                     @livewire('inspector.contact-form', ['id' => $id], key('contact-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))

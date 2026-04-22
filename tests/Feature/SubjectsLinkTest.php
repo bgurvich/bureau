@@ -70,8 +70,7 @@ it('Inspector saves subjects on task create and reloads on edit', function () {
     authedInHousehold();
     $vehicle = Vehicle::create(['kind' => 'car', 'model' => 'Civic']);
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'task')
+    Livewire::test('inspector.task-form')
         ->set('title', 'Renew insurance')
         ->set('state', 'open')
         ->set('priority', 2)
@@ -82,7 +81,7 @@ it('Inspector saves subjects on task create and reloads on edit', function () {
     expect($task->subjects()->first()->id)->toBe($vehicle->id);
 
     // Reopen for edit — subject_refs must be populated
-    $c = Livewire::test('inspector')->call('openInspector', 'task', $task->id);
+    $c = Livewire::test('inspector.task-form', ['id' => $task->id]);
     expect($c->get('subject_refs'))->toContain('vehicle:'.$vehicle->id);
 });
 
@@ -90,8 +89,7 @@ it('Inspector parseSubjectRefs drops malformed entries', function () {
     authedInHousehold();
     $vehicle = Vehicle::create(['kind' => 'car', 'model' => 'A']);
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'task')
+    Livewire::test('inspector.task-form')
         ->set('title', 'X')
         ->set('state', 'open')
         ->set('priority', 3)
@@ -125,8 +123,7 @@ it('Inspector search returns matches across kinds when ≥2 chars typed', functi
     $p = Property::create(['kind' => 'home', 'name' => 'Civic Center loft']);
     Contract::create(['kind' => 'insurance', 'title' => 'Elsewhere']);
 
-    $c = Livewire::test('inspector')
-        ->call('openInspector', 'task')
+    $c = Livewire::test('inspector.task-form')
         ->set('subject_search', 'civi');
 
     $results = $c->get('subjectSearchResults');
@@ -139,8 +136,7 @@ it('subject search is silent until 2 chars', function () {
     authedInHousehold();
     Vehicle::create(['kind' => 'car', 'model' => 'Civic']);
 
-    $c = Livewire::test('inspector')
-        ->call('openInspector', 'task')
+    $c = Livewire::test('inspector.task-form')
         ->set('subject_search', 'c');
     expect($c->get('subjectSearchResults'))->toBe([]);
 });
@@ -151,8 +147,7 @@ it('addSubject, removeSubject, and moveSubjectTo manage the ordered list', funct
     $p = Property::create(['kind' => 'home', 'name' => 'B']);
     $cn = Contract::create(['kind' => 'insurance', 'title' => 'C']);
 
-    $c = Livewire::test('inspector')
-        ->call('openInspector', 'task')
+    $c = Livewire::test('inspector.task-form')
         ->call('addSubject', 'vehicle:'.$v->id)
         ->call('addSubject', 'property:'.$p->id)
         ->call('addSubject', 'contract:'.$cn->id);
@@ -190,8 +185,7 @@ it('reorderSubjects rebuilds the chip order to match the supplied refs', functio
     $p = Property::create(['kind' => 'home', 'name' => 'B']);
     $cn = Contract::create(['kind' => 'insurance', 'title' => 'C']);
 
-    $c = Livewire::test('inspector')
-        ->call('openInspector', 'task')
+    $c = Livewire::test('inspector.task-form')
         ->call('addSubject', 'vehicle:'.$v->id)
         ->call('addSubject', 'property:'.$p->id)
         ->call('addSubject', 'contract:'.$cn->id);
@@ -223,8 +217,7 @@ it('moveSubjectTo clamps an out-of-bounds target index', function () {
     $v = Vehicle::create(['kind' => 'car', 'model' => 'A']);
     $p = Property::create(['kind' => 'home', 'name' => 'B']);
 
-    $c = Livewire::test('inspector')
-        ->call('openInspector', 'task')
+    $c = Livewire::test('inspector.task-form')
         ->call('addSubject', 'vehicle:'.$v->id)
         ->call('addSubject', 'property:'.$p->id)
         ->call('moveSubjectTo', 'vehicle:'.$v->id, 99);
@@ -238,8 +231,7 @@ it('addSubject refuses duplicates and invalid kinds', function () {
     authedInHousehold();
     $v = Vehicle::create(['kind' => 'car', 'model' => 'A']);
 
-    $c = Livewire::test('inspector')
-        ->call('openInspector', 'task')
+    $c = Livewire::test('inspector.task-form')
         ->call('addSubject', 'vehicle:'.$v->id)
         ->call('addSubject', 'vehicle:'.$v->id)   // duplicate
         ->call('addSubject', 'bogus:1')           // unknown kind
