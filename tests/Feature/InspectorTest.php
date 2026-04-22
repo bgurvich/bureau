@@ -75,8 +75,7 @@ it('edits an existing task', function () {
 it('creates a note', function () {
     authedInHousehold();
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'note')
+    Livewire::test('inspector.note-form')
         ->set('title', 'Standup')
         ->set('body', "things to do\nthings to say")
         ->set('pinned', true)
@@ -383,8 +382,7 @@ it('edits an existing insurance policy and reassigns its subject', function () {
 it('attaches tags entered as space-separated names with optional # prefix', function () {
     authedInHousehold();
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'note')
+    Livewire::test('inspector.note-form')
         ->set('title', 'Filing cabinet')
         ->set('body', 'the body')
         ->set('tag_list', '#tax-2026 #home urgent')
@@ -399,14 +397,12 @@ it('attaches tags entered as space-separated names with optional # prefix', func
 it('reuses existing tags on a second record instead of creating duplicates', function () {
     authedInHousehold();
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'note')
+    Livewire::test('inspector.note-form')
         ->set('title', 'First')
         ->set('body', '…')
         ->set('tag_list', 'tax-2026')
         ->call('save');
-    Livewire::test('inspector')
-        ->call('openInspector', 'note')
+    Livewire::test('inspector.note-form')
         ->set('title', 'Second')
         ->set('body', '…')
         ->set('tag_list', 'tax-2026 urgent')

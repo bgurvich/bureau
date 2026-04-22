@@ -110,8 +110,7 @@ it('Inspector saves subjects on note', function () {
     authedInHousehold();
     $vehicle = Vehicle::create(['kind' => 'car', 'model' => 'Honda']);
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'note')
+    Livewire::test('inspector.note-form')
         ->set('title', 'Mechanic')
         ->set('body', 'Brakes fine for now.')
         ->set('subject_refs', ['vehicle:'.$vehicle->id])

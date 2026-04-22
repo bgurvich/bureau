@@ -203,10 +203,8 @@ new class extends Component
     // contact extracted to App\Livewire\Inspector\ContactForm;
     // the shell hosts the child via @livewire in the render switch.
 
-    // note
-    public bool $pinned = false;
-
-    public bool $private = false;
+    // note extracted to App\Livewire\Inspector\NoteForm;
+    // the shell hosts the child via @livewire in the render switch.
 
     // bill
     public string $bill_title = '';
@@ -1332,7 +1330,6 @@ new class extends Component
         match ($this->type) {
             'task' => $this->loadTask(),
             'transaction' => $this->loadTransaction(),
-            'note' => $this->loadNote(),
             'bill' => $this->loadBill(),
             'document' => $this->loadDocument(),
             'contract' => $this->loadContract(),
@@ -1377,15 +1374,7 @@ new class extends Component
 
     // loadContact moved to App\Livewire\Inspector\ContactForm.
 
-    private function loadNote(): void
-    {
-        $n = Note::findOrFail($this->id);
-        $this->title = $n->title ?? '';
-        $this->body = $n->body;
-        $this->pinned = (bool) $n->pinned;
-        $this->private = (bool) $n->private;
-        $this->subject_refs = $this->subjectRefsFrom($n);
-    }
+    // loadNote moved to App\Livewire\Inspector\NoteForm.
 
     // physical_mail extracted to App\Livewire\Inspector\PhysicalMailForm.
 
@@ -1522,7 +1511,7 @@ new class extends Component
         // persists on its own. The child fires `inspector-form-saved`
         // back and the shell's onFormSaved() listener closes the drawer.
         // Add a type to this array after extracting its child form.
-        $extractedTypes = ['pet', 'pet_vaccination', 'pet_checkup', 'time_entry', 'transfer', 'savings_goal', 'budget_cap', 'category_rule', 'tag_rule', 'reminder', 'subscription', 'online_account', 'meeting', 'domain', 'project', 'account', 'contact', 'appointment', 'vehicle', 'property', 'physical_mail'];
+        $extractedTypes = ['pet', 'pet_vaccination', 'pet_checkup', 'time_entry', 'transfer', 'savings_goal', 'budget_cap', 'category_rule', 'tag_rule', 'reminder', 'subscription', 'online_account', 'meeting', 'domain', 'project', 'account', 'contact', 'appointment', 'vehicle', 'property', 'physical_mail', 'note'];
         if (in_array($this->type, $extractedTypes, true)) {
             $this->dispatch('inspector-save');
 
@@ -1533,7 +1522,6 @@ new class extends Component
             match ($this->type) {
                 'task' => $this->saveTask(),
                 'transaction' => $this->saveTransaction(),
-                'note' => $this->saveNote(),
                 'bill' => $this->saveBill(),
                 'document' => $this->saveDocument(),
                 'contract' => $this->saveContract(),
@@ -1857,32 +1845,7 @@ new class extends Component
         );
     }
 
-    private function saveNote(): void
-    {
-        $data = $this->validate([
-            'title' => 'nullable|string|max:255',
-            'body' => 'required|string',
-            'pinned' => 'boolean',
-            'private' => 'boolean',
-        ]);
-
-        $payload = [
-            'title' => $data['title'] ?: null,
-            'body' => $data['body'],
-            'pinned' => $data['pinned'],
-            'private' => $data['private'],
-        ];
-
-        if ($this->id) {
-            $note = Note::findOrFail($this->id);
-            $note->update($payload);
-        } else {
-            $payload['user_id'] = auth()->id();
-            $note = Note::create($payload);
-            $this->id = $note->id;
-        }
-        $note->syncSubjects($this->parseSubjectRefs($this->subject_refs));
-    }
+    // saveNote moved to App\Livewire\Inspector\NoteForm.
 
     // savePhysicalMail moved to App\Livewire\Inspector\PhysicalMailForm.
 
@@ -2784,7 +2747,9 @@ new class extends Component
                     @livewire('inspector.contact-form', ['id' => $id], key('contact-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
                     @break
                 @case('bill')    @include('partials.inspector.forms.bill')           @break
-                @case('note')    @include('partials.inspector.forms.note')           @break
+                @case('note')
+                    @livewire('inspector.note-form', ['id' => $id], key('note-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
+                    @break
                 @case('physical_mail')
                     @livewire('inspector.physical-mail-form', ['id' => $id], key('physical-mail-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
                     @break
