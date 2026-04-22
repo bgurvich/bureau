@@ -472,36 +472,15 @@ new class extends Component
     // back when the write lands, which closes the drawer. Delete
     // still runs from the shell's footer against $this->id.
 
-    // pet_vaccination / pet_checkup
-    public ?int $pv_pet_id = null;
-
-    public string $pv_vaccine_name = '';
-
-    public string $pv_administered_on = '';
-
-    public string $pv_valid_until = '';
-
-    public string $pv_booster_due_on = '';
-
-    public ?int $pv_provider_id = null;
-
-    public string $pv_notes = '';
-
-    public ?int $pc_pet_id = null;
-
-    public string $pc_kind = 'annual_checkup';
-
-    public string $pc_checkup_on = '';
-
-    public string $pc_next_due_on = '';
-
-    public ?int $pc_provider_id = null;
-
-    public string $pc_cost = '';
-
-    public string $pc_currency = '';
-
-    public string $pc_findings = '';
+    // pet_vaccination + pet_checkup moved to
+    // App\Livewire\Inspector\PetVaccinationForm and PetCheckupForm.
+    // Shell still owns subentity-edit-open routing and passes the
+    // parentId (pet.id) down to the child as a mount param — see the
+    // @case branches in the render switch.
+    //
+    // Holds the parentId across the shell → child mount boundary;
+    // doOpen() writes it, the case statement reads it.
+    public ?int $subentityParentId = null;
 
     // vehicle
     public string $vehicle_kind = 'car';
@@ -706,8 +685,15 @@ new class extends Component
      * the primary drawer mid-subentity-edit).
      */
     #[On('inspector-form-saved')]
-    public function onFormSaved(): void
+    public function onFormSaved(?string $type = null, ?int $id = null): void
     {
+        // When the modal instance hosts an extracted form, its save fires
+        // inspector-form-saved. Legacy subentity saves (still inline) emit
+        // subentity-edit-saved directly. Forward here so searchable-select
+        // pickers hear a consistent signal regardless of which path ran.
+        if ($this->asModal && $type && $id) {
+            $this->dispatch('subentity-edit-saved', type: $type, id: $id);
+        }
         if ($this->open) {
             $this->close();
         }
@@ -731,16 +717,10 @@ new class extends Component
                 $this->source_media_id = $mediaId;
                 $this->prefillFromMedia($mediaId);
             }
-            if ($parentId !== null) {
-                // Pre-seed the parent FK for sub-entity forms opened from
-                // inside a parent drawer (e.g. "+ Add vaccine" on the pet
-                // inspector dispatches subentity-edit-open with parent_id=pet.id).
-                match ($type) {
-                    'pet_vaccination' => $this->pv_pet_id = $parentId,
-                    'pet_checkup' => $this->pc_pet_id = $parentId,
-                    default => null,
-                };
-            }
+            // Pre-seed the parent FK for extracted sub-entity forms; the
+            // child's mount() reads this via the `petId` prop passed from
+            // the @case('pet_vaccination' | 'pet_checkup') render switch.
+            $this->subentityParentId = $parentId;
         }
 
         $this->dispatch('inspector-body-shown');
@@ -1643,9 +1623,9 @@ new class extends Component
             'online_account' => $this->loadOnlineAccount(),
             'property' => $this->loadProperty(),
             'vehicle' => $this->loadVehicle(),
-            // 'pet' no longer loads here — PetForm handles its own mount(id)
-            'pet_vaccination' => $this->loadPetVaccination(),
-            'pet_checkup' => $this->loadPetCheckup(),
+            // pet / pet_vaccination / pet_checkup all run as extracted
+            // class-based components — they load + persist their own
+            // state. The shell only manages open/close + parent id.
             'inventory' => $this->loadInventory(),
             'appointment' => $this->loadAppointment(),
             'reminder' => $this->loadReminder(),
@@ -1997,7 +1977,7 @@ new class extends Component
         // persists on its own. The child fires `inspector-form-saved`
         // back and the shell's onFormSaved() listener closes the drawer.
         // Add a type to this array after extracting its child form.
-        $extractedTypes = ['pet'];
+        $extractedTypes = ['pet', 'pet_vaccination', 'pet_checkup'];
         if (in_array($this->type, $extractedTypes, true)) {
             $this->dispatch('inspector-save');
 
@@ -2021,11 +2001,9 @@ new class extends Component
                 'online_account' => $this->saveOnlineAccount(),
                 'property' => $this->saveProperty(),
                 'vehicle' => $this->saveVehicle(),
-                // 'pet' is handled by the PetForm child — the type=='pet'
-                // branch above dispatches 'inspector-save' and returns
-                // before reaching this match, so it never lands here.
-                'pet_vaccination' => $this->savePetVaccination(),
-                'pet_checkup' => $this->savePetCheckup(),
+                // pet / pet_vaccination / pet_checkup are extracted; the
+                // $extractedTypes early-return above keeps them from
+                // reaching this match.
                 'inventory' => $this->saveInventory(),
                 'appointment' => $this->saveAppointment(),
                 'reminder' => $this->saveReminder(),
@@ -2999,100 +2977,10 @@ new class extends Component
     // handles validation and persistence; an `inspector-form-saved`
     // bounce from the child closes the drawer.
 
-    // ── Pet vaccinations ──────────────────────────────────────────────
-
-    private function loadPetVaccination(): void
-    {
-        $v = \App\Models\PetVaccination::findOrFail($this->id);
-        $this->pv_pet_id = (int) $v->pet_id;
-        $this->pv_vaccine_name = (string) ($v->vaccine_name ?? '');
-        $this->pv_administered_on = $v->administered_on ? $v->administered_on->toDateString() : '';
-        $this->pv_valid_until = $v->valid_until ? $v->valid_until->toDateString() : '';
-        $this->pv_booster_due_on = $v->booster_due_on ? $v->booster_due_on->toDateString() : '';
-        $this->pv_provider_id = $v->provider_id;
-        $this->pv_notes = (string) ($v->notes ?? '');
-    }
-
-    /**
-     * Persist a PetVaccination. The parent Pet id comes either from the
-     * loaded row (edit) or from pv_pet_id pre-seeded by the opener event
-     * (new). Without pv_pet_id on a new row we can't link to a pet, so
-     * we refuse rather than orphan.
-     */
-    private function savePetVaccination(): void
-    {
-        $data = $this->validate([
-            'pv_pet_id' => 'required|integer|exists:pets,id',
-            'pv_vaccine_name' => 'required|string|max:120',
-            'pv_administered_on' => 'nullable|date',
-            'pv_valid_until' => 'nullable|date|after_or_equal:pv_administered_on',
-            'pv_booster_due_on' => 'nullable|date',
-            'pv_provider_id' => 'nullable|integer|exists:health_providers,id',
-            'pv_notes' => 'nullable|string|max:5000',
-        ]);
-
-        $payload = [
-            'pet_id' => (int) $data['pv_pet_id'],
-            'vaccine_name' => $data['pv_vaccine_name'],
-            'administered_on' => $data['pv_administered_on'] ?: null,
-            'valid_until' => $data['pv_valid_until'] ?: null,
-            'booster_due_on' => $data['pv_booster_due_on'] ?: null,
-            'provider_id' => $data['pv_provider_id'] ?: null,
-            'notes' => $data['pv_notes'] ?: null,
-        ];
-
-        if ($this->id) {
-            \App\Models\PetVaccination::findOrFail($this->id)->update($payload);
-        } else {
-            $this->id = \App\Models\PetVaccination::create($payload)->id;
-        }
-    }
-
-    // ── Pet checkups ──────────────────────────────────────────────────
-
-    private function loadPetCheckup(): void
-    {
-        $c = \App\Models\PetCheckup::findOrFail($this->id);
-        $this->pc_pet_id = (int) $c->pet_id;
-        $this->pc_kind = (string) ($c->kind ?? 'annual_checkup');
-        $this->pc_checkup_on = $c->checkup_on ? $c->checkup_on->toDateString() : '';
-        $this->pc_next_due_on = $c->next_due_on ? $c->next_due_on->toDateString() : '';
-        $this->pc_provider_id = $c->provider_id;
-        $this->pc_cost = $c->cost !== null ? (string) $c->cost : '';
-        $this->pc_currency = (string) ($c->currency ?? '');
-        $this->pc_findings = (string) ($c->findings ?? '');
-    }
-
-    private function savePetCheckup(): void
-    {
-        $data = $this->validate([
-            'pc_pet_id' => 'required|integer|exists:pets,id',
-            'pc_kind' => 'required|string|max:64',
-            'pc_checkup_on' => 'nullable|date',
-            'pc_next_due_on' => 'nullable|date|after_or_equal:pc_checkup_on',
-            'pc_provider_id' => 'nullable|integer|exists:health_providers,id',
-            'pc_cost' => 'nullable|numeric|min:0',
-            'pc_currency' => 'nullable|string|size:3',
-            'pc_findings' => 'nullable|string|max:5000',
-        ]);
-
-        $payload = [
-            'pet_id' => (int) $data['pc_pet_id'],
-            'kind' => $data['pc_kind'],
-            'checkup_on' => $data['pc_checkup_on'] ?: null,
-            'next_due_on' => $data['pc_next_due_on'] ?: null,
-            'provider_id' => $data['pc_provider_id'] ?: null,
-            'cost' => $data['pc_cost'] !== '' ? (float) $data['pc_cost'] : null,
-            'currency' => $data['pc_currency'] ?: null,
-            'findings' => $data['pc_findings'] ?: null,
-        ];
-
-        if ($this->id) {
-            \App\Models\PetCheckup::findOrFail($this->id)->update($payload);
-        } else {
-            $this->id = \App\Models\PetCheckup::create($payload)->id;
-        }
-    }
+    // loadPetVaccination/savePetVaccination + loadPetCheckup/savePetCheckup
+    // moved to App\Livewire\Inspector\PetVaccinationForm and
+    // App\Livewire\Inspector\PetCheckupForm. Both are class-based so
+    // PHPStan sees the code + tests drive them directly.
 
     private function saveInventory(): void
     {
@@ -4361,8 +4249,18 @@ new class extends Component
                          between "new pet" and "edit pet X" transitions. --}}
                     @livewire('inspector.pet-form', ['id' => $id], key('pet-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
                     @break
-                @case('pet_vaccination') @include('partials.inspector.forms.pet_vaccination') @break
-                @case('pet_checkup') @include('partials.inspector.forms.pet_checkup') @break
+                @case('pet_vaccination')
+                    @livewire('inspector.pet-vaccination-form', [
+                        'id' => $id,
+                        'petId' => $subentityParentId,
+                    ], key('pet-vaccination-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
+                    @break
+                @case('pet_checkup')
+                    @livewire('inspector.pet-checkup-form', [
+                        'id' => $id,
+                        'petId' => $subentityParentId,
+                    ], key('pet-checkup-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
+                    @break
                 @case('inventory') @include('partials.inspector.forms.inventory')    @break
                 @case('appointment') @include('partials.inspector.forms.appointment') @break
                 @case('reminder') @include('partials.inspector.forms.reminder') @break

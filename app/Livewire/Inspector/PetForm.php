@@ -119,8 +119,10 @@ class PetForm extends Component
         // every other hub/list is already listening on) and a scoped
         // close-my-drawer signal that only the inspector shell picks up,
         // so subentity modal saves don't accidentally close the primary.
+        // The payload on inspector-form-saved lets the modal instance
+        // forward to subentity-edit-saved for picker refresh.
         $this->dispatch('inspector-saved', type: 'pet', id: $this->id);
-        $this->dispatch('inspector-form-saved');
+        $this->dispatch('inspector-form-saved', type: 'pet', id: $this->id);
     }
 
     public function render(): View

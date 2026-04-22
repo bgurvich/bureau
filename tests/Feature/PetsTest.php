@@ -108,18 +108,19 @@ it('allows a prescription to point at a pet via the polymorphic subject', functi
         ->and($rx->subject)->toBeInstanceOf(Pet::class);
 });
 
-it('pet_vaccination modal carries parentId pre-seed and saves to the right pet', function () {
+it('PetVaccinationForm accepts a parent pet id at mount + saves to the right pet', function () {
     authedInHousehold();
 
     $pet = Pet::create(['species' => 'dog', 'name' => 'Rex']);
 
-    Livewire::test('inspector', ['asModal' => true])
-        ->dispatch('subentity-edit-open', type: 'pet_vaccination', id: null, parentId: $pet->id)
-        ->assertSet('pv_pet_id', $pet->id)
-        ->set('pv_vaccine_name', 'Rabies')
-        ->set('pv_administered_on', '2026-04-22')
-        ->set('pv_valid_until', '2029-04-22')
-        ->call('save');
+    Livewire::test('inspector.pet-vaccination-form', ['petId' => $pet->id])
+        ->assertSet('pet_id', $pet->id)
+        ->set('vaccine_name', 'Rabies')
+        ->set('administered_on', '2026-04-22')
+        ->set('valid_until', '2029-04-22')
+        ->call('save')
+        ->assertDispatched('inspector-saved', type: 'pet_vaccination')
+        ->assertDispatched('inspector-form-saved');
 
     $v = PetVaccination::where('pet_id', $pet->id)->where('vaccine_name', 'Rabies')->latest('id')->first();
     expect($v)->not->toBeNull()
@@ -127,17 +128,16 @@ it('pet_vaccination modal carries parentId pre-seed and saves to the right pet',
         ->and($v->valid_until->toDateString())->toBe('2029-04-22');
 });
 
-it('pet_checkup modal saves with parentId and computes next_due_on', function () {
+it('PetCheckupForm saves with parentId and records next_due_on', function () {
     authedInHousehold();
 
     $pet = Pet::create(['species' => 'cat', 'name' => 'Whiskers']);
 
-    Livewire::test('inspector', ['asModal' => true])
-        ->dispatch('subentity-edit-open', type: 'pet_checkup', id: null, parentId: $pet->id)
-        ->assertSet('pc_pet_id', $pet->id)
-        ->set('pc_kind', 'annual_checkup')
-        ->set('pc_checkup_on', '2026-04-22')
-        ->set('pc_next_due_on', '2027-04-22')
+    Livewire::test('inspector.pet-checkup-form', ['petId' => $pet->id])
+        ->assertSet('pet_id', $pet->id)
+        ->set('kind', 'annual_checkup')
+        ->set('checkup_on', '2026-04-22')
+        ->set('next_due_on', '2027-04-22')
         ->call('save');
 
     $c = PetCheckup::where('pet_id', $pet->id)->latest('id')->first();
@@ -146,17 +146,26 @@ it('pet_checkup modal saves with parentId and computes next_due_on', function ()
         ->and($c->next_due_on->toDateString())->toBe('2027-04-22');
 });
 
-it('pet_vaccination save validates valid_until is after administered_on', function () {
+it('PetVaccinationForm validates valid_until is after administered_on', function () {
+    authedInHousehold();
+    $pet = Pet::create(['species' => 'dog', 'name' => 'Rex']);
+
+    Livewire::test('inspector.pet-vaccination-form', ['petId' => $pet->id])
+        ->set('vaccine_name', 'Rabies')
+        ->set('administered_on', '2026-04-22')
+        ->set('valid_until', '2025-04-22')
+        ->call('save')
+        ->assertHasErrors('valid_until');
+});
+
+it('shell writes subentityParentId when subentity-edit-open arrives with parentId', function () {
     authedInHousehold();
     $pet = Pet::create(['species' => 'dog', 'name' => 'Rex']);
 
     Livewire::test('inspector', ['asModal' => true])
         ->dispatch('subentity-edit-open', type: 'pet_vaccination', id: null, parentId: $pet->id)
-        ->set('pv_vaccine_name', 'Rabies')
-        ->set('pv_administered_on', '2026-04-22')
-        ->set('pv_valid_until', '2025-04-22') // before administered — invalid
-        ->call('save')
-        ->assertHasErrors('pv_valid_until');
+        ->assertSet('type', 'pet_vaccination')
+        ->assertSet('subentityParentId', $pet->id);
 });
 
 it('alerts-bell surfaces expiring vaccinations and overdue checkups in total count', function () {
