@@ -1261,6 +1261,38 @@ class extends Component
     }
 
     /**
+     * Reverse of mapCategoryHint — strip the pattern that's currently
+     * claiming this source label so it goes back to being unmapped.
+     * Walks the matcher to find which (category, pattern) pair fires
+     * on this label, then rewrites that category's match_patterns
+     * without the hit. The hint flips back to "unmapped" on the next
+     * render and the user can pick again.
+     */
+    public function unmapCategoryHint(string $fileId, string $label): void
+    {
+        $label = trim($label);
+        if ($label === '') {
+            return;
+        }
+        $hit = CategorySourceMatcher::matchWithPattern($label);
+        if ($hit === null) {
+            return;
+        }
+        [$categoryId, $pattern] = $hit;
+
+        $category = Category::find($categoryId);
+        if (! $category) {
+            return;
+        }
+
+        $kept = array_values(array_filter(
+            CategorySourceMatcher::parsePatterns((string) ($category->match_patterns ?? '')),
+            fn (string $p) => $p !== $pattern,
+        ));
+        $category->forceFill(['match_patterns' => $kept === [] ? null : implode("\n", $kept)])->save();
+    }
+
+    /**
      * Create a new household category with the source label both as its
      * display name and as its first match pattern, so future imports
      * auto-map. Used when the user decides no existing category fits.
@@ -1794,8 +1826,17 @@ class extends Component
                                                 <span class="font-medium text-neutral-200">{{ $hint['label'] }}</span>
                                                 <span class="text-[11px] text-neutral-500 tabular-nums">{{ $hint['count'] }}×</span>
                                                 @if ($hint['status'] === 'mapped')
-                                                    <span class="rounded bg-emerald-900/30 px-2 py-0.5 text-[11px] text-emerald-300">
-                                                        → {{ $hint['category_name'] }}
+                                                    <span class="inline-flex items-baseline gap-1.5 rounded bg-emerald-900/30 px-2 py-0.5 text-[11px] text-emerald-300">
+                                                        <span>→ {{ $hint['category_name'] }}</span>
+                                                        <button type="button"
+                                                                wire:click="unmapCategoryHint('{{ $fileId }}', @js($hint['label']))"
+                                                                title="{{ __('Unmap — removes the pattern from :c', ['c' => $hint['category_name']]) }}"
+                                                                aria-label="{{ __('Unmap :l', ['l' => $hint['label']]) }}"
+                                                                class="-mr-1 inline-flex h-4 w-4 items-center justify-center rounded hover:bg-emerald-800/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                                                            <svg viewBox="0 0 12 12" class="h-2.5 w-2.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                                                                <path d="m3 3 6 6M9 3l-6 6"/>
+                                                            </svg>
+                                                        </button>
                                                     </span>
                                                 @else
                                                     <select x-on:change="if ($event.target.value) $wire.mapCategoryHint(@js($fileId), @js($hint['label']), parseInt($event.target.value, 10))"

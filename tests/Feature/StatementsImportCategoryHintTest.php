@@ -45,3 +45,42 @@ it('createCategoryFromHint suffixes the slug when a clash exists', function () {
     $c = Category::firstWhere('name', 'Auto Rental');
     expect($c->slug)->toBe('auto-rental-1');
 });
+
+it('unmapCategoryHint removes the matching pattern and leaves other patterns intact', function () {
+    authedInHousehold();
+    $shopping = Category::create([
+        'name' => 'Shopping', 'slug' => 'shopping', 'kind' => 'expense',
+        'match_patterns' => "General Retail\nMerchandise\nClothing",
+    ]);
+
+    Livewire::test('statements-import')
+        ->call('unmapCategoryHint', 'dummy-file-id', 'Merchandise');
+
+    expect($shopping->fresh()->match_patterns)->toBe("General Retail\nClothing");
+});
+
+it('unmapCategoryHint clears match_patterns entirely when the last pattern is removed', function () {
+    authedInHousehold();
+    $shopping = Category::create([
+        'name' => 'Shopping', 'slug' => 'shopping', 'kind' => 'expense',
+        'match_patterns' => 'Merchandise',
+    ]);
+
+    Livewire::test('statements-import')
+        ->call('unmapCategoryHint', 'dummy-file-id', 'Merchandise');
+
+    expect($shopping->fresh()->match_patterns)->toBeNull();
+});
+
+it('unmapCategoryHint is a no-op when the label does not match any category', function () {
+    authedInHousehold();
+    $shopping = Category::create([
+        'name' => 'Shopping', 'slug' => 'shopping', 'kind' => 'expense',
+        'match_patterns' => 'Merchandise',
+    ]);
+
+    Livewire::test('statements-import')
+        ->call('unmapCategoryHint', 'dummy-file-id', 'NonExistentLabel');
+
+    expect($shopping->fresh()->match_patterns)->toBe('Merchandise');
+});
