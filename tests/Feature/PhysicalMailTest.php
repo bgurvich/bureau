@@ -52,8 +52,7 @@ it('hides processed rows when the status filter is set to unprocessed', function
 it('creates a physical_mail record from the inspector', function () {
     authedInHousehold();
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'physical_mail')
+    Livewire::test('inspector.physical-mail-form')
         ->set('pm_kind', 'medical')
         ->set('pm_received_on', '2026-04-15')
         ->set('title', 'Doctor follow-up')

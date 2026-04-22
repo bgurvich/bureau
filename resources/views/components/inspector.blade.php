@@ -1199,10 +1199,6 @@ new class extends Component
         // Physical mail defaults — received today, classified as "other"
         // until the user picks a kind, no processed-at (belongs to the
         // inbox flow).
-        $this->pm_received_on = now()->toDateString();
-        $this->pm_kind = 'other';
-        $this->pm_action_required = false;
-        $this->pm_processed_at = '';
 
         // Checklist defaults — daily routine starting today, two empty rows
         // so the user sees the repeater shape without having to hit "Add
@@ -1337,7 +1333,6 @@ new class extends Component
             'task' => $this->loadTask(),
             'transaction' => $this->loadTransaction(),
             'note' => $this->loadNote(),
-            'physical_mail' => $this->loadPhysicalMail(),
             'bill' => $this->loadBill(),
             'document' => $this->loadDocument(),
             'contract' => $this->loadContract(),
@@ -1392,30 +1387,7 @@ new class extends Component
         $this->subject_refs = $this->subjectRefsFrom($n);
     }
 
-    // Physical-mail-specific inspector state. Uses the shared $title /
-    // $description fields for subject + summary so the Inspector's
-    // existing validation + admin partials keep working.
-    public string $pm_kind = 'other';
-
-    public string $pm_received_on = '';
-
-    public ?int $pm_sender_id = null;
-
-    public bool $pm_action_required = false;
-
-    public string $pm_processed_at = '';
-
-    private function loadPhysicalMail(): void
-    {
-        $m = PhysicalMail::findOrFail($this->id);
-        $this->title = (string) ($m->subject ?? '');
-        $this->description = (string) ($m->summary ?? '');
-        $this->pm_kind = (string) ($m->kind ?? 'other');
-        $this->pm_received_on = $m->received_on?->toDateString() ?? now()->toDateString();
-        $this->pm_sender_id = $m->sender_contact_id;
-        $this->pm_action_required = (bool) $m->action_required;
-        $this->pm_processed_at = $m->processed_at ? $m->processed_at->format('Y-m-d\TH:i') : '';
-    }
+    // physical_mail extracted to App\Livewire\Inspector\PhysicalMailForm.
 
     private function loadBill(): void
     {
@@ -1550,7 +1522,7 @@ new class extends Component
         // persists on its own. The child fires `inspector-form-saved`
         // back and the shell's onFormSaved() listener closes the drawer.
         // Add a type to this array after extracting its child form.
-        $extractedTypes = ['pet', 'pet_vaccination', 'pet_checkup', 'time_entry', 'transfer', 'savings_goal', 'budget_cap', 'category_rule', 'tag_rule', 'reminder', 'subscription', 'online_account', 'meeting', 'domain', 'project', 'account', 'contact', 'appointment', 'vehicle', 'property'];
+        $extractedTypes = ['pet', 'pet_vaccination', 'pet_checkup', 'time_entry', 'transfer', 'savings_goal', 'budget_cap', 'category_rule', 'tag_rule', 'reminder', 'subscription', 'online_account', 'meeting', 'domain', 'project', 'account', 'contact', 'appointment', 'vehicle', 'property', 'physical_mail'];
         if (in_array($this->type, $extractedTypes, true)) {
             $this->dispatch('inspector-save');
 
@@ -1562,7 +1534,6 @@ new class extends Component
                 'task' => $this->saveTask(),
                 'transaction' => $this->saveTransaction(),
                 'note' => $this->saveNote(),
-                'physical_mail' => $this->savePhysicalMail(),
                 'bill' => $this->saveBill(),
                 'document' => $this->saveDocument(),
                 'contract' => $this->saveContract(),
@@ -1913,37 +1884,7 @@ new class extends Component
         $note->syncSubjects($this->parseSubjectRefs($this->subject_refs));
     }
 
-    private function savePhysicalMail(): void
-    {
-        $data = $this->validate([
-            'title' => 'nullable|string|max:255',
-            'description' => 'nullable|string|max:5000',
-            'pm_kind' => ['required', Rule::in(array_keys(Enums::physicalMailKinds()))],
-            'pm_received_on' => 'required|date',
-            'pm_sender_id' => 'nullable|integer|exists:contacts,id',
-            'pm_action_required' => 'boolean',
-            'pm_processed_at' => 'nullable|date',
-        ]);
-
-        $payload = [
-            'subject' => trim((string) $data['title']) ?: null,
-            'summary' => trim((string) $data['description']) ?: null,
-            'kind' => $data['pm_kind'],
-            'received_on' => $data['pm_received_on'],
-            'sender_contact_id' => $data['pm_sender_id'] ?: null,
-            'action_required' => (bool) $data['pm_action_required'],
-            'processed_at' => $data['pm_processed_at']
-                ? CarbonImmutable::parse($data['pm_processed_at'])
-                : null,
-        ];
-
-        if ($this->id) {
-            PhysicalMail::findOrFail($this->id)->update($payload);
-        } else {
-            $m = PhysicalMail::create($payload);
-            $this->id = $m->id;
-        }
-    }
+    // savePhysicalMail moved to App\Livewire\Inspector\PhysicalMailForm.
 
     private function saveDocument(): void
     {
@@ -2844,7 +2785,9 @@ new class extends Component
                     @break
                 @case('bill')    @include('partials.inspector.forms.bill')           @break
                 @case('note')    @include('partials.inspector.forms.note')           @break
-                @case('physical_mail') @include('partials.inspector.forms.physical_mail') @break
+                @case('physical_mail')
+                    @livewire('inspector.physical-mail-form', ['id' => $id], key('physical-mail-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
+                    @break
                 @case('document') @include('partials.inspector.forms.document')      @break
                 @case('meeting')
                     @livewire('inspector.meeting-form', ['id' => $id], key('meeting-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
