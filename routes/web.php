@@ -7,6 +7,8 @@ use App\Http\Controllers\GmailOAuthController;
 use App\Http\Controllers\MagicLinkController;
 use App\Http\Controllers\MediaFileController;
 use App\Http\Controllers\PayPalWebhookController;
+use App\Http\Controllers\PortalController;
+use App\Http\Controllers\PortalExportController;
 use App\Http\Controllers\PostmarkInboundController;
 use App\Http\Controllers\SocialLoginController;
 use App\Http\Controllers\WebAuthn\WebAuthnLoginController;
@@ -20,6 +22,24 @@ Route::post('/webhooks/postmark/inbound', PostmarkInboundController::class)
 
 Route::post('/webhooks/paypal/inbound', PayPalWebhookController::class)
     ->name('webhooks.paypal.inbound');
+
+// Bookkeeper portal — external (non-user) session scoped to a single
+// household via a time-boxed grant. Public token consumer + explicit
+// expired page; everything else lives behind the portal.session
+// middleware and is read-only.
+Route::get('/portal/expired', [PortalController::class, 'expired'])
+    ->name('portal.expired');
+Route::get('/portal/{token}', [PortalController::class, 'consume'])
+    ->where('token', '[0-9a-f]{64}')
+    ->middleware('throttle:10,1')
+    ->name('portal.consume');
+Route::post('/portal/logout', [PortalController::class, 'logout'])
+    ->name('portal.logout');
+Route::middleware('portal.session')->group(function () {
+    Route::livewire('/portal', 'portal-dashboard')->name('portal.dashboard');
+    Route::get('/portal/export', PortalExportController::class)
+        ->name('portal.export');
+});
 
 Route::middleware('guest')->group(function () {
     Route::livewire('/login', 'login')->name('login');

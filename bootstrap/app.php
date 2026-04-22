@@ -3,6 +3,7 @@
 use App\Http\Middleware\ApplyUserPreferences;
 use App\Http\Middleware\CspNonce;
 use App\Http\Middleware\EnsureHousehold;
+use App\Http\Middleware\EnsurePortalSession;
 use App\Http\Middleware\SecurityHeaders;
 use App\Http\Middleware\VerifyWebhookBasicAuth;
 use Illuminate\Foundation\Application;
@@ -33,6 +34,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'household' => EnsureHousehold::class,
             'preferences' => ApplyUserPreferences::class,
+            'portal.session' => EnsurePortalSession::class,
             'webhook.basic' => VerifyWebhookBasicAuth::class,
         ]);
     })
