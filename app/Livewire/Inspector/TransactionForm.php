@@ -9,6 +9,7 @@ use App\Livewire\Inspector\Concerns\HasAdminPanel;
 use App\Livewire\Inspector\Concerns\HasSubjectRefs;
 use App\Livewire\Inspector\Concerns\HasTagList;
 use App\Livewire\Inspector\Concerns\WithCategoryPicker;
+use App\Livewire\Inspector\Concerns\WithCounterpartyPicker;
 use App\Models\Account;
 use App\Models\Category;
 use App\Models\Contact;
@@ -44,6 +45,7 @@ class TransactionForm extends Component
     use HasSubjectRefs;
     use HasTagList;
     use WithCategoryPicker;
+    use WithCounterpartyPicker;
 
     public ?int $id = null;
 
@@ -222,24 +224,6 @@ class TransactionForm extends Component
         );
     }
 
-    public function createCounterparty(string $name, ?string $modelKey = null): void
-    {
-        $name = trim($name);
-        if ($name === '') {
-            return;
-        }
-
-        $contact = Contact::create(['kind' => 'org', 'display_name' => $name]);
-
-        $targetKey = $modelKey && property_exists($this, $modelKey)
-            ? $modelKey
-            : 'counterparty_contact_id';
-        $this->{$targetKey} = $contact->id;
-        unset($this->contacts);
-
-        $this->dispatch('ss-option-added', model: $targetKey, id: $contact->id, label: $contact->display_name);
-    }
-
     /** @return Collection<int, Account> */
     #[Computed]
     public function accounts(): Collection
@@ -259,16 +243,6 @@ class TransactionForm extends Component
             ->orderBy('kind')
             ->orderBy('name')
             ->get(['id', 'name', 'kind', 'parent_id']);
-
-        return $list;
-    }
-
-    /** @return Collection<int, Contact> */
-    #[Computed]
-    public function contacts(): Collection
-    {
-        /** @var Collection<int, Contact> $list */
-        $list = Contact::orderBy('display_name')->get(['id', 'display_name']);
 
         return $list;
     }

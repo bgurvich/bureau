@@ -6,7 +6,7 @@ namespace App\Livewire\Inspector;
 
 use App\Livewire\Inspector\Concerns\HasAdminPanel;
 use App\Livewire\Inspector\Concerns\HasTagList;
-use App\Models\Contact;
+use App\Livewire\Inspector\Concerns\WithCounterpartyPicker;
 use App\Models\Contract;
 use App\Models\InsurancePolicy;
 use App\Models\InsurancePolicySubject;
@@ -16,7 +16,6 @@ use App\Models\Vehicle;
 use App\Support\CurrentHousehold;
 use App\Support\Enums;
 use Illuminate\Contracts\View\View;
-use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\On;
@@ -36,6 +35,7 @@ class InsuranceForm extends Component
 {
     use HasAdminPanel;
     use HasTagList;
+    use WithCounterpartyPicker;
 
     public ?int $id = null;
 
@@ -208,34 +208,6 @@ class InsuranceForm extends Component
         $this->dispatch('inspector-form-saved', type: 'insurance', id: $this->id);
     }
 
-    public function createCounterparty(string $name, ?string $modelKey = null): void
-    {
-        $name = trim($name);
-        if ($name === '') {
-            return;
-        }
-
-        $contact = Contact::create(['kind' => 'org', 'display_name' => $name]);
-
-        $targetKey = $modelKey && property_exists($this, $modelKey)
-            ? $modelKey
-            : 'insurance_carrier_id';
-        $this->{$targetKey} = $contact->id;
-        unset($this->contacts);
-
-        $this->dispatch('ss-option-added', model: $targetKey, id: $contact->id, label: $contact->display_name);
-    }
-
-    /** @return Collection<int, Contact> */
-    #[Computed]
-    public function contacts(): Collection
-    {
-        /** @var Collection<int, Contact> $list */
-        $list = Contact::orderBy('display_name')->get(['id', 'display_name']);
-
-        return $list;
-    }
-
     /** @return array<string, string> encoded-key ⇒ display label */
     #[Computed]
     public function insuranceSubjectOptions(): array
@@ -295,6 +267,11 @@ class InsuranceForm extends Component
     protected function adminOwnerField(): ?string
     {
         return 'primary_user_id';
+    }
+
+    protected function defaultCounterpartyModelKey(): string
+    {
+        return 'insurance_carrier_id';
     }
 
     public function render(): View
