@@ -2,18 +2,15 @@
 
 use App\Exceptions\PeriodLockedException;
 use App\Models\Account;
-use App\Models\Appointment;
 use App\Models\BudgetCap;
-use App\Models\Category;
 use App\Models\CategoryRule;
 use App\Models\ChecklistTemplate;
 use App\Models\Contact;
 use App\Models\Contract;
 use App\Models\Document;
 use App\Models\Domain;
-use App\Models\HealthProvider;
 use App\Models\InventoryItem;
-use App\Models\Media;
+use App\Models\JournalEntry;
 use App\Models\Meeting;
 use App\Models\Note;
 use App\Models\OnlineAccount;
@@ -26,32 +23,42 @@ use App\Models\RecurringRule;
 use App\Models\Reminder;
 use App\Models\SavingsGoal;
 use App\Models\Subscription;
-use App\Models\Tag;
 use App\Models\TagRule;
 use App\Models\Task;
+use App\Models\TaxDocument;
+use App\Models\TaxEstimatedPayment;
+use App\Models\TaxYear;
 use App\Models\TimeEntry;
 use App\Models\Transaction;
-use App\Models\User;
 use App\Models\Vehicle;
-use App\Support\CurrentHousehold;
-use App\Support\Formatting;
-use App\Support\ProjectionMatcher;
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Collection;
-use Illuminate\Support\Str;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\On;
 use Livewire\Component;
-use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
-use Livewire\WithFileUploads;
 
+/**
+ * Inspector shell — drawer chrome only.
+ *
+ * Every form type renders as an extracted Livewire component
+ * (App\Livewire\Inspector\{Type}Form). `childForm()` below maps the
+ * current $type to the child component, mount args, and a wire-key
+ * discriminator; the template calls @livewire(...) exactly once off
+ * that spec. Adding a new inspector type is a one-line edit there
+ * (plus the class + blade under App\Livewire\Inspector\). The shell's
+ * job is:
+ *   1. Manage the drawer's open/close + type/id routing.
+ *   2. Pass through a few mount params to the child (source_media_id
+ *      for the Mail-inbox OCR flow, subentityParentId for pet sub-rows,
+ *      projection_prefill_id for the markPaid → transaction handoff).
+ *   3. Host the "link to which bill?" picker the TransactionForm raises
+ *      via `inspector-projection-candidates` on multi-hit matches.
+ *   4. Fan the Save button to the child via `inspector-save`, close on
+ *      `inspector-form-saved`.
+ *   5. Delete-record entry point (single place for cross-type deletes).
+ *
+ * NO per-type form state lives here anymore — the child forms own it.
+ */
 new class extends Component
 {
-    use WithFileUploads;
-
-    /** @var array<int, TemporaryUploadedFile> */
-    public array $photoUpload = [];
-
     public bool $open = false;
 
     public string $type = '';
@@ -68,266 +75,17 @@ new class extends Component
      */
     public bool $asModal = false;
 
-    public function mount(bool $asModal = false): void
-    {
-        $this->asModal = $asModal;
-    }
-
-    // shared-ish fields
-    public string $title = '';
-
-    public string $description = '';
-
-    public string $body = '';
-
-    /** Shared free-form notes — used by meeting/contact/account/contract/property/vehicle/inventory/document/project. */
-    public string $notes = '';
-
-    /** Shared cross-domain tag input — "#tax-2026 home urgent". Applied to any HasTags record on save. */
-    public string $tag_list = '';
-
-    // inventory extracted to App\Livewire\Inspector\InventoryForm;
-    // the shell hosts the child via @livewire in the render switch.
-    // (shared disposition fields moved there too — now carried inline
-    // on each asset form since vehicle/property/inventory are all extracted.)
-
-    // appointment extracted to App\Livewire\Inspector\AppointmentForm;
-    // the shell hosts the child via @livewire in the render switch.
-
-    // reminder extracted to App\Livewire\Inspector\ReminderForm;
-    // the shell hosts the child via @livewire in the render switch.
-
-    // savings_goal extracted to App\Livewire\Inspector\SavingsGoalForm;
-    // the shell hosts the child via @livewire in the render switch.
-
-    // time_entry extracted to App\Livewire\Inspector\TimeEntryForm;
-    // the shell hosts the child via @livewire in the render switch.
-
-    // transfer extracted to App\Livewire\Inspector\TransferForm;
-    // the shell hosts the child via @livewire in the render switch.
-
-    // checklist template (recurring ritual with per-day run tracking)
-    public string $checklist_name = '';
-
-    public string $checklist_description = '';
-
-    public string $checklist_time_of_day = 'anytime';
-
-    /** One of: daily | weekdays | weekends | custom */
-    public string $checklist_recurrence_mode = 'daily';
-
-    public string $checklist_rrule = '';
-
-    public string $checklist_dtstart = '';
-
-    public string $checklist_paused_until = '';
-
-    public bool $checklist_active = true;
-
-    /**
-     * Repeater rows for the items editor. Each row:
-     *   ['key' => string, 'id' => ?int, 'label' => string, 'active' => bool]
-     * `key` keeps wire:key stable across reorders; `id` is set for rows that
-     * already persisted so save-time can update in place.
-     *
-     * @var array<int, array<string, mixed>>
-     */
-    public array $checklist_items = [];
-
-    // subscription extracted to App\Livewire\Inspector\SubscriptionForm;
-    // the shell hosts the child via @livewire in the render switch.
-
-    // Admin-section meta (read-only display, loaded from the record on edit).
-    public ?int $admin_owner_id = null;
-
-    public string $admin_owner_label = '';
-
-    public string $admin_created_at = '';
-
-    public string $admin_updated_at = '';
-
-    // task
-    public string $due_at = '';
-
-    public int $priority = 3;
-
-    public string $state = 'open';
-
-    /**
-     * Polymorphic subjects for tasks/notes, in user-facing order. Each ref
-     * is "{kind}:{id}" — kind is a short alias, id is the subject's PK.
-     * Rendered as an ordered chip list + a search-driven add dropdown;
-     * persisted to task_subjects / note_subjects.
-     *
-     * @var array<int, string>
-     */
-    public array $subject_refs = [];
-
-    /** Free-text search input for the subjects add-dropdown. */
-    public string $subject_search = '';
-
-    // transaction
-    public ?int $account_id = null;
-
-    public string $occurred_on = '';
-
-    public string $amount = '';
-
-    public string $currency = 'USD';
-
-    public ?int $category_id = null;
-
-    public ?int $counterparty_contact_id = null;
-
-    public string $status = 'cleared';
-
-    public string $reference_number = '';
-
-    public string $tax_amount = '';
-
-    public string $tax_code = '';
-
-    public string $memo = '';
-
-    // contact extracted to App\Livewire\Inspector\ContactForm;
-    // the shell hosts the child via @livewire in the render switch.
-
-    // note extracted to App\Livewire\Inspector\NoteForm;
-    // the shell hosts the child via @livewire in the render switch.
-
-    // bill
-    public string $bill_title = '';
-
-    public string $issued_on = '';
-
-    public string $due_on = '';
-
-    public bool $is_recurring = false;
-
-    public string $frequency = 'monthly';
-
-    public bool $autopay = false;
-
-    public string $bill_until = '';
-
-    public int $bill_lead_days = 7;
-
-    // document extracted to App\Livewire\Inspector\DocumentForm;
-    // the shell hosts the child via @livewire in the render switch.
-
-    // meeting extracted to App\Livewire\Inspector\MeetingForm;
-    // the shell hosts the child via @livewire in the render switch.
-
-    // project extracted to App\Livewire\Inspector\ProjectForm;
-    // the shell hosts the child via @livewire in the render switch.
-
-    // contract
-    public string $contract_kind = 'subscription';
-
-    public string $contract_title = '';
-
-    public string $contract_starts_on = '';
-
-    public string $contract_ends_on = '';
-
-    public string $contract_trial_ends_on = '';
-
-    public bool $contract_auto_renews = false;
-
-    public string $contract_monthly_cost = '';
-
-    public string $contract_monthly_cost_currency = 'USD';
-
-    public string $contract_state = 'active';
-
-    public ?int $contract_counterparty_id = null;
-
-    public ?int $contract_renewal_notice_days = null;
-
-    public string $contract_cancellation_url = '';
-
-    public string $contract_cancellation_email = '';
-
-    // property extracted to App\Livewire\Inspector\PropertyForm;
-    // the shell hosts the child via @livewire in the render switch.
-
-    // pet — extracted into App\Livewire\Inspector\PetForm. The shell
-    // hosts the child based on $type and talks to it through events:
-    // parent's Save button dispatches `inspector-save` (via the
-    // type=='pet' branch in save()); child fires `inspector-form-saved`
-    // back when the write lands, which closes the drawer. Delete
-    // still runs from the shell's footer against $this->id.
-
-    // pet_vaccination + pet_checkup moved to
-    // App\Livewire\Inspector\PetVaccinationForm and PetCheckupForm.
-    // Shell still owns subentity-edit-open routing and passes the
-    // parentId (pet.id) down to the child as a mount param — see the
-    // @case branches in the render switch.
-    //
-    // Holds the parentId across the shell → child mount boundary;
-    // doOpen() writes it, the case statement reads it.
-    public ?int $subentityParentId = null;
-
-    // vehicle extracted to App\Livewire\Inspector\VehicleForm;
-    // the shell hosts the child via @livewire in the render switch.
-
-    // (inventory state moved to InventoryForm — see above.)
-
-    // account extracted to App\Livewire\Inspector\AccountForm;
-    // the shell hosts the child via @livewire in the render switch.
-
-    // online_account extracted to App\Livewire\Inspector\OnlineAccountForm;
-    // the shell hosts the child via @livewire in the render switch.
-
-    // insurance (contract + policy + one covered subject)
-    public string $insurance_title = '';
-
-    public string $insurance_coverage_kind = 'auto';
-
-    public string $insurance_policy_number = '';
-
-    public ?int $insurance_carrier_id = null;
-
-    public string $insurance_starts_on = '';
-
-    public string $insurance_ends_on = '';
-
-    public bool $insurance_auto_renews = false;
-
-    public string $insurance_premium_amount = '';
-
-    public string $insurance_premium_currency = 'USD';
-
-    public string $insurance_premium_cadence = 'monthly';
-
-    public string $insurance_coverage_amount = '';
-
-    public string $insurance_coverage_currency = 'USD';
-
-    public string $insurance_deductible_amount = '';
-
-    public string $insurance_deductible_currency = 'USD';
-
-    public string $insurance_notes = '';
-
-    /** One primary covered subject expressed as "type:id" (e.g. "vehicle:7"). */
-    public string $insurance_subject = '';
-
     public ?string $errorMessage = null;
 
     /** Source Media row used to prefill a new bill/transaction form via OCR extraction. */
     public ?int $source_media_id = null;
 
     /**
-     * Set when a Transaction save finds 2+ candidate projections to link to.
-     * The drawer stays open and renders a picker so the user can pick which
-     * bill this paid (or skip the link). Cleared on pick/skip/close.
-     *
-     * @var array<int, array{id:int, title:string, due_on:string, amount:string}>
+     * Parent FK for sub-entity forms (pet_vaccination / pet_checkup /
+     * tax_document / tax_estimated_payment). doOpen() writes it; the
+     * matching @case renders the child with this as a mount param.
      */
-    public array $ambiguousCandidates = [];
-
-    public ?int $ambiguousTransactionId = null;
+    public ?int $subentityParentId = null;
 
     /**
      * Set by markPaid() to hand a RecurringProjection's values to the
@@ -336,6 +94,23 @@ new class extends Component
      * redundantly prefill.
      */
     public ?int $projection_prefill_id = null;
+
+    /**
+     * Set when a Transaction save finds 2+ candidate projections to link
+     * to. The drawer stays open and renders the picker so the user can
+     * pick which bill this paid (or skip the link). Cleared on pick/
+     * skip/close.
+     *
+     * @var array<int, array{id:int, title:string, due_on:string, amount:string}>
+     */
+    public array $ambiguousCandidates = [];
+
+    public ?int $ambiguousTransactionId = null;
+
+    public function mount(bool $asModal = false): void
+    {
+        $this->asModal = $asModal;
+    }
 
     #[On('inspector-open')]
     public function openInspector(string $type = '', ?int $id = null, ?int $mediaId = null): void
@@ -367,18 +142,16 @@ new class extends Component
     }
 
     /**
-     * Extracted child forms (currently just PetForm) fire this event
-     * after they persist. The shell closes the drawer on receipt —
-     * separate event name from the general `inspector-saved` (which
-     * also fires from subentity modal saves and would otherwise close
-     * the primary drawer mid-subentity-edit).
+     * Extracted child forms fire this event after they persist. The
+     * shell closes the drawer on receipt — separate event name from the
+     * general `inspector-saved` (which also fires from subentity modal
+     * saves and would otherwise close the primary drawer mid-edit).
      */
     #[On('inspector-form-saved')]
     public function onFormSaved(?string $type = null, ?int $id = null): void
     {
-        // When the modal instance hosts an extracted form, its save fires
-        // inspector-form-saved. Legacy subentity saves (still inline) emit
-        // subentity-edit-saved directly. Forward here so searchable-select
+        // When the modal instance hosts an extracted form, its save
+        // fires inspector-form-saved. Forward here so searchable-select
         // pickers hear a consistent signal regardless of which path ran.
         if ($this->asModal && $type && $id) {
             $this->dispatch('subentity-edit-saved', type: $type, id: $id);
@@ -412,8 +185,8 @@ new class extends Component
         if (! $this->ambiguousTransactionId) {
             return;
         }
-        // Only link projections the matcher proposed — defense against a
-        // race where $ambiguousCandidates is stale but the component
+        // Only link projections the matcher proposed — defense against
+        // a race where $ambiguousCandidates is stale but the component
         // still receives a click.
         $allowed = array_column($this->ambiguousCandidates, 'id');
         if (! in_array($projectionId, $allowed, true)) {
@@ -441,860 +214,6 @@ new class extends Component
         $this->close();
     }
 
-    private function doOpen(string $type, ?int $id, ?int $mediaId = null, ?int $parentId = null): void
-    {
-        $this->resetExcept(['open', 'asModal']);
-        $this->type = $type;
-        $this->id = $id;
-        $this->open = true;
-        $this->errorMessage = null;
-
-        // Child form mount() reads $id / $mediaId / $projection_prefill_id
-        // and handles its own hydration. Shell just latches the three
-        // inputs so the @livewire(...) call in the @case switch can pass
-        // them to the child as mount params.
-        if ($mediaId) {
-            $this->source_media_id = $mediaId;
-        }
-        // Pre-seed the parent FK for sub-entity forms (pet_vaccination,
-        // pet_checkup); the child's mount() reads this via the `petId`
-        // prop passed from the corresponding @case render switch.
-        $this->subentityParentId = $parentId;
-
-        $this->dispatch('inspector-body-shown');
-    }
-
-    /**
-     * Map of short kind aliases (used in subject_refs strings and UI groups)
-     * to the fully-qualified model class. Single source of truth for which
-     * entities can be linked as subjects. Extend here when adding types.
-     *
-     * @var array<string, class-string>
-     */
-    public const SUBJECT_KIND_MAP = [
-        'vehicle' => Vehicle::class,
-        'property' => Property::class,
-        'contact' => Contact::class,
-        'contract' => Contract::class,
-        'inventory' => InventoryItem::class,
-        'account' => Account::class,
-        'project' => Project::class,
-        'document' => Document::class,
-        'health_provider' => HealthProvider::class,
-        'online_account' => OnlineAccount::class,
-        'recurring_rule' => RecurringRule::class,
-    ];
-
-    /**
-     * Search-on-type matches across every subjectable domain. Only fires
-     * when the user has typed at least 2 characters to avoid scanning
-     * the entire household inventory on every keystroke. Returns up to 20
-     * hits total, spread across kinds (≤ 5 per kind to keep one domain
-     * from swamping the list).
-     *
-     * @return array<int, array{ref: string, label: string, kind_label: string, name: string}>
-     */
-    #[Computed]
-    public function subjectSearchResults(): array
-    {
-        $q = trim($this->subject_search);
-        if (mb_strlen($q) < 2) {
-            return [];
-        }
-
-        $term = '%'.$q.'%';
-        $already = array_flip($this->subject_refs);
-        $out = [];
-
-        foreach (self::SUBJECT_KIND_MAP as $kind => $class) {
-            $kindLabel = $this->subjectKindLabel($kind);
-            $nameCol = $this->subjectNameColumn($class);
-
-            /** @var Illuminate\Database\Eloquent\Collection<int, Model> $rows */
-            $rows = $class::query()
-                ->where($nameCol, 'like', $term)
-                ->orderBy($nameCol)
-                ->limit(5)
-                ->get();
-
-            foreach ($rows as $row) {
-                $ref = $kind.':'.$row->id;
-                if (isset($already[$ref])) {
-                    continue;
-                }
-                $name = (string) ($row->{$nameCol} ?? '#'.$row->id);
-                $out[] = [
-                    'ref' => $ref,
-                    'label' => $kindLabel.' · '.$name,
-                    'kind_label' => $kindLabel,
-                    'name' => $name,
-                ];
-                if (count($out) >= 20) {
-                    return $out;
-                }
-            }
-        }
-
-        return $out;
-    }
-
-    /**
-     * Display metadata for the currently-selected subjects, keyed by ref.
-     * Used by the chip list renderer. Batches the per-kind queries so the
-     * render cost scales with distinct kinds selected, not individual items.
-     *
-     * @return array<string, array{label: string, kind_label: string}>
-     */
-    #[Computed]
-    public function selectedSubjectsMeta(): array
-    {
-        if ($this->subject_refs === []) {
-            return [];
-        }
-
-        $byKind = [];
-        foreach ($this->subject_refs as $ref) {
-            if (! is_string($ref) || ! str_contains($ref, ':')) {
-                continue;
-            }
-            [$kind, $id] = explode(':', $ref, 2);
-            if (! isset(self::SUBJECT_KIND_MAP[$kind]) || ! is_numeric($id)) {
-                continue;
-            }
-            $byKind[$kind][] = (int) $id;
-        }
-
-        $out = [];
-        foreach ($byKind as $kind => $ids) {
-            $class = self::SUBJECT_KIND_MAP[$kind];
-            $nameCol = $this->subjectNameColumn($class);
-            $kindLabel = $this->subjectKindLabel($kind);
-
-            /** @var Illuminate\Database\Eloquent\Collection<int, Model> $rows */
-            $rows = $class::query()->whereIn('id', $ids)->get()->keyBy('id');
-            foreach ($ids as $id) {
-                $row = $rows->get($id);
-                $name = $row ? (string) ($row->{$nameCol} ?? '#'.$id) : __('(deleted)');
-                $out[$kind.':'.$id] = [
-                    'label' => $kindLabel.' · '.$name,
-                    'kind_label' => $kindLabel,
-                ];
-            }
-        }
-
-        return $out;
-    }
-
-    public function addSubject(string $ref): void
-    {
-        if (! is_string($ref) || ! str_contains($ref, ':')) {
-            return;
-        }
-        if (in_array($ref, $this->subject_refs, true)) {
-            return;
-        }
-        [$kind] = explode(':', $ref, 2);
-        if (! isset(self::SUBJECT_KIND_MAP[$kind])) {
-            return;
-        }
-        $this->subject_refs[] = $ref;
-        $this->subject_search = '';
-    }
-
-    public function removeSubject(string $ref): void
-    {
-        $this->subject_refs = array_values(array_diff($this->subject_refs, [$ref]));
-    }
-
-    /**
-     * Drop-target mover used by the drag-and-drop chip list. Repositions
-     * `$ref` to land at index `$newIndex` in the ordered list — the shift
-     * happens after the source is removed, so $newIndex is the final slot,
-     * not the pre-remove slot.
-     */
-    public function moveSubjectTo(string $ref, int $newIndex): void
-    {
-        $idx = array_search($ref, $this->subject_refs, true);
-        if ($idx === false) {
-            return;
-        }
-        $item = $this->subject_refs[$idx];
-        array_splice($this->subject_refs, $idx, 1);
-        $newIndex = max(0, min($newIndex, count($this->subject_refs)));
-        array_splice($this->subject_refs, $newIndex, 0, [$item]);
-        $this->subject_refs = array_values($this->subject_refs);
-    }
-
-    /**
-     * Drop-target setter used by the live-reorder sortable list: receives
-     * the final DOM-order refs and rebuilds `subject_refs` to match.
-     * Unknown refs are ignored; existing refs not in the payload stay at
-     * the tail (defensive — the DOM shouldn't diverge, but if it did we'd
-     * rather keep a ref than silently drop it).
-     *
-     * @param  array<int, string>  $orderedRefs
-     */
-    public function reorderSubjects(array $orderedRefs): void
-    {
-        if ($this->subject_refs === []) {
-            return;
-        }
-
-        $existing = array_flip($this->subject_refs);
-        $next = [];
-        foreach ($orderedRefs as $ref) {
-            $r = (string) $ref;
-            if (isset($existing[$r])) {
-                $next[] = $r;
-                unset($existing[$r]);
-            }
-        }
-        foreach (array_keys($existing) as $leftover) {
-            $next[] = $leftover;
-        }
-
-        $this->subject_refs = $next;
-    }
-
-    private function subjectKindLabel(string $kind): string
-    {
-        return match ($kind) {
-            'vehicle' => __('Vehicle'),
-            'property' => __('Property'),
-            'contact' => __('Contact'),
-            'contract' => __('Contract'),
-            'inventory' => __('Inventory'),
-            'account' => __('Account'),
-            'project' => __('Project'),
-            'document' => __('Document'),
-            'health_provider' => __('Health provider'),
-            'online_account' => __('Online account'),
-            'recurring_rule' => __('Bill'),
-            default => ucfirst($kind),
-        };
-    }
-
-    /**
-     * @param  class-string  $class
-     */
-    private function subjectNameColumn(string $class): string
-    {
-        return match ($class) {
-            Vehicle::class => 'model',
-            Property::class => 'name',
-            Contact::class => 'display_name',
-            Contract::class => 'title',
-            InventoryItem::class => 'name',
-            Account::class => 'name',
-            Project::class => 'name',
-            Document::class => 'label',
-            HealthProvider::class => 'name',
-            OnlineAccount::class => 'service_name',
-            RecurringRule::class => 'title',
-            default => 'name',
-        };
-    }
-
-    /**
-     * Turn stored pivot rows back into the "{kind}:{id}" string form the
-     * <select multiple> field uses.
-     *
-     * @return array<int, string>
-     */
-    private function subjectRefsFrom(Model $model): array
-    {
-        if (! method_exists($model, 'subjects')) {
-            return [];
-        }
-        $classToKind = array_flip(self::SUBJECT_KIND_MAP);
-        $refs = [];
-        foreach ($model->subjects() as $row) {
-            $kind = $classToKind[get_class($row)] ?? null;
-            if ($kind === null) {
-                continue;
-            }
-            $refs[] = $kind.':'.$row->getKey();
-        }
-
-        return $refs;
-    }
-
-    /**
-     * @param  array<int, string>  $refs
-     * @return array<int, array{type: string, id: int}>
-     */
-    private function parseSubjectRefs(array $refs): array
-    {
-        $out = [];
-        foreach ($refs as $r) {
-            if (! is_string($r) || ! str_contains($r, ':')) {
-                continue;
-            }
-            [$kind, $id] = explode(':', $r, 2);
-            $class = self::SUBJECT_KIND_MAP[$kind] ?? null;
-            if ($class === null || ! is_numeric($id)) {
-                continue;
-            }
-            $out[] = ['type' => $class, 'id' => (int) $id];
-        }
-
-        return $out;
-    }
-
-    // attachSourceMediaTo() moved to BillForm + TransactionForm; each
-    // child attaches the OCR-scan source to its own record on create.
-
-    /**
-     * Populate the read-only Admin section (owner / created / updated) from
-     * the loaded record. Second DB fetch keeps loadRecord() methods focused
-     * on their per-type fields without knowing about meta display.
-     *
-     * @return array{0: class-string|null, 1: string|null}
-     */
-    public function adminModelMap(): array
-    {
-        return match ($this->type) {
-            'task' => [Task::class, 'assigned_user_id'],
-            'contact' => [Contact::class, 'owner_user_id'],
-            'account' => [Account::class, 'user_id'],
-            'contract' => [Contract::class, 'primary_user_id'],
-            'insurance' => [Contract::class, 'primary_user_id'],
-            'property' => [Property::class, 'primary_user_id'],
-            'vehicle' => [Vehicle::class, 'primary_user_id'],
-            'inventory' => [InventoryItem::class, 'owner_user_id'],
-            'document' => [Document::class, 'holder_user_id'],
-            'note' => [Note::class, 'user_id'],
-            'physical_mail' => [PhysicalMail::class, null],
-            'project' => [Project::class, 'user_id'],
-            'checklist_template' => [ChecklistTemplate::class, 'user_id'],
-            'transaction' => [Transaction::class, null],
-            'bill' => [RecurringRule::class, null],
-            'appointment' => [Appointment::class, null],
-            default => [null, null],
-        };
-    }
-
-    private function loadAdminMeta(): void
-    {
-        [$class, $userField] = $this->adminModelMap();
-        if (! $class || ! $this->id) {
-            return;
-        }
-
-        /** @var Model|null $model */
-        $model = $class::find($this->id);
-        if (! $model) {
-            return;
-        }
-
-        $this->admin_owner_id = $userField ? ($model->{$userField} ?? null) : null;
-        $this->admin_owner_label = $this->admin_owner_id
-            ? (User::find($this->admin_owner_id)?->name ?? '')
-            : '';
-        $this->admin_created_at = $model->created_at?->format('Y-m-d H:i') ?? '';
-        $this->admin_updated_at = $model->updated_at?->format('Y-m-d H:i') ?? '';
-    }
-
-    /**
-     * Photos (Media with pivot role=photo) attached to the currently loaded
-     * record via the HasMedia trait. Used by any form partial that renders
-     * a thumbnail strip — inventory first, others can opt in similarly.
-     *
-     * @return Collection<int, Media>
-     */
-    public function inspectorPhotos(): Collection
-    {
-        [$class] = $this->adminModelMap();
-        if (! $class || ! $this->id || ! method_exists($class, 'media')) {
-            return collect();
-        }
-
-        /** @var Model|null $model */
-        $model = $class::find($this->id);
-        if (! $model) {
-            return collect();
-        }
-
-        return $model->media()
-            ->wherePivot('role', 'photo')
-            ->orderByPivot('position')
-            ->orderBy('media.created_at')
-            ->get();
-    }
-
-    /**
-     * Attach the currently-uploaded photo to the loaded record. Positions
-     * it at the end — drag-reorder moves it to a different slot, and the
-     * first slot is treated as the cover in drill-down lists.
-     */
-    public function updatedPhotoUpload(): void
-    {
-        if (! empty($this->photoUpload)) {
-            $this->addPhoto();
-        }
-    }
-
-    public function addPhoto(): void
-    {
-        [$class] = $this->adminModelMap();
-        if (! $class || ! method_exists($class, 'media') || empty($this->photoUpload)) {
-            return;
-        }
-
-        $this->validate(['photoUpload.*' => 'required|image|max:20480']);
-
-        // Create-mode: no record exists yet. Stamp a minimal draft so we have
-        // an id to attach against. User's still-unsaved form fields are
-        // applied when they eventually click Save, which becomes an update.
-        if (! $this->id) {
-            $this->ensureDraftForPhoto();
-        }
-
-        if (! $this->id) {
-            return;
-        }
-
-        $model = $class::find($this->id);
-        if (! $model) {
-            return;
-        }
-
-        $position = (int) $model->media()->wherePivot('role', 'photo')->max('position');
-
-        foreach ($this->photoUpload as $file) {
-            $originalName = $file->getClientOriginalName();
-            $mime = $file->getMimeType();
-            $size = $file->getSize();
-            $path = $file->store('inspector-uploads', 'local');
-
-            $media = Media::create([
-                'disk' => 'local',
-                'path' => $path,
-                'original_name' => $originalName,
-                'mime' => $mime,
-                'size' => $size,
-                'captured_at' => now(),
-                'ocr_status' => 'skip',
-            ]);
-
-            $position++;
-            $model->media()->attach($media->id, ['role' => 'photo', 'position' => $position]);
-        }
-
-        $this->reset('photoUpload');
-    }
-
-    /**
-     * Stamp a minimum-viable record for the current type so the user can
-     * attach media before completing the form. Mirrors the mobile photo
-     * capture pattern: placeholder name + unprocessed, user describes later.
-     * Only wired for types we actively want photo-first creation on.
-     */
-    /**
-     * Shell-side no-op — the photo-first flow (inventory) now runs in
-     * InventoryForm, which has its own ensureDraftForPhoto override.
-     * Contract is the only remaining shell type using photos and it
-     * doesn't support photo-first creation.
-     */
-    private function ensureDraftForPhoto(): void
-    {
-        // no-op
-    }
-
-    public function deletePhoto(int $mediaId): void
-    {
-        [$class] = $this->adminModelMap();
-        if (! $class || ! $this->id || ! method_exists($class, 'media')) {
-            return;
-        }
-
-        $model = $class::find($this->id);
-        if (! $model) {
-            return;
-        }
-
-        $model->media()->detach($mediaId);
-    }
-
-    /**
-     * Persist a new order of photos for the loaded record. Incoming ids are
-     * the media ids in their new display order (top-left first). Each gets
-     * a zero-based pivot position, so "first" = cover everywhere.
-     *
-     * @param  array<int, int|string>  $orderedIds
-     */
-    public function reorderPhotos(array $orderedIds): void
-    {
-        [$class] = $this->adminModelMap();
-        if (! $class || ! $this->id || ! method_exists($class, 'media')) {
-            return;
-        }
-
-        $model = $class::find($this->id);
-        if (! $model) {
-            return;
-        }
-
-        foreach (array_values($orderedIds) as $position => $mediaId) {
-            $model->media()->updateExistingPivot((int) $mediaId, ['position' => $position]);
-        }
-    }
-
-    private function loadTagList(): void
-    {
-        [$class] = $this->adminModelMap();
-        if (! $class || ! $this->id || ! method_exists($class, 'tags')) {
-            return;
-        }
-
-        /** @var Model|null $model */
-        $model = $class::with('tags:id,name')->find($this->id);
-        if (! $model) {
-            return;
-        }
-
-        $this->tag_list = $model->tags->pluck('name')->implode(' ');
-    }
-
-    /**
-     * Parse the shared tag input into normalized tag names.
-     * Accepts "#tax-2026 #home, urgent" → ['tax-2026', 'home', 'urgent'].
-     *
-     * @return array<int, string>
-     */
-    private function parseTagList(string $raw): array
-    {
-        $parts = preg_split('/[\s,]+/', trim($raw)) ?: [];
-        $names = [];
-        foreach ($parts as $p) {
-            $name = trim(ltrim(trim($p), '#'));
-            if ($name === '') {
-                continue;
-            }
-            $names[] = $name;
-        }
-
-        return array_values(array_unique($names));
-    }
-
-    /**
-     * Sync the tag input to the saved record. Missing tags get firstOrCreate'd
-     * in the current household. Runs after the type-specific save so $this->id
-     * is populated even for freshly-created records.
-     */
-    private function persistTagList(): void
-    {
-        [$class] = $this->adminModelMap();
-        if (! $class || ! $this->id || ! method_exists($class, 'tags')) {
-            return;
-        }
-
-        /** @var Model|null $model */
-        $model = $class::find($this->id);
-        if (! $model) {
-            return;
-        }
-
-        $names = $this->parseTagList($this->tag_list);
-        $ids = [];
-        foreach ($names as $name) {
-            $slug = Str::slug($name);
-            $tag = Tag::firstOrCreate(
-                ['slug' => $slug],
-                ['name' => $name],
-            );
-            $ids[] = $tag->id;
-        }
-
-        $model->tags()->sync($ids);
-    }
-
-    public function close(): void
-    {
-        $this->open = false;
-        // Keep the modal-mode flag so the instance stays on its
-        // subentity-edit-open channel across opens; resetting it would
-        // make the modal instance silently become the primary one on
-        // the next event.
-        $this->resetExcept(['asModal']);
-    }
-
-    // seedDefaults() was the shell's "on new record, populate default
-    // dates/currencies" helper. Every extracted form now seeds its own
-    // defaults in mount() when no id is passed, so the shell stays out
-    // of per-type business.
-
-    /**
-     * Shared options list for every Inspector form that picks a Category,
-     * sorted by name. Computed so the searchable-select component can read
-     * it directly and so inline creation (see createCategoryInline) can
-     * trigger a re-render by unsetting this computed.
-     *
-     * @return array<int, string>
-     */
-    #[Computed]
-    public function categoryPickerOptions(): array
-    {
-        return Category::with('parent:id,name')
-            ->orderBy('name')
-            ->get(['id', 'name', 'kind', 'parent_id'])
-            ->mapWithKeys(fn (Category $c) => [$c->id => $c->displayLabel()])
-            ->all();
-    }
-
-    /**
-     * Create a new expense Category on the fly from the searchable-select's
-     * "+ Create 'X'" option. Dispatches `ss-option-added` so the Alpine
-     * widget pre-selects the new row.
-     */
-    /**
-     * Counterparty (Contact) options keyed by id → display name, sorted.
-     * Shared by bill / contract / subscription / transaction inspectors.
-     *
-     * @return array<int, string>
-     */
-    #[Computed]
-    public function counterpartyPickerOptions(): array
-    {
-        return Contact::orderBy('display_name')->pluck('display_name', 'id')->all();
-    }
-
-    /**
-     * Active outflow recurring rules for the subscription inspector's
-     * money-side picker. Label includes amount so duplicates (same title,
-     * different amount) remain distinguishable.
-     *
-     * @return array<int, string>
-     */
-    #[Computed]
-    public function recurringOutflowRulePickerOptions(): array
-    {
-        return RecurringRule::where('active', true)
-            ->where('amount', '<=', 0)
-            ->orderBy('title')
-            ->get(['id', 'title', 'amount', 'currency'])
-            ->mapWithKeys(fn ($r) => [
-                $r->id => $r->title.' · '.Formatting::money(abs((float) $r->amount), $r->currency ?? 'USD'),
-            ])
-            ->all();
-    }
-
-    /**
-     * Non-ended contracts for the subscription inspector's contract picker.
-     *
-     * @return array<int, string>
-     */
-    #[Computed]
-    public function openContractPickerOptions(): array
-    {
-        return Contract::whereNotIn('state', ['ended', 'cancelled'])
-            ->orderBy('title')
-            ->pluck('title', 'id')
-            ->all();
-    }
-
-    public function createCategoryInline(string $name, ?string $modelKey = null): void
-    {
-        $name = trim($name);
-        if ($name === '') {
-            return;
-        }
-        $slug = Str::slug($name);
-        $base = $slug === '' ? 'cat-'.bin2hex(random_bytes(3)) : $slug;
-        $suffix = 0;
-        while (Category::where('slug', $suffix ? "{$base}-{$suffix}" : $base)->exists()) {
-            $suffix++;
-        }
-        $category = Category::create([
-            'name' => $name,
-            'slug' => $suffix ? "{$base}-{$suffix}" : $base,
-            'kind' => 'expense',
-        ]);
-
-        unset($this->categoryPickerOptions);
-
-        // Dispatch `ss-option-added` to the specific picker that triggered
-        // the inline create. If the client didn't pass a model (older
-        // bundles), fall back to notifying every known category picker so
-        // at least one of them updates.
-        $label = $category->displayLabel(includeKind: true);
-        $targets = $modelKey && property_exists($this, $modelKey)
-            ? [$modelKey]
-            : ['category_id'];
-        foreach ($targets as $model) {
-            $this->dispatch('ss-option-added', model: $model, id: $category->id, label: $label);
-        }
-
-        if (count($targets) === 1) {
-            $this->{$targets[0]} = $category->id;
-        }
-    }
-
-    private function householdCurrency(): string
-    {
-        return CurrentHousehold::get()?->default_currency ?? 'USD';
-    }
-
-    // loadRecord() no longer runs — every type is an extracted child
-    // Livewire component that hydrates from its own mount($id). Kept
-    // removed intentionally: keeping a dispatcher would re-introduce
-    // shell-level state the extracted forms have already owned.
-
-    public function save(): void
-    {
-        // Extracted form types: the shell's Save button lands here, we
-        // fan out an `inspector-save` event, and the matching child
-        // component (App\Livewire\Inspector\{Type}Form) validates +
-        // persists on its own. The child fires `inspector-form-saved`
-        // back and the shell's onFormSaved() listener closes the drawer.
-        // Add a type to this array after extracting its child form.
-        // Every inspector type now runs as an extracted child component.
-        // Shell fans out `inspector-save`; the matching child form
-        // validates + persists + fires `inspector-form-saved` back; the
-        // shell's onFormSaved() listener closes the drawer. TransactionForm
-        // additionally fires `inspector-projection-candidates` when
-        // ProjectionMatcher returns multi-hit; onProjectionCandidates()
-        // stashes them on the shell and the picker UI takes over.
-        $this->dispatch('inspector-save');
-    }
-
-    /**
-     * Apply the Admin-section Owner picker value to the record, writing to
-     * the per-type user FK column via adminModelMap(). Null value means
-     * "shared / no owner". Only runs on edits (new records get the owner
-     * auto-assigned inside the type-specific save methods).
-     */
-    private function persistAdminOwner(): void
-    {
-        if (! $this->id) {
-            return;
-        }
-
-        [$class, $userField] = $this->adminModelMap();
-        if (! $class || ! $userField) {
-            return;
-        }
-
-        $newOwner = $this->admin_owner_id ?: null;
-
-        /** @var Model|null $model */
-        $model = $class::find($this->id);
-        if (! $model) {
-            return;
-        }
-
-        if ((int) ($model->{$userField} ?? 0) === (int) ($newOwner ?? 0)) {
-            return;
-        }
-
-        $model->forceFill([$userField => $newOwner])->save();
-    }
-
-    // saveTask moved to App\Livewire\Inspector\TaskForm.
-
-    // saveTransaction moved to App\Livewire\Inspector\TransactionForm.
-    // The form also owns prefillFromMedia / prefillFromProjection and
-    // fires `inspector-projection-candidates` on multi-hit matches.
-
-    // saveBill moved to App\Livewire\Inspector\BillForm; autoFillInterestCounterparty
-    // + materializeInitialProjection + prefillFromMedia migrated with it.
-
-    // saveContract moved to App\Livewire\Inspector\ContractForm.
-
-    // saveInsurance moved to App\Livewire\Inspector\InsuranceForm;
-    // encodeSubject + decodeSubject moved with it.
-
-    // saveProperty moved to App\Livewire\Inspector\PropertyForm.
-
-    // saveVehicle moved to App\Livewire\Inspector\VehicleForm.
-
-    // loadPet + savePet moved to App\Livewire\Inspector\PetForm as
-    // part of the inspector refactor pilot. The shell's save() forks
-    // on type=='pet' and dispatches 'inspector-save' so the child
-    // handles validation and persistence; an `inspector-form-saved`
-    // bounce from the child closes the drawer.
-
-    // loadPetVaccination/savePetVaccination + loadPetCheckup/savePetCheckup
-    // moved to App\Livewire\Inspector\PetVaccinationForm and
-    // App\Livewire\Inspector\PetCheckupForm. Both are class-based so
-    // PHPStan sees the code + tests drive them directly.
-
-    // saveInventory moved to App\Livewire\Inspector\InventoryForm.
-
-    // appointment load/save moved to App\Livewire\Inspector\AppointmentForm.
-
-    // reminder load/save moved to App\Livewire\Inspector\ReminderForm.
-
-    // savings_goal load/save moved to App\Livewire\Inspector\SavingsGoalForm.
-
-    // budget_cap extracted to App\Livewire\Inspector\BudgetCapForm.
-
-    // category_rule + tag_rule extracted to App\Livewire\Inspector\{CategoryRuleForm,TagRuleForm}.
-
-    // subscription load/save moved to App\Livewire\Inspector\SubscriptionForm.
-
-    // ── Checklist template ──────────────────────────────────────────────
-    //
-    // Recurrence is edited as a mode (daily / weekdays / weekends / custom)
-    // in the form so the user isn't forced to hand-write an RRULE for the
-    // common cases. "custom" reveals the raw string field (RFC-5545 subset
-    // supported by App\Support\Rrule).
-    private const CHECKLIST_PRESET_RRULES = [
-        'daily' => 'FREQ=DAILY',
-        'weekdays' => 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR',
-        'weekends' => 'FREQ=WEEKLY;BYDAY=SA,SU',
-        // One-off: expands to a single occurrence on dtstart. Needed for
-        // onboarding checklists + project / move-house / welcome-a-pet
-        // one-time lists where a cadence doesn't fit.
-        'one_off' => 'FREQ=DAILY;COUNT=1',
-    ];
-
-    // Checklist-template load/save/repeater methods moved to
-    // App\Livewire\Inspector\ChecklistTemplateForm. The shell no longer
-    // stores checklist state or defines addItem/removeItem/reorderItems —
-    // the child component owns them and renders via @livewire.
-
-    // ── Time entry (manual backlog) ──────────────────────────────────────
-    //
-    // Schema stores started_at + ended_at + duration_seconds. For backlog
-    // entries the user cares about "I worked 2.5h on X yesterday", not the
-    // clock times, so we accept a date + hours and synthesize the clock
-    // window (09:00 in the user's tz → +duration) to satisfy NOT NULL.
-    // loadTimeEntry + saveTimeEntry moved to App\Livewire\Inspector\TimeEntryForm.
-
-    // transfer create+validate+pickers moved to App\Livewire\Inspector\TransferForm.
-
-    /** @return Illuminate\Database\Eloquent\Collection<int, Property> */
-    #[Computed]
-    public function propertyOptions()
-    {
-        return Property::orderBy('name')->get(['id', 'name']);
-    }
-
-    /**
-     * Options for the insurance "covered subject" selector — vehicles + properties + self.
-     *
-     * @return array<string, string> encoded-key ⇒ display label
-     */
-    #[Computed]
-    public function insuranceSubjectOptions(): array
-    {
-        $options = [];
-        foreach (Vehicle::orderBy('make')->get(['id', 'make', 'model', 'year']) as $v) {
-            $label = trim(($v->year ? $v->year.' ' : '').(string) $v->make.' '.(string) $v->model);
-            $options['vehicle:'.$v->id] = __('Vehicle').' · '.($label !== '' ? $label : __('(untitled)'));
-        }
-        foreach (Property::orderBy('name')->get(['id', 'name']) as $p) {
-            $options['property:'.$p->id] = __('Property').' · '.$p->name;
-        }
-        $user = auth()->user();
-        if ($user) {
-            $options['user:'.$user->id] = __('Person').' · '.$user->name;
-        }
-
-        return $options;
-    }
-
     #[On('inspector-mark-paid')]
     public function markPaid(int $projectionId): void
     {
@@ -1316,34 +235,46 @@ new class extends Component
         $this->dispatch('inspector-body-shown');
     }
 
-    public function createCounterparty(string $name, ?string $modelKey = null): void
+    private function doOpen(string $type, ?int $id, ?int $mediaId = null, ?int $parentId = null): void
     {
-        $name = trim($name);
-        if ($name === '') {
-            return;
+        $this->resetExcept(['open', 'asModal']);
+        $this->type = $type;
+        $this->id = $id;
+        $this->open = true;
+        $this->errorMessage = null;
+
+        // Child form mount() reads $id / $mediaId / $projection_prefill_id
+        // and handles its own hydration. Shell just latches the inputs
+        // so the @livewire(...) call in the @case switch can pass them
+        // to the child as mount params.
+        if ($mediaId) {
+            $this->source_media_id = $mediaId;
         }
+        $this->subentityParentId = $parentId;
 
-        $contact = Contact::create([
-            'kind' => 'org',
-            'display_name' => $name,
-        ]);
+        $this->dispatch('inspector-body-shown');
+    }
 
-        // Write back to whichever Livewire property the calling searchable-select
-        // is bound to. The client passes `modelKey` as the second arg so this
-        // works for every counterparty picker (subscription_*, contract_*,
-        // account_vendor_id, inventory_vendor_id, …), not just the legacy
-        // generic counterparty_contact_id field.
-        $targetKey = $modelKey && property_exists($this, $modelKey)
-            ? $modelKey
-            : 'counterparty_contact_id';
-        $this->{$targetKey} = $contact->id;
-        unset($this->contacts);
+    public function save(): void
+    {
+        // Every inspector type runs as an extracted child component.
+        // Shell fans out `inspector-save`; the matching child form
+        // validates + persists + fires `inspector-form-saved` back; the
+        // shell's onFormSaved() listener closes the drawer. Transaction-
+        // Form additionally fires `inspector-projection-candidates` when
+        // ProjectionMatcher returns multi-hit; onProjectionCandidates()
+        // stashes them on the shell and the picker UI takes over.
+        $this->dispatch('inspector-save');
+    }
 
-        $this->dispatch('ss-option-added',
-            model: $targetKey,
-            id: $contact->id,
-            label: $contact->display_name,
-        );
+    public function close(): void
+    {
+        $this->open = false;
+        // Keep the modal-mode flag so the instance stays on its
+        // subentity-edit-open channel across opens; resetting it would
+        // make the modal instance silently become the primary one on
+        // the next event.
+        $this->resetExcept(['asModal']);
     }
 
     public function deleteRecord(): void
@@ -1358,6 +289,7 @@ new class extends Component
                 'transaction' => Transaction::findOrFail($this->id)->delete(),
                 'contact' => Contact::findOrFail($this->id)->delete(),
                 'note' => Note::findOrFail($this->id)->delete(),
+                'journal_entry' => JournalEntry::findOrFail($this->id)->delete(),
                 'physical_mail' => PhysicalMail::findOrFail($this->id)->delete(),
                 'bill' => RecurringRule::findOrFail($this->id)->delete(),
                 'document' => Document::findOrFail($this->id)->delete(),
@@ -1380,6 +312,9 @@ new class extends Component
                 'subscription' => Subscription::findOrFail($this->id)->delete(),
                 'checklist_template' => ChecklistTemplate::findOrFail($this->id)->delete(),
                 'time_entry' => TimeEntry::findOrFail($this->id)->delete(),
+                'tax_year' => TaxYear::findOrFail($this->id)->delete(),
+                'tax_document' => TaxDocument::findOrFail($this->id)->delete(),
+                'tax_estimated_payment' => TaxEstimatedPayment::findOrFail($this->id)->delete(),
                 default => null,
             };
         } catch (PeriodLockedException $e) {
@@ -1392,75 +327,75 @@ new class extends Component
         $this->close();
     }
 
-    /** @return array<int, string> */
-    private function splitList(?string $raw): array
-    {
-        if (! $raw) {
-            return [];
-        }
-
-        return array_values(array_filter(array_map('trim', preg_split('/[,;\n]/', $raw) ?: [])));
-    }
-
-    #[Computed]
-    public function accounts()
-    {
-        return Account::orderBy('name')->get(['id', 'name', 'currency']);
-    }
-
-    #[Computed]
-    public function categories()
-    {
-        return Category::with('parent:id,name')
-            ->orderBy('kind')
-            ->orderBy('name')
-            ->get(['id', 'name', 'kind', 'slug', 'parent_id']);
-    }
-
-    #[Computed]
-    public function contacts()
-    {
-        return Contact::orderBy('display_name')->get(['id', 'display_name']);
-    }
-
-    #[Computed]
-    public function contracts()
-    {
-        return Contract::orderBy('title')->get(['id', 'title']);
-    }
-
-    #[Computed]
-    public function healthProviders()
-    {
-        return HealthProvider::orderBy('name')->get(['id', 'name', 'specialty']);
-    }
-
-    /**
-     * Household members available as owner targets in the Admin section.
-     *
-     * @return Collection<int, User>
-     */
-    #[Computed]
-    public function householdUsers()
-    {
-        $household = CurrentHousehold::get();
-        if (! $household) {
-            return collect();
-        }
-
-        return $household->users()->orderBy('users.name')->get(['users.id', 'users.name']);
-    }
-
-    /** Per-type drawer width class. Widens for forms with many or wide fields. */
     #[Computed]
     public function drawerWidthClass(): string
     {
         return match ($this->type) {
             'transaction', 'bill', 'contract', 'vehicle', 'inventory', 'account' => 'max-w-lg',
-            'note', 'project' => 'max-w-lg',
+            'note', 'journal_entry', 'project' => 'max-w-lg',
             'property', 'insurance', 'online_account' => 'max-w-xl',
             default => 'max-w-md',
         };
+    }
+
+    /**
+     * Child form extras by type — only the types whose mount() takes
+     * more than just `id`. Keyed maps translate to mount args + a key
+     * discriminator in the `@livewire()` call below. Unlisted types
+     * use the default shape: `['id' => $id]` only.
+     *
+     * @return array<string, array<string, string>> type => (mountArg => shellPropName)
+     */
+    private const CHILD_FORM_EXTRAS = [
+        'transaction' => ['mediaId' => 'source_media_id', 'projectionId' => 'projection_prefill_id'],
+        'bill' => ['mediaId' => 'source_media_id'],
+        'pet_vaccination' => ['petId' => 'subentityParentId'],
+        'pet_checkup' => ['petId' => 'subentityParentId'],
+        'tax_document' => ['parentId' => 'subentityParentId', 'mediaId' => 'source_media_id'],
+        'tax_estimated_payment' => ['parentId' => 'subentityParentId'],
+    ];
+
+    /**
+     * Resolves the current $type to the matching extracted child form's
+     *
+     * @livewire() wiring: component name, mount args, and the key the
+     * shell uses to force a remount when discriminating inputs change
+     * (mediaId for OCR, projectionId for mark-paid, subentityParentId
+     * for pet sub-rows + tax children).
+     *
+     * Returns null for `$type === ''` (type picker renders instead) and
+     * for any unknown type — the template treats that as "render nothing".
+     *
+     * @return array{component: string, args: array<string, mixed>, key: string}|null
+     */
+    #[Computed]
+    public function childForm(): ?array
+    {
+        if ($this->type === '') {
+            return null;
+        }
+
+        $component = 'inspector.'.str_replace('_', '-', $this->type).'-form';
+        $args = ['id' => $this->id];
+        $extraKeyParts = [];
+
+        foreach (self::CHILD_FORM_EXTRAS[$this->type] ?? [] as $mountArg => $shellProp) {
+            $value = $this->{$shellProp} ?? null;
+            $args[$mountArg] = $value;
+            $extraKeyParts[] = (string) ($value ?? '0');
+        }
+
+        $keyParts = array_merge(
+            [$component, $this->id ?? 'new'],
+            $extraKeyParts,
+            [$this->asModal ? 'm' : 'p'],
+        );
+
+        return [
+            'component' => $component,
+            'args' => $args,
+            'key' => implode('-', $keyParts),
+        ];
     }
 
     #[Computed]
@@ -1471,6 +406,7 @@ new class extends Component
             'transaction' => __('transaction'),
             'contact' => __('contact'),
             'note' => __('note'),
+            'journal_entry' => __('journal entry'),
             'physical_mail' => __('post'),
             'bill' => __('bill'),
             'document' => __('document'),
@@ -1490,6 +426,9 @@ new class extends Component
             'time_entry' => __('time entry'),
             'transfer' => __('transfer'),
             'checklist_template' => __('checklist'),
+            'tax_year' => __('tax year'),
+            'tax_document' => __('tax document'),
+            'tax_estimated_payment' => __('estimated payment'),
             default => '',
         };
 
@@ -1500,6 +439,8 @@ new class extends Component
         return $this->id ? __('Edit :thing', ['thing' => $label]) : __('New :thing', ['thing' => $label]);
     }
 };
+?>
+
 ?>
 
 <div
@@ -1619,130 +560,24 @@ new class extends Component
                     </div>
                 </section>
             @else
-            @switch($type)
-                @case('')
-                    {{-- Type picker is primary-drawer behaviour ("Quick add").
-                         The modal instance is only entered via subentity-edit-open
-                         (always with a concrete type), so during a close() the
-                         type resets to '' and we'd flash the picker for a frame
-                         while Alpine's leave-transition ran. Render nothing in
-                         modal mode. --}}
+                {{-- Empty $type means "Quick add" — show the type
+                     picker (primary drawer only; the modal instance
+                     only wakes on subentity-edit-open, always with a
+                     concrete type). Every other $type resolves via
+                     $this->childForm to a single @livewire(...) call;
+                     adding a new inspector type doesn't require
+                     touching this template. --}}
+                @if ($type === '')
                     @unless ($asModal)
                         @include('partials.inspector.type-picker')
                     @endunless
-                    @break
-                @case('task')
-                    @livewire('inspector.task-form', ['id' => $id], key('task-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
-                    @break
-                @case('transaction')
-                    @livewire('inspector.transaction-form', ['id' => $id, 'mediaId' => $source_media_id, 'projectionId' => $projection_prefill_id], key('transaction-form-'.($id ?? 'new').'-'.($source_media_id ?? '0').'-'.($projection_prefill_id ?? '0').'-'.($asModal ? 'm' : 'p')))
-                    @break
-                @case('contact')
-                    @livewire('inspector.contact-form', ['id' => $id], key('contact-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
-                    @break
-                @case('bill')
-                    @livewire('inspector.bill-form', ['id' => $id, 'mediaId' => $source_media_id], key('bill-form-'.($id ?? 'new').'-'.($source_media_id ?? '0').'-'.($asModal ? 'm' : 'p')))
-                    @break
-                @case('note')
-                    @livewire('inspector.note-form', ['id' => $id], key('note-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
-                    @break
-                @case('physical_mail')
-                    @livewire('inspector.physical-mail-form', ['id' => $id], key('physical-mail-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
-                    @break
-                @case('document')
-                    @livewire('inspector.document-form', ['id' => $id], key('document-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
-                    @break
-                @case('meeting')
-                    @livewire('inspector.meeting-form', ['id' => $id], key('meeting-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
-                    @break
-                @case('project')
-                    @livewire('inspector.project-form', ['id' => $id], key('project-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
-                    @break
-                @case('contract')
-                    @livewire('inspector.contract-form', ['id' => $id], key('contract-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
-                    @break
-                @case('insurance')
-                    @livewire('inspector.insurance-form', ['id' => $id], key('insurance-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
-                    @break
-                @case('account')
-                    @livewire('inspector.account-form', ['id' => $id], key('account-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
-                    @break
-                @case('online_account')
-                    @livewire('inspector.online-account-form', ['id' => $id], key('online-account-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
-                    @break
-                @case('domain')
-                    @livewire('inspector.domain-form', ['id' => $id], key('domain-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
-                    @break
-                @case('tax_year')
-                    @livewire('inspector.tax-year-form', ['id' => $id], key('tax-year-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
-                    @break
-                @case('tax_document')
-                    @livewire('inspector.tax-document-form', ['id' => $id, 'parentId' => $subentityParentId, 'mediaId' => $source_media_id], key('tax-document-form-'.($id ?? 'new').'-'.($subentityParentId ?? '0').'-'.($asModal ? 'm' : 'p')))
-                    @break
-                @case('tax_estimated_payment')
-                    @livewire('inspector.tax-estimated-payment-form', ['id' => $id, 'parentId' => $subentityParentId], key('tax-estimated-payment-form-'.($id ?? 'new').'-'.($subentityParentId ?? '0').'-'.($asModal ? 'm' : 'p')))
-                    @break
-                @case('journal_entry')
-                    @livewire('inspector.journal-entry-form', ['id' => $id], key('journal-entry-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
-                    @break
-                @case('property')
-                    @livewire('inspector.property-form', ['id' => $id], key('property-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
-                    @break
-                @case('vehicle')
-                    @livewire('inspector.vehicle-form', ['id' => $id], key('vehicle-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
-                    @break
-                @case('pet')
-                    {{-- Extracted to App\Livewire\Inspector\PetForm. Key
-                         resets on new id so the child re-mounts cleanly
-                         between "new pet" and "edit pet X" transitions. --}}
-                    @livewire('inspector.pet-form', ['id' => $id], key('pet-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
-                    @break
-                @case('pet_vaccination')
-                    @livewire('inspector.pet-vaccination-form', [
-                        'id' => $id,
-                        'petId' => $subentityParentId,
-                    ], key('pet-vaccination-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
-                    @break
-                @case('pet_checkup')
-                    @livewire('inspector.pet-checkup-form', [
-                        'id' => $id,
-                        'petId' => $subentityParentId,
-                    ], key('pet-checkup-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
-                    @break
-                @case('inventory')
-                    @livewire('inspector.inventory-form', ['id' => $id], key('inventory-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
-                    @break
-                @case('appointment')
-                    @livewire('inspector.appointment-form', ['id' => $id], key('appointment-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
-                    @break
-                @case('reminder')
-                    @livewire('inspector.reminder-form', ['id' => $id], key('reminder-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
-                    @break
-                @case('savings_goal')
-                    @livewire('inspector.savings-goal-form', ['id' => $id], key('savings-goal-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
-                    @break
-                @case('budget_cap')
-                    @livewire('inspector.budget-cap-form', ['id' => $id], key('budget-cap-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
-                    @break
-                @case('category_rule')
-                    @livewire('inspector.category-rule-form', ['id' => $id], key('category-rule-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
-                    @break
-                @case('tag_rule')
-                    @livewire('inspector.tag-rule-form', ['id' => $id], key('tag-rule-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
-                    @break
-                @case('subscription')
-                    @livewire('inspector.subscription-form', ['id' => $id], key('subscription-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
-                    @break
-                @case('checklist_template')
-                    @livewire('inspector.checklist-template-form', ['id' => $id], key('checklist-template-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
-                    @break
-                @case('time_entry')
-                    @livewire('inspector.time-entry-form', ['id' => $id], key('time-entry-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
-                    @break
-                @case('transfer')
-                    @livewire('inspector.transfer-form', ['id' => $id], key('transfer-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
-                    @break
-            @endswitch
+                @elseif ($this->childForm)
+                    @livewire(
+                        $this->childForm['component'],
+                        $this->childForm['args'],
+                        key($this->childForm['key']),
+                    )
+                @endif
             @endif
         </div>
 
