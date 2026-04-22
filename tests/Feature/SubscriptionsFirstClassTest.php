@@ -83,8 +83,7 @@ it('inspector edits an auto-created subscription', function () {
     ]);
     $sub = Subscription::where('recurring_rule_id', $rule->id)->firstOrFail();
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'subscription', $sub->id)
+    Livewire::test('inspector.subscription-form', ['id' => $sub->id])
         ->assertSet('subscription_name', 'Basic')
         ->set('subscription_name', 'Renamed')
         ->call('save');

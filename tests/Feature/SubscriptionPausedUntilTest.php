@@ -12,8 +12,7 @@ it('persists paused_until via the inspector when state is paused', function () {
     ]);
     $sub = Subscription::where('recurring_rule_id', $rule->id)->firstOrFail();
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'subscription', $sub->id)
+    Livewire::test('inspector.subscription-form', ['id' => $sub->id])
         ->set('subscription_state', 'paused')
         ->set('subscription_paused_until', now()->addDays(30)->toDateString())
         ->call('save');
@@ -32,8 +31,7 @@ it('clears paused_until when state transitions back to active', function () {
     $sub = Subscription::where('recurring_rule_id', $rule->id)->firstOrFail();
     $sub->forceFill(['state' => 'paused', 'paused_until' => now()->addDays(7)])->save();
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'subscription', $sub->id)
+    Livewire::test('inspector.subscription-form', ['id' => $sub->id])
         ->set('subscription_state', 'active')
         ->call('save');
 

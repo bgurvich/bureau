@@ -207,8 +207,7 @@ it('dispatches ss-option-added for the exact picker that triggered the create', 
     // new option and appeared to hang after creation.
     authedInHousehold();
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'subscription')
+    Livewire::test('inspector.subscription-form')
         ->call('createCounterparty', 'Fresh Vendor LLC', 'subscription_counterparty_id')
         ->assertDispatched('ss-option-added',
             model: 'subscription_counterparty_id',

@@ -157,22 +157,8 @@ new class extends Component
      */
     public array $checklist_items = [];
 
-    // subscription (first-class — wraps a RecurringRule + optional Contract)
-    public string $subscription_name = '';
-
-    public ?int $subscription_counterparty_id = null;
-
-    public ?int $subscription_recurring_rule_id = null;
-
-    public ?int $subscription_contract_id = null;
-
-    public string $subscription_state = 'active';
-
-    public string $subscription_paused_until = '';
-
-    public string $subscription_currency = 'USD';
-
-    public string $subscription_notes = '';
+    // subscription extracted to App\Livewire\Inspector\SubscriptionForm;
+    // the shell hosts the child via @livewire in the render switch.
 
     // Admin-section meta (read-only display, loaded from the record on edit).
     public ?int $admin_owner_id = null;
@@ -1415,7 +1401,6 @@ new class extends Component
         $this->insurance_deductible_currency = $currency;
         $this->account_currency = $currency;
         $this->sale_currency = $currency;
-        $this->subscription_currency = $currency;
         $this->issued_on = now()->toDateString();
         $this->due_on = now()->addDays(14)->toDateString();
         $this->doc_issued_on = now()->toDateString();
@@ -1576,7 +1561,6 @@ new class extends Component
             // state. The shell only manages open/close + parent id.
             'inventory' => $this->loadInventory(),
             'appointment' => $this->loadAppointment(),
-            'subscription' => $this->loadSubscription(),
             'checklist_template' => $this->loadChecklistTemplate(),
             default => null,
         };
@@ -1919,7 +1903,7 @@ new class extends Component
         // persists on its own. The child fires `inspector-form-saved`
         // back and the shell's onFormSaved() listener closes the drawer.
         // Add a type to this array after extracting its child form.
-        $extractedTypes = ['pet', 'pet_vaccination', 'pet_checkup', 'time_entry', 'transfer', 'savings_goal', 'budget_cap', 'category_rule', 'tag_rule', 'reminder'];
+        $extractedTypes = ['pet', 'pet_vaccination', 'pet_checkup', 'time_entry', 'transfer', 'savings_goal', 'budget_cap', 'category_rule', 'tag_rule', 'reminder', 'subscription'];
         if (in_array($this->type, $extractedTypes, true)) {
             $this->dispatch('inspector-save');
 
@@ -1948,7 +1932,6 @@ new class extends Component
                 // reaching this match.
                 'inventory' => $this->saveInventory(),
                 'appointment' => $this->saveAppointment(),
-                'subscription' => $this->saveSubscription(),
                 'checklist_template' => $this->saveChecklistTemplate(),
                 default => null,
             };
@@ -3051,69 +3034,7 @@ new class extends Component
 
     // category_rule + tag_rule extracted to App\Livewire\Inspector\{CategoryRuleForm,TagRuleForm}.
 
-    // ── Subscription ─────────────────────────────────────────────────────
-    private function loadSubscription(): void
-    {
-        $s = \App\Models\Subscription::findOrFail($this->id);
-        $this->subscription_name = $s->name;
-        $this->subscription_counterparty_id = $s->counterparty_contact_id;
-        $this->subscription_recurring_rule_id = $s->recurring_rule_id;
-        $this->subscription_contract_id = $s->contract_id;
-        $this->subscription_state = $s->state;
-        $this->subscription_paused_until = $s->paused_until?->toDateString() ?? '';
-        $this->subscription_currency = $s->currency;
-        $this->subscription_notes = $s->notes ?? '';
-    }
-
-    private function saveSubscription(): void
-    {
-        $data = $this->validate([
-            'subscription_name' => 'required|string|max:120',
-            'subscription_counterparty_id' => 'nullable|integer|exists:contacts,id',
-            'subscription_recurring_rule_id' => 'nullable|integer|exists:recurring_rules,id',
-            'subscription_contract_id' => 'nullable|integer|exists:contracts,id',
-            'subscription_state' => ['required', \Illuminate\Validation\Rule::in(['active', 'paused', 'cancelled'])],
-            'subscription_paused_until' => 'nullable|date',
-            'subscription_currency' => 'required|string|size:3|alpha',
-            'subscription_notes' => 'nullable|string|max:5000',
-        ]);
-
-        // Keep monthly_cost_cached in sync if a rule is linked. This runs
-        // outside the observer path (the rule's amount/rrule may have
-        // changed without triggering SubscriptionSync), so recompute here.
-        $monthly = null;
-        if ($data['subscription_recurring_rule_id']) {
-            $rule = \App\Models\RecurringRule::find($data['subscription_recurring_rule_id']);
-            if ($rule) {
-                $multiplier = \App\Support\SubscriptionSync::monthlyMultiplier((string) $rule->rrule);
-                $monthly = $multiplier !== null ? $multiplier * abs((float) $rule->amount) : null;
-            }
-        }
-
-        $payload = [
-            'name' => $data['subscription_name'],
-            'counterparty_contact_id' => $data['subscription_counterparty_id'] ?: null,
-            'recurring_rule_id' => $data['subscription_recurring_rule_id'] ?: null,
-            'contract_id' => $data['subscription_contract_id'] ?: null,
-            'state' => $data['subscription_state'],
-            // `paused_until` only matters when state = paused. Clearing state
-            // back to active drops the marker so the next pause starts fresh.
-            'paused_until' => $data['subscription_state'] === 'paused'
-                ? ($data['subscription_paused_until'] ?: null)
-                : null,
-            'currency' => strtoupper($data['subscription_currency']),
-            'notes' => $data['subscription_notes'] ?: null,
-            'monthly_cost_cached' => $monthly,
-            'last_seen_at' => now(),
-        ];
-
-        if ($this->id) {
-            \App\Models\Subscription::findOrFail($this->id)->forceFill($payload)->save();
-        } else {
-            $payload['first_seen_at'] = now();
-            $this->id = \App\Models\Subscription::forceCreate($payload)->id;
-        }
-    }
+    // subscription load/save moved to App\Livewire\Inspector\SubscriptionForm.
 
     // ── Checklist template ──────────────────────────────────────────────
     //
@@ -3748,7 +3669,9 @@ new class extends Component
                 @case('tag_rule')
                     @livewire('inspector.tag-rule-form', ['id' => $id], key('tag-rule-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
                     @break
-                @case('subscription') @include('partials.inspector.forms.subscription') @break
+                @case('subscription')
+                    @livewire('inspector.subscription-form', ['id' => $id], key('subscription-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
+                    @break
                 @case('checklist_template') @include('partials.inspector.forms.checklist_template') @break
                 @case('time_entry')
                     @livewire('inspector.time-entry-form', ['id' => $id], key('time-entry-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
