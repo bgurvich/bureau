@@ -247,7 +247,7 @@ class extends Component
                             @php $day = CarbonImmutable::parse($d); @endphp
                             <th class="px-0.5 py-2 text-center font-normal text-neutral-600 {{ $day->isToday() ? 'text-neutral-200' : '' }}"
                                 title="{{ $day->toFormattedDateString() }}">
-                                <div class="text-[9px] leading-none">{{ $day->format('j') }}</div>
+                                <div class="text-[10px] leading-none">{{ $day->format('j') }}</div>
                             </th>
                         @endforeach
                     </tr>

@@ -52,7 +52,7 @@
                     </button>
                     @if ($loop->first)
                         <span aria-hidden="true"
-                              class="pointer-events-none absolute left-1 top-1 rounded bg-emerald-600/90 px-1 text-[9px] font-medium uppercase tracking-wider text-white">
+                              class="pointer-events-none absolute left-1 top-1 rounded bg-emerald-600/90 px-1 text-[10px] font-medium uppercase tracking-wider text-white">
                             {{ __('cover') }}
                         </span>
                     @endif

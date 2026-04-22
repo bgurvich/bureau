@@ -269,12 +269,12 @@ class extends Component
                                         <button type="button"
                                                 wire:click="$dispatch('inspector-open', {{ json_encode(['type' => $rec['inspector_type'], 'id' => $rec['id']]) }})"
                                                 class="flex items-center gap-1 rounded-md border border-emerald-800/50 bg-emerald-950/30 px-2 py-0.5 text-[11px] text-emerald-100 hover:bg-emerald-950/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
-                                            <span class="rounded bg-emerald-900/60 px-1 py-px text-[9px] uppercase tracking-wider text-emerald-200">{{ $rec['kind'] }}</span>
+                                            <span class="rounded bg-emerald-900/60 px-1 py-px text-[10px] uppercase tracking-wider text-emerald-200">{{ $rec['kind'] }}</span>
                                             <span class="truncate">{{ Str::limit($rec['label'], 40) }}</span>
                                         </button>
                                     @else
                                         <span class="flex items-center gap-1 rounded-md border border-neutral-800 bg-neutral-900/40 px-2 py-0.5 text-[11px] text-neutral-300">
-                                            <span class="rounded bg-neutral-800 px-1 py-px text-[9px] uppercase tracking-wider text-neutral-500">{{ $rec['kind'] }}</span>
+                                            <span class="rounded bg-neutral-800 px-1 py-px text-[10px] uppercase tracking-wider text-neutral-500">{{ $rec['kind'] }}</span>
                                             <span class="truncate">{{ Str::limit($rec['label'], 40) }}</span>
                                         </span>
                                     @endif

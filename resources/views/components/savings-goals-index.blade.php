@@ -131,7 +131,7 @@ new class extends Component
                             <div class="flex items-center gap-2 text-sm font-medium text-neutral-100">
                                 <span>{{ $g->name }}</span>
                                 @if ($g->state !== 'active')
-                                    <span class="rounded bg-neutral-800 px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-neutral-400">{{ $g->state }}</span>
+                                    <span class="rounded bg-neutral-800 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-neutral-400">{{ $g->state }}</span>
                                 @endif
                             </div>
                             <div class="text-[11px] text-neutral-500">

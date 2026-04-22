@@ -139,7 +139,7 @@ class extends Component
                 </div>
             </div>
             <button type="button" wire:click="toggleLocation"
-                    class="shrink-0 rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-[11px] text-neutral-200 hover:bg-neutral-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                    class="shrink-0 rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs text-neutral-200 hover:bg-neutral-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
                 {{ $editLocation ? __('Done') : __('Edit') }}
             </button>
         </div>
@@ -169,7 +169,7 @@ class extends Component
                 </label>
                 @if ($stickyProperty || $stickyRoom || $stickyContainer)
                     <button type="button" wire:click="clearLocation"
-                            class="self-start rounded-md px-2 py-1 text-[11px] text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                            class="self-start rounded-md px-2 py-1 text-xs text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
                         {{ __('Clear location') }}
                     </button>
                 @endif

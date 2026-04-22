@@ -17,6 +17,6 @@
 {{-- Small inline pill indicating state. Used on rows where the primary
      label needs a modifier ("paused", "cancelled", etc.). Pick a state
      from the map above; unknown keys fall back to neutral-muted. --}}
-<span {{ $attributes->class('inline-block rounded px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider '.$styles) }}>
+<span {{ $attributes->class('inline-block rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider '.$styles) }}>
     {{ $slot->isNotEmpty() ? $slot : $state }}
 </span>

@@ -66,7 +66,7 @@
                                 aria-label="{{ $label }} — {{ __('not yet available') }}"
                                 class="flex cursor-not-allowed items-center justify-between rounded-md border border-dashed border-neutral-800 bg-neutral-900/20 px-3 py-2.5 text-left text-sm text-neutral-500">
                             <span>{{ $label }}</span>
-                            <span class="rounded border border-neutral-800 bg-neutral-950 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-neutral-600">{{ __('soon') }}</span>
+                            <span class="rounded border border-neutral-800 bg-neutral-950 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-neutral-600">{{ __('soon') }}</span>
                         </button>
                     @endif
                 @endforeach

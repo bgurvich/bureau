@@ -812,7 +812,7 @@ class extends Component
                                      alt="{{ $m->original_name ?? __('PDF preview') }}"
                                      loading="lazy"
                                      class="h-full w-full object-cover">
-                                <span class="pointer-events-none absolute left-1 bottom-1 rounded bg-neutral-900/80 px-1 text-[9px] font-semibold uppercase tracking-wider text-neutral-300">PDF</span>
+                                <span class="pointer-events-none absolute left-1 bottom-1 rounded bg-neutral-900/80 px-1 text-[10px] font-semibold uppercase tracking-wider text-neutral-300">PDF</span>
                             @else
                                 <div class="flex h-full w-full items-center justify-center">
                                     <div class="text-center">
@@ -826,7 +826,7 @@ class extends Component
                                 </div>
                             @endif
                             @if ($m->ocr_status === 'pending')
-                                <span class="absolute right-1 top-1 rounded bg-amber-900/60 px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-amber-300">OCR</span>
+                                <span class="absolute right-1 top-1 rounded bg-amber-900/60 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-amber-300">OCR</span>
                             @endif
                         </div>
                         <div class="border-t border-neutral-800 px-2 py-1.5">

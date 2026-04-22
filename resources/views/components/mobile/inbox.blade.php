@@ -355,7 +355,7 @@ class extends Component
                     @endif
                     <div class="min-w-0 flex-1">
                         <div class="flex items-baseline gap-2">
-                            <span class="shrink-0 rounded px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider {{ $it['badge_class'] }}">
+                            <span class="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider {{ $it['badge_class'] }}">
                                 {{ $it['kind'] }}
                             </span>
                             <span class="truncate text-sm text-neutral-100">{{ $it['title'] }}</span>

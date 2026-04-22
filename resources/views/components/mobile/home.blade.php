@@ -296,7 +296,7 @@ class extends Component
                     <li>
                         <a href="{{ route($it['route']) }}" class="flex items-baseline justify-between gap-3 px-3 py-2 text-sm hover:bg-neutral-800/40 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-neutral-300">
                             <div class="min-w-0 flex-1">
-                                <span class="mr-2 rounded bg-neutral-800 px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-neutral-400">{{ $it['kind'] }}</span>
+                                <span class="mr-2 rounded bg-neutral-800 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-neutral-400">{{ $it['kind'] }}</span>
                                 <span class="text-neutral-100">{{ $it['title'] }}</span>
                             </div>
                             <span class="shrink-0 text-[11px] tabular-nums text-neutral-500">{{ $it['at']?->format('H:i') ?? '' }}</span>

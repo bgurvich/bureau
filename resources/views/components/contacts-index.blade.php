@@ -442,13 +442,13 @@ class extends Component
                     </p>
                     <form wire:submit="importContactsCsv" class="flex flex-col gap-2">
                         <input type="file" wire:model="importCsv" accept=".csv,text/csv"
-                               class="block w-full text-[11px] text-neutral-300 file:mr-2 file:rounded file:border-0 file:bg-neutral-800 file:px-2 file:py-1 file:text-[11px] file:text-neutral-200">
+                               class="block w-full text-xs text-neutral-300 file:mr-2 file:rounded file:border-0 file:bg-neutral-800 file:px-2 file:py-1 file:text-xs file:text-neutral-200">
                         @error('importCsv')<span role="alert" class="text-rose-300">{{ $message }}</span>@enderror
                         <div class="flex items-center gap-2">
                             <button type="submit"
                                     wire:loading.attr="disabled"
                                     @disabled(! $importCsv)
-                                    class="rounded bg-emerald-600 px-2 py-1 text-[11px] font-medium text-emerald-50 hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50">
+                                    class="rounded bg-emerald-600 px-2 py-1 text-xs font-medium text-emerald-50 hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50">
                                 <span wire:loading.remove wire:target="importContactsCsv">{{ __('Import') }}</span>
                                 <span wire:loading wire:target="importContactsCsv">{{ __('Importing…') }}</span>
                             </button>

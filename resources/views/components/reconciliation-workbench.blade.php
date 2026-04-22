@@ -793,7 +793,7 @@ class extends Component
                                                aria-label="{{ __('Description') }}"
                                                class="w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-xs text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
                                     </td>
-                                    <td class="px-2 py-1 text-[11px]">
+                                    <td class="px-2 py-1 text-xs">
                                         <x-ui.searchable-select
                                             id="rec-cp-{{ $t->id }}"
                                             model="edit.counterparty_contact_id"
@@ -803,7 +803,7 @@ class extends Component
                                             create-method="createCounterpartyForRow"
                                             edit-inspector-type="contact" />
                                     </td>
-                                    <td class="px-2 py-1 text-[11px]">
+                                    <td class="px-2 py-1 text-xs">
                                         <x-ui.searchable-select
                                             id="rec-cat-{{ $t->id }}"
                                             model="edit.category_id"
@@ -830,7 +830,7 @@ class extends Component
                                                    type="text"
                                                    placeholder="{{ __('match pattern (optional)') }}"
                                                    aria-label="{{ __('Match pattern') }}"
-                                                   class="w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1 font-mono text-[11px] text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                                                   class="w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1 font-mono text-xs text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
                                             <div class="inline-flex items-center justify-end gap-1">
                                                 <button type="button" wire:click.stop="saveRow"
                                                         class="rounded bg-emerald-600 px-2 py-0.5 text-[10px] font-medium text-emerald-50 hover:bg-emerald-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">

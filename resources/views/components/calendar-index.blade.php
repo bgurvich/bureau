@@ -424,14 +424,14 @@ class extends Component
                                                     wire:click="$dispatch('inspector-open', {{ json_encode(['type' => $e['type'], 'id' => $e['id']]) }})"
                                                     class="flex w-full items-center gap-1 overflow-hidden rounded border px-1 py-0.5 text-left text-[10px] leading-tight transition hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300 {{ $e['class'] }}">
                                                 @if ($e['time'])
-                                                    <span class="shrink-0 font-mono text-[9px] opacity-70">{{ $e['time'] }}</span>
+                                                    <span class="shrink-0 font-mono text-[10px] opacity-70">{{ $e['time'] }}</span>
                                                 @endif
                                                 <span class="truncate">{{ $e['title'] }}</span>
                                             </button>
                                         @else
                                             <span class="flex items-center gap-1 overflow-hidden rounded border px-1 py-0.5 text-[10px] leading-tight {{ $e['class'] }}">
                                                 @if ($e['time'])
-                                                    <span class="shrink-0 font-mono text-[9px] opacity-70">{{ $e['time'] }}</span>
+                                                    <span class="shrink-0 font-mono text-[10px] opacity-70">{{ $e['time'] }}</span>
                                                 @endif
                                                 <span class="truncate">{{ $e['title'] }}</span>
                                             </span>
