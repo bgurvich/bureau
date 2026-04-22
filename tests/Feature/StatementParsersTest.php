@@ -466,18 +466,51 @@ it('Citi checking CSV parser populates sign from debit/credit', function () {
         ->and($amounts)->toContain(500.00);
 });
 
-it('Citi credit CSV parser requires Status column', function () {
+it('Citi credit CSV parser recognizes its own Status-column export', function () {
     $content = [
         'headers' => ['Status', 'Date', 'Description', 'Debit', 'Credit'],
         'rows' => [
             ['Status' => 'Cleared', 'Date' => '03/05/2026', 'Description' => 'COFFEE', 'Debit' => '4.50', 'Credit' => ''],
+            ['Status' => 'Cleared', 'Date' => '03/10/2026', 'Description' => 'REFUND', 'Debit' => '', 'Credit' => '25.00'],
         ],
     ];
 
     $parser = new CitiCreditCsvParser;
     expect($parser->fingerprint($content))->toBeTrue();
     $stmt = $parser->parse($content);
-    expect($stmt->transactions[0]->amount)->toBe(-4.50);
+    expect($stmt->transactions[0]->amount)->toBe(-4.50)
+        ->and($stmt->transactions[1]->amount)->toBe(25.00);
+});
+
+it('Citi credit CSV parser recognizes the Costco Anywhere Visa variant (Category column, negative Credit)', function () {
+    // Costco's "Year to date" / "Annual Account Summary" shape: Category
+    // column instead of Status, and Credit values come through negative.
+    $content = [
+        'headers' => ['Date', 'Description', 'Debit', 'Credit', 'Category'],
+        'rows' => [
+            ['Date' => 'Jul 16, 2025', 'Description' => 'DOLLAR RAC 180-08005252 TN', 'Debit' => '312.39', 'Credit' => '', 'Category' => 'Auto Rental'],
+            ['Date' => 'Jul 03, 2025', 'Description' => 'MED*PROVIDENCE HLTH SRVC RENTON WA', 'Debit' => '', 'Credit' => '-10', 'Category' => 'Health Care'],
+        ],
+    ];
+
+    $parser = new CitiCreditCsvParser;
+    expect($parser->fingerprint($content))->toBeTrue();
+    $stmt = $parser->parse($content);
+    expect(count($stmt->transactions))->toBe(2)
+        ->and($stmt->transactions[0]->amount)->toBe(-312.39)
+        ->and($stmt->transactions[1]->amount)->toBe(10.0); // abs() of -10, sign flipped for credit-card refund.
+});
+
+it('Citi credit CSV parser rejects 4-column CSVs that have neither Status nor Category', function () {
+    // Guardrail against swallowing arbitrary Date/Description/Debit/Credit
+    // exports from unrelated institutions.
+    $content = [
+        'headers' => ['Date', 'Description', 'Debit', 'Credit'],
+        'rows' => [],
+    ];
+
+    $parser = new CitiCreditCsvParser;
+    expect($parser->fingerprint($content))->toBeFalse();
 });
 
 it('Amex checking CSV parser requires Balance but not Category', function () {

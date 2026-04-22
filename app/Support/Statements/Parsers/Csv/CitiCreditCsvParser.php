@@ -5,10 +5,24 @@ namespace App\Support\Statements\Parsers\Csv;
 use App\Support\Statements\ParsedTransaction;
 
 /**
- * Citi credit card CSV. Header signature: Status, Date, Description,
- * Debit, Credit. The Status column distinguishes this from Citi checking.
- * Citi emits Debit = charge (positive), Credit = payment/refund (positive);
- * Bureau stores charges negative, payments positive.
+ * Citi-issued credit card CSV — covers both the vanilla Citi export
+ * (Status, Date, Description, Debit, Credit) and the Costco Anywhere
+ * Visa "Annual Account Summary" / "Year to date" export, which is also
+ * Citi-issued and shares the same columns plus a Category field in
+ * place of Status. Both use Citi's Debit/Credit sign convention:
+ *
+ *   - Debit column carries a positive dollar value for a charge.
+ *   - Credit column carries the refund/payment amount — positive on
+ *     the vanilla Citi export, sometimes negative on the Costco export
+ *     (it encodes the sign of the balance delta rather than the
+ *     absolute refund amount). abs() normalizes either shape.
+ *
+ * Bureau's credit-card convention is charges negative / refunds-and-
+ * payments positive, which is what we emit.
+ *
+ * The Category column (Costco-only) is dropped — Bureau runs its own
+ * category rules against transaction.description and Costco's taxonomy
+ * doesn't map cleanly onto household categories.
  */
 final class CitiCreditCsvParser extends AbstractCsvStatementParser
 {
@@ -28,9 +42,15 @@ final class CitiCreditCsvParser extends AbstractCsvStatementParser
             return false;
         }
         $headers = $content['headers'] ?? [];
+        if (! $this->headersMatch($headers, ['Date', 'Description', 'Debit', 'Credit'])) {
+            return false;
+        }
 
-        return $this->headersMatch($headers, ['Status', 'Date', 'Description'])
-            && $this->headersMatch($headers, ['Debit', 'Credit']);
+        // Citi's own export has Status; Costco's has Category. One of the
+        // two must be present so we don't swallow arbitrary 4-column
+        // Date/Description/Debit/Credit CSVs that aren't Citi-issued.
+        return $this->headersMatch($headers, ['Status'])
+            || $this->headersMatch($headers, ['Category']);
     }
 
     protected function mapRow(array $row): ?ParsedTransaction
@@ -43,8 +63,8 @@ final class CitiCreditCsvParser extends AbstractCsvStatementParser
         $credit = $this->money($this->cell($row, ['Credit']));
 
         $amount = match (true) {
-            $credit !== null && $credit > 0 => $credit,
-            $debit !== null && $debit > 0 => -$debit,
+            $debit !== null && $debit !== 0.0 => -abs($debit),
+            $credit !== null && $credit !== 0.0 => abs($credit),
             default => null,
         };
         if ($amount === null) {

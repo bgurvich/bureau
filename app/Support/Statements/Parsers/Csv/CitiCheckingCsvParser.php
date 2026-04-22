@@ -6,7 +6,13 @@ use App\Support\Statements\ParsedTransaction;
 
 /**
  * Citi checking/savings CSV. Header signature: Date, Description, Debit,
- * Credit, (Balance). Sign determined by which column is populated.
+ * Credit, Balance. Sign determined by which column is populated.
+ *
+ * Requires `Balance` because the 4-column Date/Description/Debit/Credit
+ * subset is shared by Citi Credit (which adds Status) and the Costco
+ * Anywhere Visa variant (which adds Category). Without the Balance
+ * anchor this parser would win the fingerprint race on credit-card
+ * exports and sign-flip them incorrectly.
  */
 final class CitiCheckingCsvParser extends AbstractCsvStatementParser
 {
@@ -26,7 +32,7 @@ final class CitiCheckingCsvParser extends AbstractCsvStatementParser
             return false;
         }
 
-        return $this->headersMatch($content['headers'] ?? [], ['Date', 'Description', 'Debit', 'Credit']);
+        return $this->headersMatch($content['headers'] ?? [], ['Date', 'Description', 'Debit', 'Credit', 'Balance']);
     }
 
     protected function mapRow(array $row): ?ParsedTransaction
