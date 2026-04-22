@@ -290,7 +290,7 @@ class extends Component
     #[Computed]
     public function categoryOptions(): \Illuminate\Database\Eloquent\Collection
     {
-        return Category::orderBy('name')->get(['id', 'name']);
+        return Category::with('parent:id,name')->orderBy('name')->get(['id', 'name', 'kind', 'parent_id']);
     }
 
     /** @return \Illuminate\Database\Eloquent\Collection<int, \App\Models\Contact> */
@@ -645,7 +645,7 @@ class extends Component
                     <x-ui.searchable-select
                         id="btx-category"
                         model="bulkCategoryId"
-                        :options="['' => '— ' . __('unchanged') . ' —'] + $this->categoryOptions->mapWithKeys(fn ($c) => [$c->id => $c->name])->all()"
+                        :options="['' => '— ' . __('unchanged') . ' —'] + $this->categoryOptions->mapWithKeys(fn ($c) => [$c->id => $c->displayLabel()])->all()"
                         placeholder="—" />
                 </div>
 

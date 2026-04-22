@@ -363,7 +363,12 @@ class extends Component
     #[Computed]
     public function categoryOptions(): array
     {
-        return Category::query()->orderBy('name')->pluck('name', 'id')->all();
+        return Category::query()
+            ->with('parent:id,name')
+            ->orderBy('name')
+            ->get(['id', 'name', 'kind', 'parent_id'])
+            ->mapWithKeys(fn (Category $c) => [$c->id => $c->displayLabel()])
+            ->all();
     }
 
     /**

@@ -1408,7 +1408,11 @@ new class extends Component
     #[Computed]
     public function categoryPickerOptions(): array
     {
-        return \App\Models\Category::orderBy('name')->pluck('name', 'id')->all();
+        return \App\Models\Category::with('parent:id,name')
+            ->orderBy('name')
+            ->get(['id', 'name', 'kind', 'parent_id'])
+            ->mapWithKeys(fn (\App\Models\Category $c) => [$c->id => $c->displayLabel()])
+            ->all();
     }
 
     /**
@@ -1486,7 +1490,7 @@ new class extends Component
         // the inline create. If the client didn't pass a model (older
         // bundles), fall back to notifying every known category picker so
         // at least one of them updates.
-        $label = ucfirst($category->kind).' · '.$category->name;
+        $label = $category->displayLabel(includeKind: true);
         $targets = $modelKey && property_exists($this, $modelKey)
             ? [$modelKey]
             : ['category_id'];
@@ -3269,7 +3273,10 @@ new class extends Component
     #[Computed]
     public function categories()
     {
-        return Category::orderBy('kind')->orderBy('name')->get(['id', 'name', 'kind', 'slug']);
+        return Category::with('parent:id,name')
+            ->orderBy('kind')
+            ->orderBy('name')
+            ->get(['id', 'name', 'kind', 'slug', 'parent_id']);
     }
 
     #[Computed]

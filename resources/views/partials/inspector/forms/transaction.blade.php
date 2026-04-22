@@ -54,7 +54,7 @@
             <x-ui.searchable-select
                 id="i-txn-cat"
                 model="category_id"
-                :options="['' => '—'] + $this->categories->mapWithKeys(fn ($c) => [$c->id => ucfirst($c->kind).' · '.$c->name])->all()"
+                :options="['' => '—'] + $this->categories->mapWithKeys(fn ($c) => [$c->id => $c->displayLabel(includeKind: true)])->all()"
                 :allow-create="true"
                 create-method="createCategoryInline"
                 placeholder="—" />

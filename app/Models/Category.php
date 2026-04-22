@@ -30,4 +30,26 @@ class Category extends Model
     {
         return $this->hasMany(Transaction::class);
     }
+
+    /**
+     * Disambiguated picker label that includes the parent segment when
+     * present, so hierarchical siblings like `pets/grooming` and
+     * `personal/grooming` don't both render as plain "Grooming". Kind
+     * prefix is optional — on contexts where every visible category is
+     * the same kind (tag-rule picker, etc.) the kind adds noise.
+     */
+    public function displayLabel(bool $includeKind = false): string
+    {
+        $parts = [];
+        if ($includeKind && is_string($this->kind) && $this->kind !== '') {
+            $parts[] = ucfirst($this->kind);
+        }
+        $parent = $this->parent?->name;
+        if (is_string($parent) && $parent !== '') {
+            $parts[] = $parent;
+        }
+        $parts[] = (string) $this->name;
+
+        return implode(' · ', $parts);
+    }
 }

@@ -20,7 +20,11 @@ trait WithCategoryPicker
     #[Computed]
     public function categoryPickerOptions(): array
     {
-        return Category::orderBy('name')->pluck('name', 'id')->all();
+        return Category::with('parent:id,name')
+            ->orderBy('name')
+            ->get(['id', 'name', 'kind', 'parent_id'])
+            ->mapWithKeys(fn (Category $c) => [$c->id => $c->displayLabel()])
+            ->all();
     }
 
     public function createCategoryInline(string $name, ?string $modelKey = null): void
@@ -43,8 +47,7 @@ trait WithCategoryPicker
 
         unset($this->categoryPickerOptions);
 
-        $label = ucfirst($category->kind).' · '.$category->name;
-        $this->dispatch('ss-option-added', model: $modelKey ?: $this->defaultCategoryPickerModel(), id: $category->id, label: $label);
+        $this->dispatch('ss-option-added', model: $modelKey ?: $this->defaultCategoryPickerModel(), id: $category->id, label: $category->displayLabel());
     }
 
     protected function defaultCategoryPickerModel(): string

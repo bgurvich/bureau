@@ -1511,7 +1511,10 @@ class extends Component
     #[Computed]
     public function categories(): Collection
     {
-        return Category::orderBy('kind')->orderBy('name')->get(['id', 'name', 'kind', 'slug']);
+        return Category::with('parent:id,name')
+            ->orderBy('kind')
+            ->orderBy('name')
+            ->get(['id', 'name', 'kind', 'slug', 'parent_id']);
     }
 };
 ?>
@@ -1799,7 +1802,7 @@ class extends Component
                                                             class="rounded-md border border-neutral-700 bg-neutral-950 px-2 py-1 text-sm text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
                                                         <option value="">{{ __('— map to existing —') }}</option>
                                                         @foreach ($this->categories as $c)
-                                                            <option value="{{ $c->id }}">{{ ucfirst($c->kind) }} · {{ $c->name }}</option>
+                                                            <option value="{{ $c->id }}">{{ $c->displayLabel(includeKind: true) }}</option>
                                                         @endforeach
                                                     </select>
                                                     <button type="button"
