@@ -46,6 +46,29 @@ it('createCategoryFromHint suffixes the slug when a clash exists', function () {
     expect($c->slug)->toBe('auto-rental-1');
 });
 
+it('createCategoryFromHint accepts a custom display name while seeding the source label as pattern', function () {
+    authedInHousehold();
+
+    Livewire::test('statements-import')
+        ->call('createCategoryFromHint', 'dummy-file-id', 'Merchandise', 'Shopping');
+
+    $shopping = Category::firstWhere('name', 'Shopping');
+    expect($shopping)->not->toBeNull()
+        ->and($shopping->slug)->toBe('shopping')
+        ->and($shopping->match_patterns)->toBe('Merchandise');
+});
+
+it('createCategoryFromHint falls back to the hint label when the name parameter is blank', function () {
+    authedInHousehold();
+
+    Livewire::test('statements-import')
+        ->call('createCategoryFromHint', 'dummy-file-id', 'Health Care', '   ');
+
+    $c = Category::firstWhere('name', 'Health Care');
+    expect($c)->not->toBeNull()
+        ->and($c->match_patterns)->toBe('Health Care');
+});
+
 it('unmapCategoryHint removes the matching pattern and leaves other patterns intact', function () {
     authedInHousehold();
     $shopping = Category::create([

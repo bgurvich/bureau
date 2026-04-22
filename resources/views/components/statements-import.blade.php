@@ -1261,6 +1261,121 @@ class extends Component
     }
 
     /**
+     * Resolve the Category each row will land on by mirroring the
+     * import cascade without touching the DB:
+     *
+     *   1. counterparty.category_id (the row's Contact's default)
+     *   2. first CategoryRule whose pattern matches the description
+     *   3. first Category whose match_patterns hit the source label
+     *
+     * First hit wins — same order as TransactionObserver + our own
+     * fallback in the importer. Returns per-row `[category_id,
+     * category_name, source]`, with `source` in `contact | rule |
+     * hint` so the UI can render a provenance icon.
+     *
+     * Built once per file and memo'd on the call path so the per-row
+     * render doesn't re-read CategoryRule / match_patterns / Contact
+     * for each row.
+     *
+     * @return array<int, array{category_id: int, category_name: string, source: string}>
+     */
+    public function categoryResolutionForFile(string $fileId): array
+    {
+        $rows = (array) ($this->parsed[$fileId]['rows'] ?? []);
+        if ($rows === []) {
+            return [];
+        }
+
+        $vendorPreview = $this->vendorPreviewForFile($fileId);
+        $vendorPatternList = VendorReresolver::patternList();
+        $contactCategories = Contact::query()
+            ->whereNotNull('category_id')
+            ->pluck('category_id', 'id');
+
+        $hintPatternList = CategorySourceMatcher::patternList();
+
+        $rules = \App\Models\CategoryRule::query()
+            ->where('active', true)
+            ->orderBy('priority')
+            ->orderBy('id')
+            ->get(['id', 'pattern_type', 'pattern', 'category_id']);
+
+        $nameLookup = Category::query()->pluck('name', 'id');
+
+        $out = [];
+        foreach ($rows as $i => $row) {
+            $catId = null;
+            $source = null;
+
+            // 1 — contact default. Use the preview logic to figure out
+            // which contact this row will land on. For rows with an
+            // explicit counterparty_id_override we trust the override.
+            $contactId = $row['counterparty_id_override'] ?? null;
+            if (! $contactId) {
+                $descLower = mb_strtolower((string) ($row['description'] ?? ''));
+                $hit = VendorReresolver::firstPatternMatch($descLower, $vendorPatternList);
+                if ($hit !== null) {
+                    $contactId = $hit;
+                }
+            }
+            if ($contactId && isset($contactCategories[(int) $contactId])) {
+                $catId = (int) $contactCategories[(int) $contactId];
+                $source = 'contact';
+            }
+
+            // 2 — description rule.
+            if ($catId === null) {
+                $desc = (string) ($row['description'] ?? '');
+                foreach ($rules as $rule) {
+                    if (self::categoryRuleMatches((string) $rule->pattern_type, (string) $rule->pattern, $desc)) {
+                        $catId = (int) $rule->category_id;
+                        $source = 'rule';
+                        break;
+                    }
+                }
+            }
+
+            // 3 — hint fallback.
+            if ($catId === null) {
+                $label = trim((string) ($row['category_hint'] ?? ''));
+                if ($label !== '') {
+                    $hinted = CategorySourceMatcher::match($label, $hintPatternList);
+                    if ($hinted !== null) {
+                        $catId = $hinted;
+                        $source = 'hint';
+                    }
+                }
+            }
+
+            if ($catId !== null) {
+                $out[$i] = [
+                    'category_id' => $catId,
+                    'category_name' => (string) ($nameLookup[$catId] ?? ''),
+                    'source' => (string) $source,
+                ];
+            }
+        }
+
+        return $out;
+    }
+
+    /** Local copy of CategoryRuleMatcher::matches — keeps the preview
+     *  path decoupled from the observer's internals. */
+    private static function categoryRuleMatches(string $patternType, string $pattern, string $haystack): bool
+    {
+        if ($pattern === '' || $haystack === '') {
+            return false;
+        }
+        if ($patternType === 'regex') {
+            $delimited = '/'.str_replace('/', '\\/', $pattern).'/i';
+
+            return @preg_match($delimited, $haystack) === 1;
+        }
+
+        return mb_stripos($haystack, $pattern) !== false;
+    }
+
+    /**
      * Reverse of mapCategoryHint — strip the pattern that's currently
      * claiming this source label so it goes back to being unmapped.
      * Walks the matcher to find which (category, pattern) pair fires
@@ -1293,24 +1408,33 @@ class extends Component
     }
 
     /**
-     * Create a new household category with the source label both as its
-     * display name and as its first match pattern, so future imports
-     * auto-map. Used when the user decides no existing category fits.
+     * Create a new household expense category that future imports will
+     * auto-map this label to. `$name` is what the user actually wants
+     * to call the category (they may want "Shopping" even though the
+     * statement says "Merchandise"); when omitted or empty, the raw
+     * source label is used. The source label is always seeded into
+     * match_patterns so the mapping sticks regardless of the chosen
+     * display name.
      */
-    public function createCategoryFromHint(string $fileId, string $label): void
+    public function createCategoryFromHint(string $fileId, string $label, ?string $name = null): void
     {
         $label = trim($label);
         if ($label === '') {
             return;
         }
-        $slug = \Illuminate\Support\Str::slug($label) ?: 'cat-'.bin2hex(random_bytes(3));
+        $displayName = trim((string) $name);
+        if ($displayName === '') {
+            $displayName = $label;
+        }
+
+        $slug = \Illuminate\Support\Str::slug($displayName) ?: 'cat-'.bin2hex(random_bytes(3));
         $base = $slug;
         $suffix = 0;
         while (Category::where('slug', $suffix ? "{$base}-{$suffix}" : $base)->exists()) {
             $suffix++;
         }
         Category::create([
-            'name' => $label,
+            'name' => $displayName,
             'slug' => $suffix ? "{$base}-{$suffix}" : $base,
             'kind' => 'expense',
             'match_patterns' => $label,
@@ -1839,18 +1963,92 @@ class extends Component
                                                         </button>
                                                     </span>
                                                 @else
-                                                    <select x-on:change="if ($event.target.value) $wire.mapCategoryHint(@js($fileId), @js($hint['label']), parseInt($event.target.value, 10))"
-                                                            class="rounded-md border border-neutral-700 bg-neutral-950 px-2 py-1 text-sm text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
-                                                        <option value="">{{ __('— map to existing —') }}</option>
-                                                        @foreach ($this->categories as $c)
-                                                            <option value="{{ $c->id }}">{{ $c->displayLabel(includeKind: true) }}</option>
-                                                        @endforeach
-                                                    </select>
-                                                    <button type="button"
-                                                            wire:click="createCategoryFromHint('{{ $fileId }}', @js($hint['label']))"
-                                                            class="rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-sm text-neutral-300 hover:border-neutral-600 hover:bg-neutral-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
-                                                        {{ __('Create new') }}
-                                                    </button>
+                                                    {{-- Searchable + addable combobox. Typing filters the
+                                                         household categories; picking one calls
+                                                         mapCategoryHint so the hint auto-maps next time.
+                                                         If the typed text doesn't match anything, a
+                                                         "+ Create" row appears that spawns a new category
+                                                         using the typed name (falls back to the raw hint
+                                                         label when the search box is empty) and seeds
+                                                         that category's match_patterns with the original
+                                                         source label so future imports hit it. --}}
+                                                    <div x-data="{
+                                                            q: '',
+                                                            open: false,
+                                                            active: 0,
+                                                            options: @js($this->categories->map(fn ($c) => ['id' => $c->id, 'label' => $c->displayLabel(includeKind: true)])->values()->all()),
+                                                            get filtered() {
+                                                                const needle = this.q.trim().toLowerCase();
+                                                                if (needle === '') return this.options;
+                                                                return this.options.filter(o => o.label.toLowerCase().includes(needle));
+                                                            },
+                                                            get canCreate() {
+                                                                const needle = this.q.trim().toLowerCase();
+                                                                if (needle === '') return false;
+                                                                return ! this.options.some(o => o.label.toLowerCase() === needle);
+                                                            },
+                                                            pick(id) {
+                                                                this.$wire.mapCategoryHint(@js($fileId), @js($hint['label']), id);
+                                                                this.open = false;
+                                                                this.q = '';
+                                                            },
+                                                            createNew() {
+                                                                const typed = this.q.trim();
+                                                                this.$wire.createCategoryFromHint(@js($fileId), @js($hint['label']), typed);
+                                                                this.open = false;
+                                                                this.q = '';
+                                                            },
+                                                            activate() {
+                                                                if (this.active < this.filtered.length) {
+                                                                    this.pick(this.filtered[this.active].id);
+                                                                } else if (this.canCreate) {
+                                                                    this.createNew();
+                                                                }
+                                                            },
+                                                            move(delta) {
+                                                                const total = this.filtered.length + (this.canCreate ? 1 : 0);
+                                                                if (total === 0) return;
+                                                                this.active = (this.active + delta + total) % total;
+                                                            },
+                                                         }"
+                                                         class="relative"
+                                                         x-on:click.outside="open = false">
+                                                        <input type="text"
+                                                               x-model="q"
+                                                               x-on:focus="open = true; active = 0"
+                                                               x-on:keydown.arrow-down.prevent="open = true; move(1)"
+                                                               x-on:keydown.arrow-up.prevent="move(-1)"
+                                                               x-on:keydown.enter.prevent="activate()"
+                                                               x-on:keydown.escape.prevent="open = false"
+                                                               placeholder="{{ __('Map or type to create…') }}"
+                                                               class="w-56 rounded-md border border-neutral-700 bg-neutral-950 px-2 py-1 text-sm text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                                                        <div x-show="open"
+                                                             x-cloak
+                                                             x-transition.opacity.duration.75ms
+                                                             class="absolute left-0 z-20 mt-1 w-72 overflow-hidden rounded-md border border-neutral-700 bg-neutral-900 shadow-xl">
+                                                            <ul class="max-h-56 overflow-y-auto py-1" role="listbox">
+                                                                <template x-for="(row, idx) in filtered" :key="row.id">
+                                                                    <li role="option"
+                                                                        x-on:click="pick(row.id)"
+                                                                        x-on:mouseenter="active = idx"
+                                                                        :class="active === idx ? 'bg-neutral-800' : ''"
+                                                                        class="cursor-pointer px-3 py-1.5 text-sm text-neutral-200">
+                                                                        <span x-text="row.label"></span>
+                                                                    </li>
+                                                                </template>
+                                                                <li x-show="canCreate"
+                                                                    x-on:click="createNew()"
+                                                                    x-on:mouseenter="active = filtered.length"
+                                                                    :class="active === filtered.length ? 'bg-neutral-800' : ''"
+                                                                    class="cursor-pointer border-t border-neutral-800 px-3 py-1.5 text-sm text-emerald-300">
+                                                                    <span x-text="'+ {{ __('Create') }} \'' + q.trim() + '\''"></span>
+                                                                </li>
+                                                                <li x-show="filtered.length === 0 && ! canCreate" class="px-3 py-2 text-xs text-neutral-500">
+                                                                    {{ __('No matches.') }}
+                                                                </li>
+                                                            </ul>
+                                                        </div>
+                                                    </div>
                                                 @endif
                                             </li>
                                         @endforeach
@@ -1860,6 +2058,7 @@ class extends Component
 
                             @php($vendorPreview = $this->vendorPreviewForFile($fileId))
                             @php($hintByLabel = collect($categoryHints)->keyBy('label'))
+                            @php($categoryResolution = $this->categoryResolutionForFile($fileId))
                             <div class="overflow-x-auto rounded-md border border-neutral-800 bg-neutral-950/60">
                                 <table class="w-full text-xs">
                                     <thead class="text-neutral-500">
@@ -1956,20 +2155,32 @@ class extends Component
                                                 @else
                                                     <td class="px-2 py-1 text-neutral-100">
                                                         {{ $row['description'] }}
+                                                        @php($resolved = $categoryResolution[$i] ?? null)
                                                         @php($rowHint = trim((string) ($row['category_hint'] ?? '')))
-                                                        @if ($rowHint !== '')
-                                                            @php($hintInfo = $hintByLabel->get($rowHint))
-                                                            @if ($hintInfo && $hintInfo['status'] === 'mapped')
-                                                                <span class="ml-2 rounded bg-emerald-900/30 px-1.5 py-0.5 text-[11px] text-emerald-300"
-                                                                      title="{{ __('Hint “:h” will map to :c', ['h' => $rowHint, 'c' => $hintInfo['category_name']]) }}">
-                                                                    → {{ $hintInfo['category_name'] }}
-                                                                </span>
-                                                            @else
-                                                                <span class="ml-2 rounded bg-neutral-800 px-1.5 py-0.5 text-[11px] text-neutral-400"
-                                                                      title="{{ __('Statement category hint — unmapped; use the Category hints panel to seed a pattern.') }}">
-                                                                    {{ $rowHint }}
-                                                                </span>
-                                                            @endif
+                                                        @if ($resolved)
+                                                            {{-- Final category the transaction will land on.
+                                                                 Source badge disambiguates how it was picked so
+                                                                 the user can tell "this came from a contact
+                                                                 default" vs "this came from the Costco hint". --}}
+                                                            @php($sourceLabel = match ($resolved['source']) {
+                                                                'contact' => __('via contact'),
+                                                                'rule' => __('via rule'),
+                                                                'hint' => __('via hint “:h”', ['h' => $rowHint ?: '?']),
+                                                                default => '',
+                                                            })
+                                                            <span class="ml-2 inline-flex items-baseline gap-1 rounded bg-emerald-900/30 px-1.5 py-0.5 text-xs text-emerald-300"
+                                                                  title="{{ $sourceLabel }}">
+                                                                <span>→ {{ $resolved['category_name'] }}</span>
+                                                                <span class="text-[10px] uppercase tracking-wider text-emerald-400/70">{{ $resolved['source'] }}</span>
+                                                            </span>
+                                                        @elseif ($rowHint !== '')
+                                                            {{-- No resolution happened — most commonly because
+                                                                 the hint is unmapped. Surface the raw label
+                                                                 so the Category-hints panel is easy to act on. --}}
+                                                            <span class="ml-2 rounded bg-neutral-800 px-1.5 py-0.5 text-xs text-neutral-400"
+                                                                  title="{{ __('Statement category hint — unmapped; use the Category hints panel to seed a pattern.') }}">
+                                                                {{ $rowHint }}
+                                                            </span>
                                                         @endif
                                                     </td>
                                                     <td class="px-2 py-1">
