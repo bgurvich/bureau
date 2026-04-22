@@ -139,6 +139,41 @@ it('portal-grants-manager issues a grant and exposes the one-time URL', function
         ->and(PortalGrant::first()->grantee_email)->toBe('cpa@firm.com');
 });
 
+it('portal-grants-manager previewAsCpa creates a preview grant + dispatches open event', function () {
+    authedInHousehold();
+
+    Livewire::test('portal-grants-manager')
+        ->call('previewAsCpa')
+        ->assertDispatched('open-portal-preview');
+
+    expect(PortalGrant::count())->toBe(1);
+    $grant = PortalGrant::first();
+    expect((bool) $grant->is_preview)->toBeTrue()
+        ->and($grant->label)->toBe(__('Owner preview'))
+        ->and($grant->expires_at->greaterThan(now()))->toBeTrue()
+        ->and($grant->expires_at->lessThanOrEqualTo(now()->addHour()))->toBeTrue();
+});
+
+it('portal-grants-manager list hides preview grants', function () {
+    $user = authedInHousehold();
+
+    PortalGrant::issue(
+        householdId: (int) $user->defaultHousehold->id,
+        expiresAt: CarbonImmutable::now()->addDays(30),
+        label: 'Real CPA grant',
+    );
+    PortalGrant::issue(
+        householdId: (int) $user->defaultHousehold->id,
+        expiresAt: CarbonImmutable::now()->addHour(),
+        label: 'Owner preview',
+        isPreview: true,
+    );
+
+    $labels = Livewire::test('portal-grants-manager')
+        ->instance()->grants->pluck('label')->all();
+    expect($labels)->toBe(['Real CPA grant']);
+});
+
 it('portal-grants-manager revoke flips a grant revoked_at', function () {
     $user = authedInHousehold();
     [$grant] = PortalGrant::issue(

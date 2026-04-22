@@ -32,7 +32,11 @@ new class extends Component
     #[Computed]
     public function grants(): Collection
     {
+        // Preview grants are owner-only scratch rows — hide them so the
+        // visible roster stays about real CPA access. Expired ones fall
+        // off after their TTL and can be swept by a future cron.
         return PortalGrant::query()
+            ->where('is_preview', false)
             ->orderByRaw('revoked_at IS NULL DESC')
             ->orderByDesc('expires_at')
             ->limit(25)
@@ -69,6 +73,33 @@ new class extends Component
         }
     }
 
+    /**
+     * Owner-only preview — issues a short-lived (1 hour) grant flagged
+     * `is_preview` and dispatches a browser event carrying the one-time
+     * URL. Alpine opens that URL in a new tab so the owner's main
+     * session stays logged in (the portal session regenerates the tab's
+     * session id on consume, which would log the owner out if it ran in
+     * the same window).
+     */
+    public function previewAsCpa(): void
+    {
+        $household = CurrentHousehold::get();
+        $user = auth()->user();
+        if (! $household || ! $user) {
+            return;
+        }
+
+        [, $raw] = PortalGrant::issue(
+            householdId: (int) $household->id,
+            expiresAt: CarbonImmutable::now()->addHour(),
+            granteeEmail: $user->email,
+            label: __('Owner preview'),
+            isPreview: true,
+        );
+
+        $this->dispatch('open-portal-preview', url: route('portal.consume', ['token' => $raw]));
+    }
+
     public function dismissOneTimeUrl(): void
     {
         $this->oneTimeUrl = null;
@@ -76,12 +107,27 @@ new class extends Component
 };
 ?>
 
-<section aria-labelledby="portal-heading" class="rounded-xl border border-neutral-800 bg-neutral-900/40 p-5">
-    <header class="mb-3">
-        <h2 id="portal-heading" class="text-sm font-semibold text-neutral-100">{{ __('Bookkeeper portal') }}</h2>
-        <p class="mt-1 text-xs text-neutral-500">
-            {{ __('Time-boxed read-only access to this household\'s fiscal data for an external CPA or bookkeeper. Share the one-time URL out-of-band (email, Signal). Revoke at any time; grants auto-expire.') }}
-        </p>
+<section aria-labelledby="portal-heading"
+         x-data
+         {{-- Livewire dispatches `open-portal-preview { url }` after it
+              stamps the short-lived preview grant. Opening in a new
+              window keeps the owner's main session alive (the portal
+              consume route regenerates the tab's session id). --}}
+         @open-portal-preview.window="window.open($event.detail.url ?? $event.detail[0]?.url, '_blank', 'noopener')"
+         class="rounded-xl border border-neutral-800 bg-neutral-900/40 p-5">
+    <header class="mb-3 flex items-start justify-between gap-4">
+        <div>
+            <h2 id="portal-heading" class="text-sm font-semibold text-neutral-100">{{ __('Bookkeeper portal') }}</h2>
+            <p class="mt-1 text-xs text-neutral-500">
+                {{ __('Time-boxed read-only access to this household\'s fiscal data for an external CPA or bookkeeper. Share the one-time URL out-of-band (email, Signal). Revoke at any time; grants auto-expire.') }}
+            </p>
+        </div>
+        <button type="button"
+                wire:click="previewAsCpa"
+                title="{{ __('Opens a short-lived one-hour preview grant in a new tab so you can see exactly what the CPA sees. Your main session stays signed in.') }}"
+                class="shrink-0 rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs text-neutral-200 hover:bg-neutral-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+            {{ __('View as CPA would') }}
+        </button>
     </header>
 
     @if ($oneTimeUrl)

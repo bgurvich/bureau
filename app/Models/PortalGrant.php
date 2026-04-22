@@ -24,6 +24,7 @@ class PortalGrant extends Model
         'expires_at' => 'datetime',
         'revoked_at' => 'datetime',
         'last_seen_at' => 'datetime',
+        'is_preview' => 'boolean',
     ];
 
     /** 64 hex chars = 256 bits of entropy. Non-enumerable. */
@@ -41,6 +42,7 @@ class PortalGrant extends Model
         CarbonImmutable $expiresAt,
         ?string $granteeEmail = null,
         ?string $label = null,
+        bool $isPreview = false,
     ): array {
         $raw = bin2hex(random_bytes(self::TOKEN_LENGTH / 2));
 
@@ -52,6 +54,7 @@ class PortalGrant extends Model
             'token_tail' => Str::substr($raw, -6),
             'expires_at' => $expiresAt,
             'scope' => ['fiscal'],
+            'is_preview' => $isPreview,
         ]);
 
         return [$grant, $raw];
