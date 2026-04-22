@@ -223,20 +223,8 @@ new class extends Component
 
     public int $bill_lead_days = 7;
 
-    // document
-    public string $doc_kind = 'passport';
-
-    public string $doc_label = '';
-
-    public string $doc_number = '';
-
-    public string $doc_issuer = '';
-
-    public string $doc_issued_on = '';
-
-    public string $doc_expires_on = '';
-
-    public bool $in_case_of_pack = false;
+    // document extracted to App\Livewire\Inspector\DocumentForm;
+    // the shell hosts the child via @livewire in the render switch.
 
     // meeting extracted to App\Livewire\Inspector\MeetingForm;
     // the shell hosts the child via @livewire in the render switch.
@@ -1192,7 +1180,6 @@ new class extends Component
         $this->sale_currency = $currency;
         $this->issued_on = now()->toDateString();
         $this->due_on = now()->addDays(14)->toDateString();
-        $this->doc_issued_on = now()->toDateString();
 
         // Physical mail defaults — received today, classified as "other"
         // until the user picks a kind, no processed-at (belongs to the
@@ -1330,7 +1317,6 @@ new class extends Component
         match ($this->type) {
             'transaction' => $this->loadTransaction(),
             'bill' => $this->loadBill(),
-            'document' => $this->loadDocument(),
             'contract' => $this->loadContract(),
             'insurance' => $this->loadInsurance(),
             // pet / pet_vaccination / pet_checkup all run as extracted
@@ -1392,18 +1378,7 @@ new class extends Component
         $this->bill_lead_days = (int) ($r->lead_days ?? 7);
     }
 
-    private function loadDocument(): void
-    {
-        $d = Document::findOrFail($this->id);
-        $this->doc_kind = $d->kind;
-        $this->doc_label = $d->label ?? '';
-        $this->doc_number = $d->number ?? '';
-        $this->doc_issuer = $d->issuer ?? '';
-        $this->doc_issued_on = $d->issued_on?->toDateString() ?? '';
-        $this->doc_expires_on = $d->expires_on?->toDateString() ?? '';
-        $this->in_case_of_pack = (bool) $d->in_case_of_pack;
-        $this->notes = $d->notes ?? '';
-    }
+    // loadDocument moved to App\Livewire\Inspector\DocumentForm.
 
     // loadProject moved to App\Livewire\Inspector\ProjectForm.
 
@@ -1501,7 +1476,7 @@ new class extends Component
         // persists on its own. The child fires `inspector-form-saved`
         // back and the shell's onFormSaved() listener closes the drawer.
         // Add a type to this array after extracting its child form.
-        $extractedTypes = ['pet', 'pet_vaccination', 'pet_checkup', 'time_entry', 'transfer', 'savings_goal', 'budget_cap', 'category_rule', 'tag_rule', 'reminder', 'subscription', 'online_account', 'meeting', 'domain', 'project', 'account', 'contact', 'appointment', 'vehicle', 'property', 'physical_mail', 'note', 'task'];
+        $extractedTypes = ['pet', 'pet_vaccination', 'pet_checkup', 'time_entry', 'transfer', 'savings_goal', 'budget_cap', 'category_rule', 'tag_rule', 'reminder', 'subscription', 'online_account', 'meeting', 'domain', 'project', 'account', 'contact', 'appointment', 'vehicle', 'property', 'physical_mail', 'note', 'task', 'document'];
         if (in_array($this->type, $extractedTypes, true)) {
             $this->dispatch('inspector-save');
 
@@ -1512,7 +1487,6 @@ new class extends Component
             match ($this->type) {
                 'transaction' => $this->saveTransaction(),
                 'bill' => $this->saveBill(),
-                'document' => $this->saveDocument(),
                 'contract' => $this->saveContract(),
                 'insurance' => $this->saveInsurance(),
                 // pet / pet_vaccination / pet_checkup are extracted; the
@@ -1811,38 +1785,7 @@ new class extends Component
 
     // savePhysicalMail moved to App\Livewire\Inspector\PhysicalMailForm.
 
-    private function saveDocument(): void
-    {
-        $data = $this->validate([
-            'doc_kind' => ['required', Rule::in(array_keys(Enums::documentKinds()))],
-            'doc_label' => 'nullable|string|max:255',
-            'doc_number' => 'nullable|string|max:255',
-            'doc_issuer' => 'nullable|string|max:255',
-            'doc_issued_on' => 'nullable|date',
-            'doc_expires_on' => 'nullable|date',
-            'in_case_of_pack' => 'boolean',
-            'notes' => 'nullable|string|max:5000',
-        ]);
-
-        $payload = [
-            'kind' => $data['doc_kind'],
-            'label' => $data['doc_label'] ?: null,
-            'number' => $data['doc_number'] ?: null,
-            'issuer' => $data['doc_issuer'] ?: null,
-            'issued_on' => $data['doc_issued_on'] ?: null,
-            'expires_on' => $data['doc_expires_on'] ?: null,
-            'in_case_of_pack' => (bool) $data['in_case_of_pack'],
-            'notes' => $data['notes'] ?: null,
-        ];
-
-        if ($this->id) {
-            Document::findOrFail($this->id)->update($payload);
-        } else {
-            $payload['holder_user_id'] = auth()->id();
-            $this->id = Document::create($payload)->id;
-        }
-    }
-
+    // saveDocument moved to App\Livewire\Inspector\DocumentForm.
 
     // saveProject moved to App\Livewire\Inspector\ProjectForm.
 
@@ -2717,7 +2660,9 @@ new class extends Component
                 @case('physical_mail')
                     @livewire('inspector.physical-mail-form', ['id' => $id], key('physical-mail-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
                     @break
-                @case('document') @include('partials.inspector.forms.document')      @break
+                @case('document')
+                    @livewire('inspector.document-form', ['id' => $id], key('document-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
+                    @break
                 @case('meeting')
                     @livewire('inspector.meeting-form', ['id' => $id], key('meeting-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
                     @break
