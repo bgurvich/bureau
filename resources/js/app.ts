@@ -305,7 +305,14 @@ document.addEventListener('alpine:init', () => {
         placeholderCreateLabel: 'Create',
         get value(): string {
             const self = this as unknown as SearchableSelectData;
-            return String(self.$wire[self.model] ?? '');
+            // $wire[path] does literal-property access, so dotted
+            // Livewire paths like `parsed.abc.rows.0.counterparty_id_override`
+            // come back undefined. $wire.get(path) walks nested
+            // component state correctly for both flat and dotted
+            // model keys.
+            const get = (self.$wire as unknown as { get: (k: string) => unknown }).get;
+            const v = typeof get === 'function' ? get.call(self.$wire, self.model) : self.$wire[self.model];
+            return String(v ?? '');
         },
         get label(): string {
             const self = this as unknown as SearchableSelectData;
