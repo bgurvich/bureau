@@ -1,14 +1,17 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" shape-rendering="geometricPrecision">
-    <!-- Rounded dark tile — matches manifest.theme_color #0a0a0a. -->
-    <rect width="512" height="512" rx="96" fill="#0a0a0a"/>
+    <!-- Rounded tile in dusk's dark warm brown (mirrors the heavy end of
+         the neutral-* scale in resources/css/app.css). Kept darker than
+         the page bg so the favicon reads on light browser chrome. -->
+    <rect width="512" height="512" rx="96" fill="#2a2217"/>
     <!-- Filing-cabinet glyph: body + drawer divider, stroke-based so the
-         silhouette stays legible at 16px favicon size. -->
-    <g fill="none" stroke="#e5e5e5" stroke-width="24" stroke-linecap="round" stroke-linejoin="round">
+         silhouette stays legible at 16px favicon size. Warm stone matches
+         the dusk page bg (#d8cfbf) — light-on-dark for maximum contrast. -->
+    <g fill="none" stroke="#d8cfbf" stroke-width="24" stroke-linecap="round" stroke-linejoin="round">
         <rect x="112" y="96" width="288" height="320" rx="28"/>
         <line x1="112" y1="256" x2="400" y2="256"/>
     </g>
     <!-- Solid drawer-pull bars, centered on each drawer. -->
-    <g fill="#e5e5e5">
+    <g fill="#d8cfbf">
         <rect x="216" y="168" width="80" height="18" rx="9"/>
         <rect x="216" y="328" width="80" height="18" rx="9"/>
     </g>
