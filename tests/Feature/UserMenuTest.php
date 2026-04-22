@@ -53,6 +53,16 @@ it('persists the retro theme', function () {
     expect($user->fresh()->theme)->toBe('retro');
 });
 
+it('persists the dusk theme — the warm-stone midtone option', function () {
+    $user = authedAliceExample();
+
+    Livewire::test('user-menu')
+        ->call('setTheme', 'dusk')
+        ->assertSet('theme', 'dusk');
+
+    expect($user->fresh()->theme)->toBe('dusk');
+});
+
 it('rejects unknown locales', function () {
     $user = authedAliceExample();
 

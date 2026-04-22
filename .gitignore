@@ -25,6 +25,7 @@ Homestead.json
 Homestead.yaml
 Thumbs.db
 /.claude/settings.local.json
+/.claude/scheduled_tasks.lock
 /test-results
 /playwright-report
 /blob-report

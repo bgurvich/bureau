@@ -81,6 +81,108 @@ a[aria-current='page'] {
 }
 
 /*
+ * Dusk = warm-stone midtone palette. Not bright, not dark. Goal is a
+ * soft, comforting, library-at-dusk feel — easy to look at for long
+ * sessions without the starkness of pure dark or the glare of pure
+ * light.
+ *
+ * Same remap pattern as light theme: the neutral-* scale is reversed
+ * (dark numbers → light surfaces, light numbers → dark text) AND
+ * warmed with a low-chroma hue shift (~70-75 = warm beige / ~45-55 =
+ * cozy brown at the text end). Accents get desaturated vs the light
+ * theme so status badges whisper rather than shout.
+ */
+html[data-resolved-theme='dusk'] {
+    color-scheme: light;
+
+    /*
+     * Neutrals — dropped ~10-12% lightness across the board vs the
+     * first-pass dusk palette. Still unmistakably a midtone theme
+     * (no pure dark, no pure light), but noticeably less glare.
+     * Hue drifts warm beige (75) → cozy brown (42) across the scale.
+     */
+    --color-neutral-50:  oklch(12% 0.025 42);  /* emphasis text (heaviest) */
+    --color-neutral-100: oklch(17% 0.025 45);  /* primary text */
+    --color-neutral-200: oklch(22% 0.024 50);
+    --color-neutral-300: oklch(28% 0.023 55);
+    --color-neutral-400: oklch(35% 0.022 60);  /* secondary text */
+    --color-neutral-500: oklch(42% 0.020 65);  /* muted text */
+    --color-neutral-600: oklch(50% 0.018 68);
+    --color-neutral-700: oklch(60% 0.018 70);  /* strong borders */
+    --color-neutral-800: oklch(70% 0.017 72);  /* subtle borders / input bg */
+    --color-neutral-900: oklch(76% 0.016 74);  /* card surfaces */
+    --color-neutral-950: oklch(80% 0.015 75);  /* page background */
+
+    /*
+     * Accents — the full scale gets remapped, not just a few variants.
+     * Rationale: Tailwind patterns like `bg-amber-950/30` + `text-amber-100`
+     * (dark-on-dark status pill in the source dark theme) land on a light-ish
+     * dusk surface where both ends drift into the page hue unless we flip
+     * their roles deliberately.
+     *
+     *   -50/-100/-200   → DARK tints of the accent (used as text)
+     *   -300/-400       → mid tints (used on body text + icons)
+     *   -500/-600       → saturated mids
+     *   -900/-950       → LIGHT tints (used as bg-*-{900,950}/30 fills)
+     *
+     * Chroma kept moderate so status pills still read as distinct without
+     * being visually loud against the warm stone page.
+     */
+
+    /*
+     * Chroma bumped vs first pass so alpha-blended fills (the
+     * `bg-amber-950/30` pattern) still carry obvious hue over the warm
+     * stone page — otherwise status tints wash out to grey. Text
+     * variants (-100/-200/-300) push darker + more saturated than the
+     * light theme to stay high-contrast on the midtone bg.
+     */
+
+    /* amber — warnings / upcoming / counters */
+    --color-amber-50:  oklch(20% 0.15 50);
+    --color-amber-100: oklch(25% 0.16 50);
+    --color-amber-200: oklch(33% 0.17 52);
+    --color-amber-300: oklch(42% 0.17 55);
+    --color-amber-400: oklch(52% 0.16 58);
+    --color-amber-900: oklch(72% 0.16 55);
+    --color-amber-950: oklch(78% 0.14 55);
+
+    /* rose — overdue / destructive */
+    --color-rose-50:  oklch(22% 0.19 15);
+    --color-rose-100: oklch(27% 0.19 15);
+    --color-rose-200: oklch(34% 0.19 15);
+    --color-rose-300: oklch(45% 0.19 15);
+    --color-rose-400: oklch(54% 0.19 15);
+    --color-rose-900: oklch(74% 0.17 15);
+    --color-rose-950: oklch(80% 0.14 15);
+
+    /* emerald — confirmations / positive state */
+    --color-emerald-50:  oklch(20% 0.13 150);
+    --color-emerald-100: oklch(25% 0.13 150);
+    --color-emerald-200: oklch(32% 0.14 150);
+    --color-emerald-300: oklch(42% 0.15 152);
+    --color-emerald-400: oklch(52% 0.14 150);
+    --color-emerald-900: oklch(75% 0.13 150);
+    --color-emerald-950: oklch(80% 0.11 150);
+
+    /* sky — pet care / informational */
+    --color-sky-50:  oklch(22% 0.12 245);
+    --color-sky-100: oklch(27% 0.12 245);
+    --color-sky-200: oklch(34% 0.13 245);
+    --color-sky-300: oklch(44% 0.13 242);
+    --color-sky-400: oklch(52% 0.13 245);
+    --color-sky-900: oklch(74% 0.12 245);
+    --color-sky-950: oklch(80% 0.10 245);
+
+    /* violet / fuchsia — birthdays / accent-of-last-resort */
+    --color-violet-100: oklch(27% 0.20 295);
+    --color-violet-200: oklch(34% 0.21 295);
+    --color-violet-300: oklch(45% 0.21 295);
+    --color-violet-400: oklch(55% 0.20 295);
+    --color-violet-900: oklch(78% 0.14 295);
+    --color-fuchsia-300: oklch(48% 0.20 325);
+}
+
+/*
  * Retro = dark palette + monospace + phosphor-glow accents + faint CRT
  * scanline. Opt-in via theme selector; stock dark stays untouched.
  */

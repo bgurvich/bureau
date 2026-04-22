@@ -29,7 +29,7 @@ new class extends Component
     #[Validate('required|integer|between:0,6')]
     public int $week_starts_on = 0;
 
-    #[Validate('required|string|in:system,light,dark,retro')]
+    #[Validate('required|string|in:system,light,dark,dusk,retro')]
     public string $theme = 'system';
 
     #[Validate('required|string|size:3|alpha')]

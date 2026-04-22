@@ -3,7 +3,7 @@
 // react without flashing. Listens for the Livewire "theme-changed" event and
 // for OS preference changes.
 
-type ThemePref = 'light' | 'dark' | 'system' | 'retro';
+type ThemePref = 'light' | 'dark' | 'dusk' | 'system' | 'retro';
 
 interface LivewireGlobal {
     on(event: string, handler: (payload: unknown) => void): void;
@@ -37,8 +37,16 @@ function applyTheme(pref: ThemePref): void {
     const resolved = resolveTheme(pref);
     root.dataset.theme = pref;
     root.dataset.resolvedTheme = resolved;
-    // Retro is a dark-based opt-in; keep the native color-scheme honest.
-    root.style.colorScheme = resolved === 'retro' ? 'dark' : resolved;
+    // Retro is dark-based; dusk is light-based. Native color-scheme
+    // matches so form controls and browser chrome (scrollbars etc.) pick
+    // the right default styling.
+    if (resolved === 'retro') {
+        root.style.colorScheme = 'dark';
+    } else if (resolved === 'dusk') {
+        root.style.colorScheme = 'light';
+    } else {
+        root.style.colorScheme = resolved;
+    }
 }
 
 applyTheme((root.dataset.theme as ThemePref) || 'system');
@@ -47,6 +55,15 @@ media.addEventListener('change', () => {
     if (((root.dataset.theme as ThemePref) || 'system') === 'system') {
         applyTheme('system');
     }
+});
+
+// Re-apply after Livewire's wire:navigate SPA transitions. The inline
+// theme-flash script in `<head>` runs only on a fresh document load, so
+// without this handler the resolved-theme attribute + color-scheme get
+// dropped on every in-page navigation and the CSS falls back to the
+// :root dark default until the user hits reload.
+document.addEventListener('livewire:navigated', () => {
+    applyTheme((root.dataset.theme as ThemePref) || 'system');
 });
 
 document.addEventListener('livewire:init', () => {
