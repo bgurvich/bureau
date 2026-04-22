@@ -4227,7 +4227,17 @@ new class extends Component
                 </section>
             @else
             @switch($type)
-                @case('')        @include('partials.inspector.type-picker')          @break
+                @case('')
+                    {{-- Type picker is primary-drawer behaviour ("Quick add").
+                         The modal instance is only entered via subentity-edit-open
+                         (always with a concrete type), so during a close() the
+                         type resets to '' and we'd flash the picker for a frame
+                         while Alpine's leave-transition ran. Render nothing in
+                         modal mode. --}}
+                    @unless ($asModal)
+                        @include('partials.inspector.type-picker')
+                    @endunless
+                    @break
                 @case('task')    @include('partials.inspector.forms.task')           @break
                 @case('transaction') @include('partials.inspector.forms.transaction')@break
                 @case('contact') @include('partials.inspector.forms.contact')        @break
