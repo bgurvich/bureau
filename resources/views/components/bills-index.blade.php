@@ -32,7 +32,16 @@ class extends Component
     #[Computed]
     public function projections(): Collection
     {
-        return RecurringProjection::with(['rule:id,title,kind,counterparty_contact_id,currency', 'rule.counterparty:id,display_name'])
+        // `matchedTransaction.media` + `rule.media` are eager-loaded so
+        // projectionScan() can resolve the preview image without running
+        // a follow-up query per projection row in the render loop.
+        return RecurringProjection::with([
+            'rule:id,title,kind,counterparty_contact_id,currency',
+            'rule.counterparty:id,display_name',
+            'rule.media' => fn ($q) => $q->where('mime', 'like', 'image/%'),
+            'matchedTransaction:id',
+            'matchedTransaction.media' => fn ($q) => $q->where('mime', 'like', 'image/%'),
+        ])
             ->whereDate('due_on', '>=', now()->toDateString())
             ->whereDate('due_on', '<=', now()->addDays(90)->toDateString())
             ->whereIn('status', ['projected', 'matched', 'overdue'])
@@ -47,7 +56,16 @@ class extends Component
         // 7 days before they count as "something's wrong".
         $graceCutoff = now()->subDays(7)->toDateString();
 
-        return RecurringProjection::with(['rule:id,title,kind,counterparty_contact_id,currency', 'rule.counterparty:id,display_name'])
+        // `matchedTransaction.media` + `rule.media` are eager-loaded so
+        // projectionScan() can resolve the preview image without running
+        // a follow-up query per projection row in the render loop.
+        return RecurringProjection::with([
+            'rule:id,title,kind,counterparty_contact_id,currency',
+            'rule.counterparty:id,display_name',
+            'rule.media' => fn ($q) => $q->where('mime', 'like', 'image/%'),
+            'matchedTransaction:id',
+            'matchedTransaction.media' => fn ($q) => $q->where('mime', 'like', 'image/%'),
+        ])
             ->where('status', 'overdue')
             ->where(fn ($q) => $q
                 ->where('autopay', false)
@@ -78,10 +96,11 @@ class extends Component
      */
     public function projectionScan(RecurringProjection $p): ?Media
     {
-        if ($p->matched_transaction_id) {
-            $txn = Transaction::with(['media' => fn ($q) => $q->where('mime', 'like', 'image/%')])
-                ->find($p->matched_transaction_id);
-            $hit = $txn?->media->firstWhere('pivot.role', 'receipt') ?? $txn?->media->first();
+        // Walks relations already eager-loaded by the projections()
+        // computed so no per-row fetch fires here.
+        $txn = $p->matched_transaction_id ? $p->matchedTransaction : null;
+        if ($txn) {
+            $hit = $txn->media->firstWhere('pivot.role', 'receipt') ?? $txn->media->first();
             if ($hit instanceof Media) {
                 return $hit;
             }
@@ -89,7 +108,6 @@ class extends Component
 
         $rule = $p->rule;
         if ($rule) {
-            $rule->loadMissing(['media' => fn ($q) => $q->where('mime', 'like', 'image/%')]);
             $hit = $rule->media->firstWhere('pivot.role', 'receipt') ?? $rule->media->first();
             if ($hit instanceof Media) {
                 return $hit;

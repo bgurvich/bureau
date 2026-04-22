@@ -12,6 +12,7 @@ use App\Models\Transaction;
 use App\Models\Transfer;
 use App\Models\User;
 use App\Models\Vehicle;
+use App\Support\AccountBalances;
 use App\Support\CurrentHousehold;
 use App\Support\Enums;
 use App\Support\Formatting;
@@ -31,6 +32,30 @@ class extends Component
     }
 
     /**
+     * Active in-net-worth accounts. Cached for the request so the
+     * multiple callers (netWorth, netWorthByUser) share one fetch.
+     *
+     * @return \Illuminate\Database\Eloquent\Collection<int, Account>
+     */
+    #[Computed]
+    public function netWorthAccounts(): \Illuminate\Database\Eloquent\Collection
+    {
+        return Account::where('is_active', true)->where('include_in_net_worth', true)->get();
+    }
+
+    /**
+     * Per-account balances for the active net-worth set — computed once,
+     * shared with every caller that needs per-account totals.
+     *
+     * @return array<int, float>
+     */
+    #[Computed]
+    public function netWorthBalances(): array
+    {
+        return AccountBalances::forAccounts($this->netWorthAccounts);
+    }
+
+    /**
      * Household-wide net worth by kind (all users aggregated — this is the
      * family-level view, distinct from the Money radar's current-user view).
      *
@@ -46,11 +71,9 @@ class extends Component
         ];
 
         $accountsTotal = 0.0;
-        foreach (Account::where('is_active', true)->where('include_in_net_worth', true)->get() as $a) {
-            $bal = (float) $a->opening_balance
-                + (float) Transaction::where('account_id', $a->id)->where('status', 'cleared')->sum('amount')
-                - (float) Transfer::where('from_account_id', $a->id)->where('status', 'cleared')->sum('from_amount')
-                + (float) Transfer::where('to_account_id', $a->id)->where('status', 'cleared')->sum('to_amount');
+        $balances = $this->netWorthBalances;
+        foreach ($this->netWorthAccounts as $a) {
+            $bal = $balances[$a->id] ?? 0.0;
             $byKind[$a->type] = ($byKind[$a->type] ?? 0) + $bal;
             $accountsTotal += $bal;
         }
@@ -58,16 +81,26 @@ class extends Component
         $assetsTotal = 0.0;
         foreach ([[Property::class, 'property', 'purchase_price'], [Vehicle::class, 'vehicle', 'purchase_price'], [InventoryItem::class, 'inventory', 'cost_amount']] as [$class, $bucket, $fallback]) {
             $sum = 0.0;
-            foreach ($class::query()->get() as $asset) {
-                $valuation = AssetValuation::where('valuable_type', $class)
-                    ->where('valuable_id', $asset->id)
+            $assets = $class::query()->get();
+            if ($assets->isNotEmpty()) {
+                // Pull every asset's newest valuation in one query instead
+                // of a per-asset lookup. unique('valuable_id') on the
+                // desc-sorted set keeps the most recent row per asset.
+                $latest = AssetValuation::where('valuable_type', $class)
+                    ->whereIn('valuable_id', $assets->pluck('id'))
                     ->orderByDesc('as_of')
                     ->orderByDesc('id')
-                    ->first();
-                if ($valuation) {
-                    $sum += (float) $valuation->value;
-                } elseif ($asset->{$fallback} !== null) {
-                    $sum += (float) $asset->{$fallback};
+                    ->get()
+                    ->unique('valuable_id')
+                    ->keyBy('valuable_id');
+
+                foreach ($assets as $asset) {
+                    $v = $latest->get($asset->id);
+                    if ($v) {
+                        $sum += (float) $v->value;
+                    } elseif ($asset->{$fallback} !== null) {
+                        $sum += (float) $asset->{$fallback};
+                    }
                 }
             }
             $byKind[$bucket] = $sum;
@@ -111,26 +144,22 @@ class extends Component
         $rows = [];
         $sharedTotal = 0.0;
 
-        // Accounts — by user_id; null user_id rolls into shared
-        $accountsByUser = Account::where('is_active', true)->where('include_in_net_worth', true)->get()
-            ->groupBy(fn (Account $a) => $a->user_id);
+        // Accounts — by user_id; null user_id rolls into shared. Shares
+        // the netWorthAccounts + netWorthBalances computeds with netWorth()
+        // so the same data doesn't get re-queried per call site.
+        $balances = $this->netWorthBalances;
+        $accountsByUser = $this->netWorthAccounts->groupBy(fn (Account $a) => $a->user_id);
 
         foreach ($users as $u) {
             $sum = 0.0;
             foreach ($accountsByUser->get($u->id, collect()) as $a) {
-                $sum += (float) $a->opening_balance
-                    + (float) Transaction::where('account_id', $a->id)->where('status', 'cleared')->sum('amount')
-                    - (float) Transfer::where('from_account_id', $a->id)->where('status', 'cleared')->sum('from_amount')
-                    + (float) Transfer::where('to_account_id', $a->id)->where('status', 'cleared')->sum('to_amount');
+                $sum += $balances[$a->id] ?? 0.0;
             }
             $rows[] = ['id' => $u->id, 'name' => $u->name, 'total' => round($sum, 2)];
         }
 
         foreach ($accountsByUser->get(null, collect()) as $a) {
-            $sharedTotal += (float) $a->opening_balance
-                + (float) Transaction::where('account_id', $a->id)->where('status', 'cleared')->sum('amount')
-                - (float) Transfer::where('from_account_id', $a->id)->where('status', 'cleared')->sum('from_amount')
-                + (float) Transfer::where('to_account_id', $a->id)->where('status', 'cleared')->sum('to_amount');
+            $sharedTotal += $balances[$a->id] ?? 0.0;
         }
         if (abs($sharedTotal) > 0.01) {
             $rows[] = ['id' => null, 'name' => __('Shared'), 'total' => round($sharedTotal, 2)];
@@ -222,10 +251,18 @@ class extends Component
         $remaining = 0.0;
         $expiringSoon = 0;
 
+        // Gift cards don't participate in transfers — a single SUM-by-account_id
+        // query covers every card's activity instead of looping one query per
+        // card. Falls back to 0 for cards with no transactions yet.
+        $txnSums = Transaction::whereIn('account_id', $giftCards->pluck('id'))
+            ->where('status', 'cleared')
+            ->selectRaw('account_id, SUM(amount) as total')
+            ->groupBy('account_id')
+            ->pluck('total', 'account_id');
+
         foreach ($giftCards as $gc) {
             $faceValue += (float) $gc->opening_balance;
-            $bal = (float) $gc->opening_balance
-                + (float) Transaction::where('account_id', $gc->id)->where('status', 'cleared')->sum('amount');
+            $bal = (float) $gc->opening_balance + (float) ($txnSums[$gc->id] ?? 0);
             $remaining += $bal;
 
             if ($gc->expires_on && now()->startOfDay()->diffInDays($gc->expires_on, absolute: false) <= 30 && now()->startOfDay()->diffInDays($gc->expires_on, absolute: false) >= 0) {
