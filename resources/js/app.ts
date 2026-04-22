@@ -3,7 +3,7 @@
 // react without flashing. Listens for the Livewire "theme-changed" event and
 // for OS preference changes.
 
-type ThemePref = 'light' | 'dark' | 'dusk' | 'system' | 'retro';
+type ThemePref = 'light' | 'dark' | 'dusk' | 'dusk-comfort' | 'system' | 'retro';
 
 interface LivewireGlobal {
     on(event: string, handler: (payload: unknown) => void): void;
@@ -37,12 +37,12 @@ function applyTheme(pref: ThemePref): void {
     const resolved = resolveTheme(pref);
     root.dataset.theme = pref;
     root.dataset.resolvedTheme = resolved;
-    // Retro is dark-based; dusk is light-based. Native color-scheme
-    // matches so form controls and browser chrome (scrollbars etc.) pick
-    // the right default styling.
+    // Retro is dark-based; dusk (and its comfort variant) are
+    // light-based. Native color-scheme matches so form controls and
+    // browser chrome (scrollbars etc.) pick the right default styling.
     if (resolved === 'retro') {
         root.style.colorScheme = 'dark';
-    } else if (resolved === 'dusk') {
+    } else if (resolved === 'dusk' || resolved === 'dusk-comfort') {
         root.style.colorScheme = 'light';
     } else {
         root.style.colorScheme = resolved;

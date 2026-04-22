@@ -62,12 +62,15 @@ class User extends Authenticatable implements WebAuthnAuthenticatable
     public static function availableThemes(): array
     {
         // Dusk sits between light and dark — a soft warm-stone palette
-        // tuned for long sessions. See `resources/css/app.css` for the
-        // token remap and `resources/js/app.ts` for the resolver shim.
+        // tuned for long sessions. Dusk (comfort) shares the palette
+        // and floors every text-xs / text-[10px|11px] utility at
+        // text-sm for long-reading legibility. See resources/css/app.css
+        // for the token remap and resources/js/app.ts for the resolver.
         return [
             'system' => 'System',
             'light' => 'Light',
             'dusk' => 'Dusk',
+            'dusk-comfort' => 'Dusk (comfort)',
             'dark' => 'Dark',
             'retro' => 'Retro',
         ];

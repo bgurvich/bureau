@@ -9,8 +9,8 @@
             ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
             : pref;
         r.dataset.resolvedTheme = resolved;
-        // retro is dark-based, dusk is light-based.
+        // retro is dark-based; dusk + dusk-comfort are light-based.
         r.style.colorScheme = resolved === 'retro' ? 'dark'
-            : (resolved === 'dusk' ? 'light' : resolved);
+            : ((resolved === 'dusk' || resolved === 'dusk-comfort') ? 'light' : resolved);
     })();
 </script>

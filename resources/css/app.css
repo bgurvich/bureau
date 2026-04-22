@@ -92,7 +92,8 @@ a[aria-current='page'] {
  * cozy brown at the text end). Accents get desaturated vs the light
  * theme so status badges whisper rather than shout.
  */
-html[data-resolved-theme='dusk'] {
+html[data-resolved-theme='dusk'],
+html[data-resolved-theme='dusk-comfort'] {
     color-scheme: light;
 
     /*
@@ -180,6 +181,28 @@ html[data-resolved-theme='dusk'] {
     --color-violet-400: oklch(55% 0.20 295);
     --color-violet-900: oklch(78% 0.14 295);
     --color-fuchsia-300: oklch(48% 0.20 325);
+}
+
+/*
+ * Dusk (comfort) = dusk palette + `text-sm` as the smallest rendered
+ * font size. Every text-xs utility and every arbitrary `text-[9px]`
+ * through `text-[13px]` class gets floored at text-sm so long-session
+ * readers don't have to squint at captions, chips, or status pills.
+ * Intentionally ignores the "visual hierarchy" argument — the point
+ * of this variant is legibility over density.
+ *
+ * The ancestor selector `html[...] .foo` carries higher specificity
+ * (0,1,1,0) than plain `.foo` (0,1,0,0), so Tailwind's utility
+ * classes defer without needing `!important`.
+ */
+html[data-resolved-theme='dusk-comfort'] .text-xs,
+html[data-resolved-theme='dusk-comfort'] .text-\[9px\],
+html[data-resolved-theme='dusk-comfort'] .text-\[10px\],
+html[data-resolved-theme='dusk-comfort'] .text-\[11px\],
+html[data-resolved-theme='dusk-comfort'] .text-\[12px\],
+html[data-resolved-theme='dusk-comfort'] .text-\[13px\] {
+    font-size: var(--text-sm);
+    line-height: var(--text-sm--line-height);
 }
 
 /*
