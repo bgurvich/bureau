@@ -139,7 +139,11 @@ new class extends Component
     #[Computed]
     public function savingsGoalsReadyToClose(): int
     {
-        return SavingsGoal::where('state', 'active')
+        // Eager-load account.latestBalance so progressRatio() → currentSaved()
+        // doesn't fire a round-trip per goal when it checks the linked account
+        // balance. Goals with no account_id skip the balance chain entirely.
+        return SavingsGoal::with(['account.latestBalance'])
+            ->where('state', 'active')
             ->get()
             ->filter(fn ($g) => $g->progressRatio() >= 1.0)
             ->count();
