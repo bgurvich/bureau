@@ -112,8 +112,7 @@ it('saves inventory listing fields and filters by for-sale', function () {
 
     $item = InventoryItem::create(['name' => 'Old bike', 'category' => 'other']);
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'inventory', $item->id)
+    Livewire::test('inspector.inventory-form', ['id' => $item->id])
         ->set('inventory_is_for_sale', true)
         ->set('inventory_listing_platform', 'ebay')
         ->set('inventory_listing_asking_amount', '325.00')
@@ -144,8 +143,7 @@ it('accepts multiple photos in a single upload', function () {
 
     $item = InventoryItem::create(['name' => 'Lamp', 'category' => 'other']);
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'inventory', $item->id)
+    Livewire::test('inspector.inventory-form', ['id' => $item->id])
         ->set('photoUpload', [
             UploadedFile::fake()->image('a.jpg'),
             UploadedFile::fake()->image('b.jpg'),
@@ -161,8 +159,7 @@ it('lets a user attach a photo while creating a new inventory item (photo-first)
     Storage::fake('local');
     authedInHousehold();
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'inventory')  // no id — create mode
+    Livewire::test('inspector.inventory-form')  // no id — create mode
         ->set('inventory_name', 'Blue lamp')
         ->set('photoUpload', UploadedFile::fake()->image('lamp.jpg'));
 
@@ -182,8 +179,7 @@ it('uploads an additional photo from the Inspector at the end of the sequence', 
     ]);
     $item->media()->attach($existing->id, ['role' => 'photo', 'position' => 0]);
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'inventory', $item->id)
+    Livewire::test('inspector.inventory-form', ['id' => $item->id])
         ->set('photoUpload', UploadedFile::fake()->image('new.jpg'));
 
     expect($item->media()->wherePivot('role', 'photo')->count())->toBe(2);
@@ -201,8 +197,7 @@ it('deletes a photo from the Inspector', function () {
     ]);
     $item->media()->attach($m->id, ['role' => 'photo', 'position' => 0]);
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'inventory', $item->id)
+    Livewire::test('inspector.inventory-form', ['id' => $item->id])
         ->call('deletePhoto', $m->id);
 
     expect($item->media()->count())->toBe(0);
@@ -219,8 +214,7 @@ it('reorders photos and treats the first position as the drill-down cover', func
     $item->media()->attach($b->id, ['role' => 'photo', 'position' => 1]);
     $item->media()->attach($c->id, ['role' => 'photo', 'position' => 2]);
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'inventory', $item->id)
+    Livewire::test('inspector.inventory-form', ['id' => $item->id])
         ->call('reorderPhotos', [$c->id, $a->id, $b->id]);
 
     $ordered = $item->media()->wherePivot('role', 'photo')->orderByPivot('position')->get();
@@ -246,8 +240,7 @@ it('shows attached photos in the inventory Inspector form', function () {
     ]);
     $item->media()->attach($media->id, ['role' => 'photo']);
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'inventory', $item->id)
+    Livewire::test('inspector.inventory-form', ['id' => $item->id])
         ->assertSee(__('Photos'))
         ->assertSee(route('media.file', $media), false);
 });

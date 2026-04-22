@@ -495,8 +495,7 @@ it('saves a subscription contract with a trial end date', function () {
 it('saves an inventory item with quantity and container', function () {
     authedInHousehold();
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'inventory')
+    Livewire::test('inspector.inventory-form')
         ->set('inventory_name', 'Candles')
         ->set('inventory_quantity', 20)
         ->set('inventory_room', 'Linen closet')
@@ -515,8 +514,7 @@ it('saves an inventory item with vendor, order #, and return-by date', function 
     authedInHousehold();
     $vendor = Contact::create(['kind' => 'org', 'display_name' => 'Apple Store']);
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'inventory')
+    Livewire::test('inspector.inventory-form')
         ->set('inventory_name', 'MacBook Pro')
         ->set('inventory_category', 'electronic')
         ->set('inventory_vendor_id', $vendor->id)

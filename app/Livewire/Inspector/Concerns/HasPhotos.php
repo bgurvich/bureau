@@ -8,6 +8,7 @@ use App\Models\Media;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
+use Livewire\WithFileUploads;
 
 /**
  * Photos repeater for inspector child components whose backing model
@@ -26,6 +27,8 @@ use Illuminate\Support\Collection;
  */
 trait HasPhotos
 {
+    use WithFileUploads;
+
     /** @var array<int, UploadedFile> */
     public array $photoUpload = [];
 

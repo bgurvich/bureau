@@ -79,28 +79,10 @@ new class extends Component
     /** Shared cross-domain tag input — "#tax-2026 home urgent". Applied to any HasTags record on save. */
     public string $tag_list = '';
 
-    // Shared disposition fields for property/vehicle/inventory.
-    public string $disposition = '';
-
-    public string $sale_amount = '';
-
-    public string $sale_currency = 'USD';
-
-    public ?int $buyer_contact_id = null;
-
-    public string $inventory_disposed_on = '';
-
-    public bool $inventory_is_for_sale = false;
-
-    public string $inventory_listing_asking_amount = '';
-
-    public string $inventory_listing_asking_currency = 'USD';
-
-    public string $inventory_listing_platform = '';
-
-    public string $inventory_listing_url = '';
-
-    public string $inventory_listing_posted_at = '';
+    // inventory extracted to App\Livewire\Inspector\InventoryForm;
+    // the shell hosts the child via @livewire in the render switch.
+    // (shared disposition fields moved there too — now carried inline
+    // on each asset form since vehicle/property/inventory are all extracted.)
 
     // appointment extracted to App\Livewire\Inspector\AppointmentForm;
     // the shell hosts the child via @livewire in the render switch.
@@ -282,38 +264,7 @@ new class extends Component
     // vehicle extracted to App\Livewire\Inspector\VehicleForm;
     // the shell hosts the child via @livewire in the render switch.
 
-    // inventory
-    public string $inventory_name = '';
-
-    public int $inventory_quantity = 1;
-
-    public string $inventory_container = '';
-
-    public string $inventory_category = 'other';
-
-    public ?int $inventory_property_id = null;
-
-    public string $inventory_room = '';
-
-    public string $inventory_brand = '';
-
-    public string $inventory_model_number = '';
-
-    public string $inventory_serial_number = '';
-
-    public string $inventory_purchased_on = '';
-
-    public string $inventory_cost_amount = '';
-
-    public string $inventory_cost_currency = 'USD';
-
-    public string $inventory_warranty_expires_on = '';
-
-    public ?int $inventory_vendor_id = null;
-
-    public string $inventory_order_number = '';
-
-    public string $inventory_return_by = '';
+    // (inventory state moved to InventoryForm — see above.)
 
     // account extracted to App\Livewire\Inspector\AccountForm;
     // the shell hosts the child via @livewire in the render switch.
@@ -1026,25 +977,15 @@ new class extends Component
      * capture pattern: placeholder name + unprocessed, user describes later.
      * Only wired for types we actively want photo-first creation on.
      */
+    /**
+     * Shell-side no-op — the photo-first flow (inventory) now runs in
+     * InventoryForm, which has its own ensureDraftForPhoto override.
+     * Contract is the only remaining shell type using photos and it
+     * doesn't support photo-first creation.
+     */
     private function ensureDraftForPhoto(): void
     {
-        if ($this->type !== 'inventory') {
-            return;
-        }
-
-        $name = trim((string) $this->inventory_name) !== ''
-            ? (string) $this->inventory_name
-            : __('Captured :when', ['when' => now()->format('M j, H:i')]);
-
-        $item = InventoryItem::create([
-            'name' => mb_substr($name, 0, 255),
-            'quantity' => max(1, (int) ($this->inventory_quantity ?: 1)),
-            'category' => $this->inventory_category ?: 'other',
-            'owner_user_id' => auth()->id(),
-        ]);
-
-        $this->id = $item->id;
-        $this->loadAdminMeta();
+        // no-op
     }
 
     public function deletePhoto(int $mediaId): void
@@ -1173,11 +1114,9 @@ new class extends Component
         $this->due_at = now()->addDay()->startOfHour()->format('Y-m-d\TH:i');
         $this->currency = $currency;
         $this->contract_monthly_cost_currency = $currency;
-        $this->inventory_cost_currency = $currency;
         $this->insurance_premium_currency = $currency;
         $this->insurance_coverage_currency = $currency;
         $this->insurance_deductible_currency = $currency;
-        $this->sale_currency = $currency;
         $this->issued_on = now()->toDateString();
         $this->due_on = now()->addDays(14)->toDateString();
 
@@ -1322,7 +1261,6 @@ new class extends Component
             // pet / pet_vaccination / pet_checkup all run as extracted
             // class-based components — they load + persist their own
             // state. The shell only manages open/close + parent id.
-            'inventory' => $this->loadInventory(),
             'checklist_template' => $this->loadChecklistTemplate(),
             default => null,
         };
@@ -1435,38 +1373,7 @@ new class extends Component
 
     // loadVehicle moved to App\Livewire\Inspector\VehicleForm.
 
-    private function loadInventory(): void
-    {
-        $i = InventoryItem::findOrFail($this->id);
-        $this->inventory_name = $i->name;
-        $this->inventory_quantity = (int) ($i->quantity ?? 1);
-        $this->inventory_category = $i->category ?: 'other';
-        $this->inventory_property_id = $i->location_property_id;
-        $this->inventory_room = $i->room ?? '';
-        $this->inventory_container = $i->container ?? '';
-        $this->inventory_brand = $i->brand ?? '';
-        $this->inventory_model_number = $i->model_number ?? '';
-        $this->inventory_serial_number = $i->serial_number ?? '';
-        $this->inventory_purchased_on = $i->purchased_on?->toDateString() ?? '';
-        $this->inventory_cost_amount = $i->cost_amount !== null ? (string) $i->cost_amount : '';
-        $this->inventory_cost_currency = $i->cost_currency ?: 'USD';
-        $this->inventory_warranty_expires_on = $i->warranty_expires_on?->toDateString() ?? '';
-        $this->inventory_vendor_id = $i->purchased_from_contact_id;
-        $this->inventory_order_number = $i->order_number ?? '';
-        $this->inventory_return_by = $i->return_by?->toDateString() ?? '';
-        $this->inventory_disposed_on = $i->disposed_on?->toDateString() ?? '';
-        $this->disposition = $i->disposition ?? '';
-        $this->sale_amount = $i->sale_amount !== null ? (string) $i->sale_amount : '';
-        $this->sale_currency = $i->sale_currency ?: $this->householdCurrency();
-        $this->buyer_contact_id = $i->buyer_contact_id;
-        $this->inventory_is_for_sale = (bool) $i->is_for_sale;
-        $this->inventory_listing_asking_amount = $i->listing_asking_amount !== null ? (string) $i->listing_asking_amount : '';
-        $this->inventory_listing_asking_currency = $i->listing_asking_currency ?: $this->householdCurrency();
-        $this->inventory_listing_platform = $i->listing_platform ?? '';
-        $this->inventory_listing_url = $i->listing_url ?? '';
-        $this->inventory_listing_posted_at = $i->listing_posted_at?->toDateString() ?? '';
-        $this->notes = $i->notes ?? '';
-    }
+    // loadInventory moved to App\Livewire\Inspector\InventoryForm.
 
     public function save(): void
     {
@@ -1476,7 +1383,7 @@ new class extends Component
         // persists on its own. The child fires `inspector-form-saved`
         // back and the shell's onFormSaved() listener closes the drawer.
         // Add a type to this array after extracting its child form.
-        $extractedTypes = ['pet', 'pet_vaccination', 'pet_checkup', 'time_entry', 'transfer', 'savings_goal', 'budget_cap', 'category_rule', 'tag_rule', 'reminder', 'subscription', 'online_account', 'meeting', 'domain', 'project', 'account', 'contact', 'appointment', 'vehicle', 'property', 'physical_mail', 'note', 'task', 'document'];
+        $extractedTypes = ['pet', 'pet_vaccination', 'pet_checkup', 'time_entry', 'transfer', 'savings_goal', 'budget_cap', 'category_rule', 'tag_rule', 'reminder', 'subscription', 'online_account', 'meeting', 'domain', 'project', 'account', 'contact', 'appointment', 'vehicle', 'property', 'physical_mail', 'note', 'task', 'document', 'inventory'];
         if (in_array($this->type, $extractedTypes, true)) {
             $this->dispatch('inspector-save');
 
@@ -1492,7 +1399,6 @@ new class extends Component
                 // pet / pet_vaccination / pet_checkup are extracted; the
                 // $extractedTypes early-return above keeps them from
                 // reaching this match.
-                'inventory' => $this->saveInventory(),
                 'checklist_template' => $this->saveChecklistTemplate(),
                 default => null,
             };
@@ -1973,78 +1879,7 @@ new class extends Component
     // App\Livewire\Inspector\PetCheckupForm. Both are class-based so
     // PHPStan sees the code + tests drive them directly.
 
-    private function saveInventory(): void
-    {
-        $data = $this->validate([
-            'inventory_name' => 'required|string|max:255',
-            'inventory_quantity' => 'required|integer|min:1',
-            'inventory_category' => ['nullable', Rule::in(array_keys(Enums::inventoryCategories()))],
-            'inventory_property_id' => 'nullable|integer|exists:properties,id',
-            'inventory_room' => 'nullable|string|max:100',
-            'inventory_container' => 'nullable|string|max:100',
-            'inventory_brand' => 'nullable|string|max:100',
-            'inventory_model_number' => 'nullable|string|max:100',
-            'inventory_serial_number' => 'nullable|string|max:100',
-            'inventory_purchased_on' => 'nullable|date',
-            'inventory_cost_amount' => 'nullable|numeric',
-            'inventory_cost_currency' => 'nullable|string|size:3',
-            'inventory_warranty_expires_on' => 'nullable|date',
-            'inventory_vendor_id' => 'nullable|integer|exists:contacts,id',
-            'inventory_order_number' => 'nullable|string|max:128',
-            'inventory_return_by' => 'nullable|date',
-            'inventory_disposed_on' => 'nullable|date',
-            'disposition' => ['nullable', Rule::in(array_keys(Enums::assetDispositions()))],
-            'sale_amount' => 'nullable|numeric',
-            'sale_currency' => 'nullable|string|size:3',
-            'buyer_contact_id' => 'nullable|integer|exists:contacts,id',
-            'inventory_is_for_sale' => 'boolean',
-            'inventory_listing_asking_amount' => 'nullable|numeric',
-            'inventory_listing_asking_currency' => 'nullable|string|size:3',
-            'inventory_listing_platform' => ['nullable', Rule::in(array_keys(Enums::inventoryListingPlatforms()))],
-            'inventory_listing_url' => 'nullable|url|max:512',
-            'inventory_listing_posted_at' => 'nullable|date',
-            'notes' => 'nullable|string|max:5000',
-        ]);
-
-        $payload = [
-            'name' => $data['inventory_name'],
-            'quantity' => max(1, (int) $data['inventory_quantity']),
-            'category' => $data['inventory_category'] ?: null,
-            'location_property_id' => $data['inventory_property_id'] ?: null,
-            'room' => $data['inventory_room'] ?: null,
-            'container' => $data['inventory_container'] ?: null,
-            'brand' => $data['inventory_brand'] ?: null,
-            'model_number' => $data['inventory_model_number'] ?: null,
-            'serial_number' => $data['inventory_serial_number'] ?: null,
-            'purchased_on' => $data['inventory_purchased_on'] ?: null,
-            'cost_amount' => $data['inventory_cost_amount'] !== '' ? (float) $data['inventory_cost_amount'] : null,
-            'cost_currency' => $data['inventory_cost_currency'] ?: null,
-            'warranty_expires_on' => $data['inventory_warranty_expires_on'] ?: null,
-            'purchased_from_contact_id' => $data['inventory_vendor_id'] ?: null,
-            'order_number' => $data['inventory_order_number'] ?: null,
-            'return_by' => $data['inventory_return_by'] ?: null,
-            'processed_at' => now(),
-            'disposed_on' => $data['inventory_disposed_on'] ?: null,
-            'disposition' => $data['disposition'] ?: null,
-            'sale_amount' => $data['sale_amount'] !== '' ? (float) $data['sale_amount'] : null,
-            'sale_currency' => $data['sale_currency'] ?: null,
-            'buyer_contact_id' => $data['buyer_contact_id'] ?: null,
-            'is_for_sale' => (bool) ($data['inventory_is_for_sale'] ?? false),
-            'listing_asking_amount' => $data['inventory_listing_asking_amount'] !== '' ? (float) $data['inventory_listing_asking_amount'] : null,
-            'listing_asking_currency' => $data['inventory_listing_asking_currency'] ?: null,
-            'listing_platform' => $data['inventory_listing_platform'] ?: null,
-            'listing_url' => $data['inventory_listing_url'] ?: null,
-            'listing_posted_at' => $data['inventory_listing_posted_at'] ?: null,
-            'notes' => $data['notes'] ?: null,
-        ];
-
-        if ($this->id) {
-            InventoryItem::findOrFail($this->id)->update($payload);
-        } else {
-            $payload['owner_user_id'] = auth()->id();
-            $this->id = InventoryItem::create($payload)->id;
-        }
-    }
+    // saveInventory moved to App\Livewire\Inspector\InventoryForm.
 
     // appointment load/save moved to App\Livewire\Inspector\AppointmentForm.
 
@@ -2704,7 +2539,9 @@ new class extends Component
                         'petId' => $subentityParentId,
                     ], key('pet-checkup-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
                     @break
-                @case('inventory') @include('partials.inspector.forms.inventory')    @break
+                @case('inventory')
+                    @livewire('inspector.inventory-form', ['id' => $id], key('inventory-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
+                    @break
                 @case('appointment')
                     @livewire('inspector.appointment-form', ['id' => $id], key('appointment-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
                     @break
