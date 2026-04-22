@@ -547,8 +547,7 @@ it('records a vehicle sale with disposition + sale_amount + buyer', function () 
         'purchase_price' => 20000, 'purchase_currency' => 'USD',
     ]);
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'vehicle', $vehicle->id)
+    Livewire::test('inspector.vehicle-form', ['id' => $vehicle->id])
         ->set('vehicle_disposed_on', '2026-04-01')
         ->set('disposition', 'sold')
         ->set('sale_amount', '14500')
@@ -566,8 +565,7 @@ it('records a vehicle sale with disposition + sale_amount + buyer', function () 
 it('saves a vehicle with VIN and registration fields', function () {
     authedInHousehold();
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'vehicle')
+    Livewire::test('inspector.vehicle-form')
         ->set('vehicle_kind', 'car')
         ->set('vehicle_make', 'Honda')
         ->set('vehicle_model', 'Civic')
@@ -577,7 +575,7 @@ it('saves a vehicle with VIN and registration fields', function () {
         ->set('vehicle_registration_fee_amount', '85')
         ->set('vehicle_registration_fee_currency', 'USD')
         ->call('save')
-        ->assertSet('open', false);
+        ->assertHasNoErrors();
 
     $v = Vehicle::firstWhere('make', 'Honda');
     expect($v)->not->toBeNull()
