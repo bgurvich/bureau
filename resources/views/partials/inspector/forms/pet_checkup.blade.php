@@ -17,7 +17,9 @@
                 class="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
             <option value="annual_checkup">{{ __('Annual checkup') }}</option>
             <option value="dental_cleaning">{{ __('Dental cleaning') }}</option>
+            <option value="teeth_cleaning">{{ __('Teeth cleaning (home)') }}</option>
             <option value="grooming">{{ __('Grooming') }}</option>
+            <option value="nail_trim">{{ __('Nail trim') }}</option>
             <option value="blood_panel">{{ __('Blood panel') }}</option>
             <option value="other">{{ __('Other') }}</option>
         </select>

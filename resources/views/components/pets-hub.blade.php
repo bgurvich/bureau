@@ -19,7 +19,7 @@ class extends Component
 
     public function setTab(string $tab): void
     {
-        if (in_array($tab, ['pets', 'vaccinations', 'checkups'], true)) {
+        if (in_array($tab, ['pets', 'vaccinations', 'checkups', 'grooming'], true)) {
             $this->tab = $tab;
             HubTabMemory::remember('pets', $tab);
         }
@@ -38,6 +38,7 @@ class extends Component
             'pets' => __('Pets'),
             'vaccinations' => __('Vaccinations'),
             'checkups' => __('Checkups'),
+            'grooming' => __('Grooming'),
         ];
     @endphp
 
@@ -64,6 +65,13 @@ class extends Component
                 @break
             @case('checkups')
                 <livewire:pet-checkups-index :key="'pets-checkups'" />
+                @break
+            @case('grooming')
+                {{-- Grooming is a PetCheckup with kind=grooming — the
+                     dedicated view narrows the kind filter so the user
+                     doesn't have to. Future: a dedicated grooming-cadence
+                     surface on top of recurring_rules with subject_type=Pet. --}}
+                <livewire:pet-checkups-index :key="'pets-grooming'" :kind-filter="'grooming'" :state-filter="'all'" />
                 @break
             @default
                 <livewire:pets-index :key="'pets-list'" />

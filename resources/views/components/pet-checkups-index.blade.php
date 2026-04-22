@@ -17,6 +17,21 @@ new class extends Component
     #[Url(as: 'state')]
     public string $stateFilter = 'upcoming';
 
+    /**
+     * mount() params let a parent hub preseed the filters (e.g. the
+     * Grooming tab passes kindFilter='grooming' + stateFilter='all').
+     * URL params still win once the user changes them.
+     */
+    public function mount(?string $kindFilter = null, ?string $stateFilter = null): void
+    {
+        if ($kindFilter !== null && $this->kindFilter === '') {
+            $this->kindFilter = $kindFilter;
+        }
+        if ($stateFilter !== null && $this->stateFilter === 'upcoming') {
+            $this->stateFilter = $stateFilter;
+        }
+    }
+
     #[On('inspector-saved')]
     public function refresh(): void
     {
@@ -77,7 +92,9 @@ new class extends Component
                 <option value="">{{ __('All') }}</option>
                 <option value="annual_checkup">{{ __('Annual checkup') }}</option>
                 <option value="dental_cleaning">{{ __('Dental cleaning') }}</option>
+                <option value="teeth_cleaning">{{ __('Teeth cleaning (home)') }}</option>
                 <option value="grooming">{{ __('Grooming') }}</option>
+                <option value="nail_trim">{{ __('Nail trim') }}</option>
                 <option value="blood_panel">{{ __('Blood panel') }}</option>
                 <option value="other">{{ __('Other') }}</option>
             </select>
