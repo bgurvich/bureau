@@ -1,5 +1,6 @@
 <?php
 
+use App\Support\HubTabMemory;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Url;
 use Livewire\Component;
@@ -9,19 +10,24 @@ new
 class extends Component
 {
     /**
-     * Active tab. URL-bound so the browser back button, deep links, and
-     * refreshes all land on the right pane. The children are
-     * Livewire components with their own URL-bound filter/sort state —
-     * we only mount the active one so their `#[Url]` params don't all
-     * collide in the query string at once.
+     * Active tab. URL-bound so deep links + refreshes land on the right
+     * pane. When the URL has no `?tab=`, HubTabMemory restores the
+     * last-visited tab from user_hub_preferences and falls back to
+     * `accounts` for a fresh user.
      */
-    #[Url(as: 'tab')]
-    public string $tab = 'accounts';
+    #[Url(as: 'tab', except: '')]
+    public string $tab = '';
+
+    public function mount(): void
+    {
+        $this->tab = HubTabMemory::resolve('ledger', $this->tab, 'accounts');
+    }
 
     public function setTab(string $tab): void
     {
         if (in_array($tab, ['accounts', 'transactions', 'months', 'inbox', 'import', 'reconcile', 'bookkeeper'], true)) {
             $this->tab = $tab;
+            HubTabMemory::remember('ledger', $tab);
         }
     }
 };

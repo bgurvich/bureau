@@ -1,5 +1,6 @@
 <?php
 
+use App\Support\HubTabMemory;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Url;
 use Livewire\Component;
@@ -8,13 +9,19 @@ new
 #[Layout('components.layouts.app', ['title' => 'Schedule'])]
 class extends Component
 {
-    #[Url(as: 'tab')]
-    public string $tab = 'calendar';
+    #[Url(as: 'tab', except: '')]
+    public string $tab = '';
+
+    public function mount(): void
+    {
+        $this->tab = HubTabMemory::resolve('schedule', $this->tab, 'calendar');
+    }
 
     public function setTab(string $tab): void
     {
         if (in_array($tab, ['calendar', 'tasks', 'meetings', 'checklists'], true)) {
             $this->tab = $tab;
+            HubTabMemory::remember('schedule', $tab);
         }
     }
 };

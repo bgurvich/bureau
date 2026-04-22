@@ -3,6 +3,7 @@
 use App\Models\ChecklistRun;
 use App\Models\ChecklistTemplate;
 use App\Support\ChecklistScheduling;
+use App\Support\HubTabMemory;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Livewire\Attributes\Computed;
@@ -23,8 +24,21 @@ new
 #[Layout('components.layouts.app', ['title' => 'Checklists'])]
 class extends Component
 {
-    #[Url(as: 'tab')]
-    public string $tab = 'templates';
+    #[Url(as: 'tab', except: '')]
+    public string $tab = '';
+
+    public function mount(): void
+    {
+        $this->tab = HubTabMemory::resolve('checklists', $this->tab, 'templates');
+    }
+
+    public function setTab(string $tab): void
+    {
+        if (in_array($tab, ['templates', 'history'], true)) {
+            $this->tab = $tab;
+            HubTabMemory::remember('checklists', $tab);
+        }
+    }
 
     private const HISTORY_DAYS = 60;
 
@@ -154,7 +168,7 @@ class extends Component
     <nav class="flex gap-1 border-b border-neutral-800" aria-label="{{ __('Checklist views') }}">
         @foreach (['templates' => __('Templates'), 'history' => __('History')] as $key => $label)
             <button type="button"
-                    wire:click="$set('tab', '{{ $key }}')"
+                    wire:click="setTab('{{ $key }}')"
                     @if ($tab === $key) aria-current="page" @endif
                     class="-mb-px border-b-2 px-3 py-2 text-xs font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300 {{ $tab === $key ? 'border-neutral-100 text-neutral-100' : 'border-transparent text-neutral-500 hover:text-neutral-200' }}">
                 {{ $label }}
