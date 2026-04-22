@@ -3,15 +3,16 @@
 use App\Models\Account;
 use App\Models\ChecklistRun;
 use App\Models\Contract;
+use App\Models\Domain;
 use App\Models\InventoryItem;
 use App\Models\Media;
 use App\Models\PetCheckup;
 use App\Models\PetVaccination;
 use App\Models\RecurringProjection;
 use App\Models\Reminder;
+use App\Models\SavingsGoal;
 use App\Models\Task;
 use App\Models\Transaction;
-use App\Models\SavingsGoal;
 use App\Support\BudgetMonitor;
 use App\Support\ChecklistScheduling;
 use App\Support\SpendingAnomalyDetector;
@@ -91,6 +92,20 @@ new class extends Component
     public function giftCardsExpiringSoon(): int
     {
         return Account::whereIn('type', ['gift_card', 'prepaid'])
+            ->whereNotNull('expires_on')
+            ->whereBetween('expires_on', [now()->toDateString(), now()->addDays(30)->toDateString()])
+            ->count();
+    }
+
+    /**
+     * Domains expiring within 30 days that aren't set to auto-renew.
+     * Auto-renewing domains drop off the radar because the registrar
+     * will handle them — manual renewals are the actionable bucket.
+     */
+    #[Computed]
+    public function domainsExpiringSoon(): int
+    {
+        return Domain::where('auto_renew', false)
             ->whereNotNull('expires_on')
             ->whereBetween('expires_on', [now()->toDateString(), now()->addDays(30)->toDateString()])
             ->count();
@@ -228,6 +243,7 @@ new class extends Component
             + $this->trialsEndingSoon
             + $this->autorenewingContractsEndingSoon
             + $this->giftCardsExpiringSoon
+            + $this->domainsExpiringSoon
             + $this->billsInbox
             + $this->unprocessedInventory
             + $this->budgetEnvelopesAtRisk
@@ -293,6 +309,12 @@ new class extends Component
                 <li class="flex items-baseline justify-between">
                     <span class="text-neutral-300">Gift cards expiring ≤ 30d</span>
                     <span class="tabular-nums text-amber-400">{{ $this->giftCardsExpiringSoon }}</span>
+                </li>
+            @endif
+            @if ($this->domainsExpiringSoon)
+                <li class="flex items-baseline justify-between">
+                    <a href="{{ route('assets.domains', ['status' => 'expiring']) }}" class="text-neutral-300 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">{{ __('Domains expiring ≤ 30d') }}</a>
+                    <span class="tabular-nums text-amber-400">{{ $this->domainsExpiringSoon }}</span>
                 </li>
             @endif
             @if ($this->billsInbox)

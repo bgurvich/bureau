@@ -19,7 +19,7 @@ class extends Component
 
     public function setTab(string $tab): void
     {
-        if (in_array($tab, ['properties', 'vehicles', 'inventory', 'online_accounts', 'in_case_of'], true)) {
+        if (in_array($tab, ['properties', 'vehicles', 'inventory', 'domains', 'online_accounts', 'in_case_of'], true)) {
             $this->tab = $tab;
             HubTabMemory::remember('assets', $tab);
         }
@@ -38,6 +38,7 @@ class extends Component
             'properties' => __('Properties'),
             'vehicles' => __('Vehicles'),
             'inventory' => __('Inventory'),
+            'domains' => __('Domains'),
             'online_accounts' => __('Online accounts'),
             'in_case_of' => __('In case of'),
         ];
@@ -66,6 +67,9 @@ class extends Component
                 @break
             @case('inventory')
                 <livewire:inventory-index :key="'assets-inventory'" />
+                @break
+            @case('domains')
+                <livewire:domains-index :key="'assets-domains'" />
                 @break
             @case('online_accounts')
                 <livewire:online-accounts-index :key="'assets-online_accounts'" />
