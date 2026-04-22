@@ -117,16 +117,8 @@ new class extends Component
 
     public bool $appointment_self_subject = true;
 
-    // reminder
-    public string $reminder_title = '';
-
-    public string $reminder_remind_at = '';
-
-    public string $reminder_channel = 'in_app';
-
-    public string $reminder_state = 'pending';
-
-    public string $reminder_notes = '';
+    // reminder extracted to App\Livewire\Inspector\ReminderForm;
+    // the shell hosts the child via @livewire in the render switch.
 
     // savings_goal extracted to App\Livewire\Inspector\SavingsGoalForm;
     // the shell hosts the child via @livewire in the render switch.
@@ -1584,7 +1576,6 @@ new class extends Component
             // state. The shell only manages open/close + parent id.
             'inventory' => $this->loadInventory(),
             'appointment' => $this->loadAppointment(),
-            'reminder' => $this->loadReminder(),
             'subscription' => $this->loadSubscription(),
             'checklist_template' => $this->loadChecklistTemplate(),
             default => null,
@@ -1928,7 +1919,7 @@ new class extends Component
         // persists on its own. The child fires `inspector-form-saved`
         // back and the shell's onFormSaved() listener closes the drawer.
         // Add a type to this array after extracting its child form.
-        $extractedTypes = ['pet', 'pet_vaccination', 'pet_checkup', 'time_entry', 'transfer', 'savings_goal', 'budget_cap', 'category_rule', 'tag_rule'];
+        $extractedTypes = ['pet', 'pet_vaccination', 'pet_checkup', 'time_entry', 'transfer', 'savings_goal', 'budget_cap', 'category_rule', 'tag_rule', 'reminder'];
         if (in_array($this->type, $extractedTypes, true)) {
             $this->dispatch('inspector-save');
 
@@ -1957,7 +1948,6 @@ new class extends Component
                 // reaching this match.
                 'inventory' => $this->saveInventory(),
                 'appointment' => $this->saveAppointment(),
-                'reminder' => $this->saveReminder(),
                 'subscription' => $this->saveSubscription(),
                 'checklist_template' => $this->saveChecklistTemplate(),
                 default => null,
@@ -3053,41 +3043,7 @@ new class extends Component
         }
     }
 
-    // ── Reminder ─────────────────────────────────────────────────────────
-    private function loadReminder(): void
-    {
-        $r = \App\Models\Reminder::findOrFail($this->id);
-        $this->reminder_title = $r->title ?? '';
-        $this->reminder_remind_at = $r->remind_at?->format('Y-m-d\TH:i') ?? '';
-        $this->reminder_channel = $r->channel ?? 'in_app';
-        $this->reminder_state = $r->state ?? 'pending';
-        $this->reminder_notes = $r->notes ?? '';
-    }
-
-    private function saveReminder(): void
-    {
-        $data = $this->validate([
-            'reminder_title' => 'required|string|max:255',
-            'reminder_remind_at' => 'required|date',
-            'reminder_channel' => ['required', \Illuminate\Validation\Rule::in(['in_app', 'email', 'slack', 'sms', 'telegram', 'push'])],
-            'reminder_state' => ['required', \Illuminate\Validation\Rule::in(['pending', 'fired', 'acknowledged', 'cancelled'])],
-            'reminder_notes' => 'nullable|string|max:5000',
-        ]);
-        $payload = [
-            'title' => $data['reminder_title'],
-            'remind_at' => $data['reminder_remind_at'],
-            'channel' => $data['reminder_channel'],
-            'state' => $data['reminder_state'],
-            'notes' => $data['reminder_notes'] ?: null,
-        ];
-
-        if ($this->id) {
-            \App\Models\Reminder::findOrFail($this->id)->update($payload);
-        } else {
-            $payload['user_id'] = auth()->id();
-            $this->id = \App\Models\Reminder::create($payload)->id;
-        }
-    }
+    // reminder load/save moved to App\Livewire\Inspector\ReminderForm.
 
     // savings_goal load/save moved to App\Livewire\Inspector\SavingsGoalForm.
 
@@ -3777,7 +3733,9 @@ new class extends Component
                     @break
                 @case('inventory') @include('partials.inspector.forms.inventory')    @break
                 @case('appointment') @include('partials.inspector.forms.appointment') @break
-                @case('reminder') @include('partials.inspector.forms.reminder') @break
+                @case('reminder')
+                    @livewire('inspector.reminder-form', ['id' => $id], key('reminder-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
+                    @break
                 @case('savings_goal')
                     @livewire('inspector.savings-goal-form', ['id' => $id], key('savings-goal-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
                     @break
