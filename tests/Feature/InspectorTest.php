@@ -91,8 +91,7 @@ it('creates a note', function () {
 it('creates a contact and splits email/phone lists', function () {
     authedInHousehold();
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'contact')
+    Livewire::test('inspector.contact-form')
         ->set('kind', 'person')
         ->set('display_name', 'Alice Example')
         ->set('email', 'alice@example.com, alice.backup@example.com')

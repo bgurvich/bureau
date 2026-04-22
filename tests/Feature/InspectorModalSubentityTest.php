@@ -19,8 +19,7 @@ it('primary inspector ignores subentity-edit-open, modal instance responds', fun
         ->dispatch('subentity-edit-open', type: 'contact', id: $contact->id);
     expect($modal->get('open'))->toBeTrue()
         ->and($modal->get('type'))->toBe('contact')
-        ->and($modal->get('id'))->toBe($contact->id)
-        ->and($modal->get('display_name'))->toBe('Acme');
+        ->and($modal->get('id'))->toBe($contact->id);
 });
 
 it('modal inspector ignores inspector-open so the primary drawer is not double-opened', function () {
@@ -49,16 +48,15 @@ it('close keeps asModal flag intact so the modal instance stays on its own chann
     expect($modal->get('open'))->toBeTrue();
 });
 
-it('modal save dispatches subentity-edit-saved with type + id for picker refresh', function () {
+it('ContactForm save persists rename + dispatches inspector-form-saved so the shell can close', function () {
     authedInHousehold();
     $contact = Contact::create(['kind' => 'org', 'display_name' => 'Acme']);
 
-    Livewire::test('inspector', ['asModal' => true])
-        ->dispatch('subentity-edit-open', type: 'contact', id: $contact->id)
+    Livewire::test('inspector.contact-form', ['id' => $contact->id])
         ->set('display_name', 'Acme (renamed)')
         ->call('save')
-        ->assertDispatched('subentity-edit-saved', type: 'contact', id: $contact->id)
-        ->assertDispatched('inspector-saved', type: 'contact');
+        ->assertDispatched('inspector-saved', type: 'contact', id: $contact->id)
+        ->assertDispatched('inspector-form-saved', type: 'contact', id: $contact->id);
 
     expect($contact->fresh()->display_name)->toBe('Acme (renamed)');
 });
@@ -67,9 +65,7 @@ it('persists contact_roles on save and clears them when all boxes unchecked', fu
     authedInHousehold();
     $contact = Contact::create(['kind' => 'person', 'display_name' => 'Aunt Sue']);
 
-    // Modal flow — user toggles two role checkboxes and saves.
-    Livewire::test('inspector', ['asModal' => true])
-        ->dispatch('subentity-edit-open', type: 'contact', id: $contact->id)
+    Livewire::test('inspector.contact-form', ['id' => $contact->id])
         ->set('contact_roles', ['family', 'emergency_contact'])
         ->call('save');
 
@@ -77,8 +73,7 @@ it('persists contact_roles on save and clears them when all boxes unchecked', fu
 
     // Re-open + clear — saving with an empty array writes null (not the
     // stale previous set).
-    Livewire::test('inspector', ['asModal' => true])
-        ->dispatch('subentity-edit-open', type: 'contact', id: $contact->id)
+    Livewire::test('inspector.contact-form', ['id' => $contact->id])
         ->set('contact_roles', [])
         ->call('save');
 
@@ -89,13 +84,11 @@ it('rejects invalid role slugs on save (Rule::in catalog enforcement)', function
     authedInHousehold();
     $contact = Contact::create(['kind' => 'person', 'display_name' => 'Aunt Sue']);
 
-    Livewire::test('inspector', ['asModal' => true])
-        ->dispatch('subentity-edit-open', type: 'contact', id: $contact->id)
+    Livewire::test('inspector.contact-form', ['id' => $contact->id])
         ->set('contact_roles', ['family', 'made_up_role'])
         ->call('save')
         ->assertHasErrors(['contact_roles.*']);
 
-    // Contact was not saved because validation failed — roles stay null.
     expect($contact->fresh()->contact_roles)->toBeNull();
 });
 
@@ -103,8 +96,7 @@ it('primary save does NOT dispatch subentity-edit-saved (event is modal-only)', 
     authedInHousehold();
     $contact = Contact::create(['kind' => 'org', 'display_name' => 'Acme']);
 
-    Livewire::test('inspector')
-        ->dispatch('inspector-open', type: 'contact', id: $contact->id)
+    Livewire::test('inspector.contact-form', ['id' => $contact->id])
         ->set('display_name', 'Acme B')
         ->call('save')
         ->assertNotDispatched('subentity-edit-saved')

@@ -65,8 +65,7 @@ it('saves a contact with a known-year birthday via the inspector', function () {
     authedInHousehold();
     $contact = Contact::create(['kind' => 'person', 'display_name' => 'Aunt Sue']);
 
-    Livewire::test('inspector')
-        ->dispatch('inspector-open', type: 'contact', id: $contact->id)
+    Livewire::test('inspector.contact-form', ['id' => $contact->id])
         ->set('birthday', '1985-05-10')
         ->set('birthday_year_known', true)
         ->call('save');
@@ -78,8 +77,7 @@ it('normalises a birthday to 1900-MM-DD when year is unknown', function () {
     authedInHousehold();
     $contact = Contact::create(['kind' => 'person', 'display_name' => 'Aunt Sue']);
 
-    Livewire::test('inspector')
-        ->dispatch('inspector-open', type: 'contact', id: $contact->id)
+    Livewire::test('inspector.contact-form', ['id' => $contact->id])
         ->set('birthday', '2026-05-10') // user types any year with the right MM-DD
         ->set('birthday_year_known', false)
         ->call('save');
@@ -94,8 +92,7 @@ it('clearing the birthday input writes null back', function () {
         'kind' => 'person', 'display_name' => 'Aunt Sue', 'birthday' => '1985-05-10',
     ]);
 
-    Livewire::test('inspector')
-        ->dispatch('inspector-open', type: 'contact', id: $contact->id)
+    Livewire::test('inspector.contact-form', ['id' => $contact->id])
         ->set('birthday', '')
         ->call('save');
 

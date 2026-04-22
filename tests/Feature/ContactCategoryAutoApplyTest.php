@@ -108,8 +108,7 @@ it('backfills uncategorised transactions when triggered from the contact inspect
     // Set the contact's category via the inspector and run the backfill.
     // Backfill persists the category itself so the user can hit Apply
     // without a prior Save click — drawer stays open to show the status.
-    Livewire::test('inspector')
-        ->call('openInspector', 'contact', $contact->id)
+    Livewire::test('inspector.contact-form', ['id' => $contact->id])
         ->set('contact_category_id', $groceries->id)
         ->call('backfillCategoryToTransactions');
 

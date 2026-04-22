@@ -87,8 +87,7 @@ it('autocomplete returns an empty list on Nominatim error without throwing', fun
 it('Inspector saves a Contact with structured address populated from the picker', function () {
     authedInHousehold();
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'contact')
+    Livewire::test('inspector.contact-form')
         ->set('kind', 'person')
         ->set('display_name', 'Jane Doe')
         ->set('contact_address_line', '123 Main St')
@@ -119,7 +118,7 @@ it('Inspector reloads a Contact address from JSON into the form fields', functio
         ]],
     ]);
 
-    $component = Livewire::test('inspector')->call('openInspector', 'contact', $c->id);
+    $component = Livewire::test('inspector.contact-form', ['id' => $c->id]);
     expect($component->get('contact_address_line'))->toBe('1 Analytical Engine Lane')
         ->and($component->get('contact_address_city'))->toBe('London')
         ->and($component->get('contact_address_country'))->toBe('UK');

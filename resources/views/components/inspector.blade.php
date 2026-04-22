@@ -212,78 +212,8 @@ new class extends Component
 
     public string $memo = '';
 
-    // contact
-    public string $kind = 'person';
-
-    public string $display_name = '';
-
-    public string $first_name = '';
-
-    public string $last_name = '';
-
-    public string $organization = '';
-
-    public bool $favorite = false;
-
-    public bool $is_vendor = false;
-
-    public bool $is_customer = false;
-
-    public string $tax_id = '';
-
-    public string $email = '';
-
-    public string $phone = '';
-
-    /** Free-form primary address for a contact — populated from Nominatim autocomplete or manual entry. */
-    public string $contact_address_line = '';
-
-    public string $contact_address_city = '';
-
-    public string $contact_address_region = '';
-
-    public string $contact_address_postcode = '';
-
-    public string $contact_address_country = '';
-
-    /**
-     * Multi-line regex list (one per line) that the import + vendor
-     * re-resolver test against transaction descriptions. First hit
-     * across any Contact's patterns assigns the row — so renames of
-     * display_name don't break vendor matching.
-     */
-    public string $contact_match_patterns = '';
-
-    /** Default spending category for this contact — freshly-created
-     *  transactions with this counterparty auto-inherit it. */
-    public ?int $contact_category_id = null;
-
-    /** User-facing status line for the "apply to uncategorised"
-     *  backfill action on the contact inspector. */
-    public ?string $contactBackfillMessage = null;
-
-    /**
-     * Relationship roles selected on the inspector checkbox grid.
-     * Subset of Enums::contactRoles() keys.
-     *
-     * @var array<int, string>
-     */
-    public array $contact_roles = [];
-
-    /**
-     * Birthday as Y-m-d. Empty string means "no birthday on file".
-     * When the user only knows the month/day, they pick any year with
-     * the right MM-DD; saveContact rewrites it as 1900-MM-DD via the
-     * `birthday_year_known` flag below.
-     */
-    public string $birthday = '';
-
-    /**
-     * True when the stored year is real; false means "only month/day
-     * known" → persist as 1900-MM-DD sentinel that Birthdays::ageOn
-     * detects and returns null for.
-     */
-    public bool $birthday_year_known = true;
+    // contact extracted to App\Livewire\Inspector\ContactForm;
+    // the shell hosts the child via @livewire in the render switch.
 
     // note
     public bool $pinned = false;
@@ -1475,7 +1405,6 @@ new class extends Component
         match ($this->type) {
             'task' => $this->loadTask(),
             'transaction' => $this->loadTransaction(),
-            'contact' => $this->loadContact(),
             'note' => $this->loadNote(),
             'physical_mail' => $this->loadPhysicalMail(),
             'bill' => $this->loadBill(),
@@ -1523,41 +1452,7 @@ new class extends Component
         $this->subject_refs = $this->subjectRefsFrom($t);
     }
 
-    private function loadContact(): void
-    {
-        $c = Contact::findOrFail($this->id);
-        $this->kind = $c->kind;
-        $this->display_name = $c->display_name;
-        $this->first_name = $c->first_name ?? '';
-        $this->last_name = $c->last_name ?? '';
-        $this->organization = $c->organization ?? '';
-        $this->favorite = (bool) $c->favorite;
-        $this->is_vendor = (bool) $c->is_vendor;
-        $this->is_customer = (bool) $c->is_customer;
-        $this->tax_id = $c->tax_id ?? '';
-        $emails = $c->emails ?? [];
-        $this->email = is_array($emails) ? implode(', ', $emails) : (string) $emails;
-        $phones = $c->phones ?? [];
-        $this->phone = is_array($phones) ? implode(', ', $phones) : (string) $phones;
-        $this->notes = $c->notes ?? '';
-        $this->contact_match_patterns = (string) ($c->match_patterns ?? '');
-        $this->contact_category_id = $c->category_id;
-        $this->contactBackfillMessage = null;
-        $this->contact_roles = is_array($c->contact_roles) ? array_values($c->contact_roles) : [];
-        $this->birthday = $c->birthday ? $c->birthday->toDateString() : '';
-        $this->birthday_year_known = $c->birthday ? (int) $c->birthday->year !== \App\Support\Birthdays::YEAR_UNKNOWN : true;
-
-        // Addresses is a JSON array of address objects on Contact; surface the
-        // first one into the five structured fields the form edits. Saving
-        // collapses them back into a single-entry array.
-        $addresses = is_array($c->addresses) ? $c->addresses : [];
-        $first = is_array($addresses[0] ?? null) ? $addresses[0] : [];
-        $this->contact_address_line = (string) ($first['line'] ?? '');
-        $this->contact_address_city = (string) ($first['city'] ?? '');
-        $this->contact_address_region = (string) ($first['region'] ?? '');
-        $this->contact_address_postcode = (string) ($first['postcode'] ?? '');
-        $this->contact_address_country = (string) ($first['country'] ?? '');
-    }
+    // loadContact moved to App\Livewire\Inspector\ContactForm.
 
     private function loadNote(): void
     {
@@ -1773,7 +1668,7 @@ new class extends Component
         // persists on its own. The child fires `inspector-form-saved`
         // back and the shell's onFormSaved() listener closes the drawer.
         // Add a type to this array after extracting its child form.
-        $extractedTypes = ['pet', 'pet_vaccination', 'pet_checkup', 'time_entry', 'transfer', 'savings_goal', 'budget_cap', 'category_rule', 'tag_rule', 'reminder', 'subscription', 'online_account', 'meeting', 'domain', 'project', 'account'];
+        $extractedTypes = ['pet', 'pet_vaccination', 'pet_checkup', 'time_entry', 'transfer', 'savings_goal', 'budget_cap', 'category_rule', 'tag_rule', 'reminder', 'subscription', 'online_account', 'meeting', 'domain', 'project', 'account', 'contact'];
         if (in_array($this->type, $extractedTypes, true)) {
             $this->dispatch('inspector-save');
 
@@ -1784,7 +1679,6 @@ new class extends Component
             match ($this->type) {
                 'task' => $this->saveTask(),
                 'transaction' => $this->saveTransaction(),
-                'contact' => $this->saveContact(),
                 'note' => $this->saveNote(),
                 'physical_mail' => $this->savePhysicalMail(),
                 'bill' => $this->saveBill(),
@@ -2031,131 +1925,7 @@ new class extends Component
         return $account?->counterparty_contact_id ?? $account?->vendor_contact_id ?? null;
     }
 
-    private function saveContact(): void
-    {
-        $data = $this->validate([
-            'kind' => ['required', Rule::in(array_keys(Enums::contactKinds()))],
-            'display_name' => 'required|string|max:255',
-            'first_name' => 'nullable|string|max:100',
-            'last_name' => 'nullable|string|max:100',
-            'organization' => 'nullable|string|max:255',
-            'favorite' => 'boolean',
-            'is_vendor' => 'boolean',
-            'is_customer' => 'boolean',
-            'tax_id' => 'nullable|string|max:64',
-            'email' => 'nullable|string|max:500',
-            'phone' => 'nullable|string|max:200',
-            'contact_address_line' => 'nullable|string|max:255',
-            'contact_address_city' => 'nullable|string|max:100',
-            'contact_address_region' => 'nullable|string|max:100',
-            'contact_address_postcode' => 'nullable|string|max:32',
-            'contact_address_country' => 'nullable|string|max:100',
-            'notes' => 'nullable|string|max:5000',
-            'contact_match_patterns' => 'nullable|string|max:5000',
-            'contact_category_id' => 'nullable|integer|exists:categories,id',
-            'contact_roles' => 'array',
-            'contact_roles.*' => ['string', Rule::in(array_keys(Enums::contactRoles()))],
-            'birthday' => 'nullable|date',
-            'birthday_year_known' => 'boolean',
-        ]);
-
-        $addressParts = array_filter([
-            'line' => trim((string) ($data['contact_address_line'] ?? '')) ?: null,
-            'city' => trim((string) ($data['contact_address_city'] ?? '')) ?: null,
-            'region' => trim((string) ($data['contact_address_region'] ?? '')) ?: null,
-            'postcode' => trim((string) ($data['contact_address_postcode'] ?? '')) ?: null,
-            'country' => trim((string) ($data['contact_address_country'] ?? '')) ?: null,
-        ], fn ($v) => $v !== null);
-        $addresses = $addressParts !== [] ? [$addressParts] : null;
-
-        $payload = array_filter([
-            'kind' => $data['kind'],
-            'display_name' => $data['display_name'],
-            'first_name' => $data['first_name'] ?: null,
-            'last_name' => $data['last_name'] ?: null,
-            'organization' => $data['organization'] ?: null,
-            'favorite' => $data['favorite'],
-            'is_vendor' => $data['is_vendor'],
-            'is_customer' => $data['is_customer'],
-            'tax_id' => $data['tax_id'] ?: null,
-            'emails' => $this->splitList($data['email']),
-            'phones' => $this->splitList($data['phone']),
-            'addresses' => $addresses,
-            'notes' => $data['notes'] ?: null,
-            'match_patterns' => trim((string) ($data['contact_match_patterns'] ?? '')) ?: null,
-        ], fn ($v) => $v !== null);
-
-        // always-present booleans should NOT be filtered out when false
-        $payload['favorite'] = $data['favorite'];
-        $payload['is_vendor'] = $data['is_vendor'];
-        $payload['is_customer'] = $data['is_customer'];
-
-        // category_id is nullable and needs to be written even when null
-        // (to explicitly clear), so it sits outside the filter_null block.
-        $payload['category_id'] = $data['contact_category_id'] ?: null;
-
-        // Roles — always persist so clearing all boxes writes an empty
-        // array back rather than leaving the previous set in place.
-        $roles = array_values(array_unique((array) ($data['contact_roles'] ?? [])));
-        $payload['contact_roles'] = $roles === [] ? null : $roles;
-
-        // Birthday: when the user has the day but not the year, we
-        // store 1900-MM-DD as a sentinel; Birthdays helpers detect it
-        // and suppress age display while keeping the anniversary logic.
-        $birthdayRaw = trim((string) ($data['birthday'] ?? ''));
-        if ($birthdayRaw === '') {
-            $payload['birthday'] = null;
-        } else {
-            $parsed = \Carbon\CarbonImmutable::parse($birthdayRaw);
-            $payload['birthday'] = ($data['birthday_year_known'] ?? true)
-                ? $parsed->toDateString()
-                : $parsed->setDate(\App\Support\Birthdays::YEAR_UNKNOWN, (int) $parsed->month, (int) $parsed->day)->toDateString();
-        }
-
-        if ($this->id) {
-            Contact::findOrFail($this->id)->update($payload);
-        } else {
-            $payload['owner_user_id'] = auth()->id();
-            $this->id = Contact::create($payload)->id;
-        }
-    }
-
-    /**
-     * Apply the contact's default category to every Transaction linked
-     * to this contact that currently has no category_id. Explicit
-     * backfill — the observer only auto-applies at Transaction create
-     * time, so rows created before the contact got a category stay
-     * uncategorised until the user explicitly asks.
-     *
-     * Self-contained: persists the picked category on the contact (in
-     * case the user clicks Apply without having saved the form first)
-     * and updates the transactions in one pass. Does NOT close the
-     * drawer so the user sees the status line confirming how many rows
-     * flipped; they still have to click Save (or the drawer's X) to
-     * dismiss the inspector.
-     */
-    public function backfillCategoryToTransactions(): void
-    {
-        if (! $this->id || $this->type !== 'contact' || ! $this->contact_category_id) {
-            return;
-        }
-        $contactId = (int) $this->id;
-        $categoryId = (int) $this->contact_category_id;
-
-        // Persist the picked category first so the contact and its
-        // historical transactions end up consistent.
-        Contact::whereKey($contactId)->update(['category_id' => $categoryId]);
-
-        $n = Transaction::query()
-            ->where('counterparty_contact_id', $contactId)
-            ->whereNull('category_id')
-            ->update(['category_id' => $categoryId]);
-
-        $this->contactBackfillMessage = $n > 0
-            ? __(':n transaction(s) categorised.', ['n' => $n])
-            : __('No uncategorised transactions matched.');
-        $this->dispatch('inspector-saved');
-    }
+    // saveContact + backfillCategoryToTransactions moved to App\Livewire\Inspector\ContactForm.
 
     private function saveBill(): void
     {
@@ -3351,7 +3121,9 @@ new class extends Component
                     @break
                 @case('task')    @include('partials.inspector.forms.task')           @break
                 @case('transaction') @include('partials.inspector.forms.transaction')@break
-                @case('contact') @include('partials.inspector.forms.contact')        @break
+                @case('contact')
+                    @livewire('inspector.contact-form', ['id' => $id], key('contact-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
+                    @break
                 @case('bill')    @include('partials.inspector.forms.bill')           @break
                 @case('note')    @include('partials.inspector.forms.note')           @break
                 @case('physical_mail') @include('partials.inspector.forms.physical_mail') @break
