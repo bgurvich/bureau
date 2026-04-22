@@ -325,22 +325,8 @@ new class extends Component
     // meeting extracted to App\Livewire\Inspector\MeetingForm;
     // the shell hosts the child via @livewire in the render switch.
 
-    // project
-    public string $project_name = '';
-
-    public string $project_slug = '';
-
-    public string $project_color = '';
-
-    public bool $project_billable = false;
-
-    public string $project_hourly_rate = '';
-
-    public string $project_hourly_rate_currency = 'USD';
-
-    public ?int $project_client_id = null;
-
-    public bool $project_archived = false;
+    // project extracted to App\Livewire\Inspector\ProjectForm;
+    // the shell hosts the child via @livewire in the render switch.
 
     // contract
     public string $contract_kind = 'subscription';
@@ -1358,7 +1344,6 @@ new class extends Component
         $this->occurred_on = now()->toDateString();
         $this->due_at = now()->addDay()->startOfHour()->format('Y-m-d\TH:i');
         $this->currency = $currency;
-        $this->project_hourly_rate_currency = $currency;
         $this->contract_monthly_cost_currency = $currency;
         $this->property_purchase_currency = $currency;
         $this->vehicle_purchase_currency = $currency;
@@ -1518,7 +1503,6 @@ new class extends Component
             'physical_mail' => $this->loadPhysicalMail(),
             'bill' => $this->loadBill(),
             'document' => $this->loadDocument(),
-            'project' => $this->loadProject(),
             'contract' => $this->loadContract(),
             'insurance' => $this->loadInsurance(),
             'account' => $this->loadAccount(),
@@ -1671,19 +1655,7 @@ new class extends Component
         $this->notes = $d->notes ?? '';
     }
 
-    private function loadProject(): void
-    {
-        $p = Project::findOrFail($this->id);
-        $this->project_name = $p->name;
-        $this->project_slug = $p->slug;
-        $this->project_color = $p->color ?? '';
-        $this->project_billable = (bool) $p->billable;
-        $this->project_hourly_rate = $p->hourly_rate !== null ? (string) $p->hourly_rate : '';
-        $this->project_hourly_rate_currency = $p->hourly_rate_currency ?: 'USD';
-        $this->project_client_id = $p->client_contact_id;
-        $this->project_archived = (bool) $p->archived;
-        $this->notes = $p->notes ?? '';
-    }
+    // loadProject moved to App\Livewire\Inspector\ProjectForm.
 
     private function loadContract(): void
     {
@@ -1842,7 +1814,7 @@ new class extends Component
         // persists on its own. The child fires `inspector-form-saved`
         // back and the shell's onFormSaved() listener closes the drawer.
         // Add a type to this array after extracting its child form.
-        $extractedTypes = ['pet', 'pet_vaccination', 'pet_checkup', 'time_entry', 'transfer', 'savings_goal', 'budget_cap', 'category_rule', 'tag_rule', 'reminder', 'subscription', 'online_account', 'meeting', 'domain'];
+        $extractedTypes = ['pet', 'pet_vaccination', 'pet_checkup', 'time_entry', 'transfer', 'savings_goal', 'budget_cap', 'category_rule', 'tag_rule', 'reminder', 'subscription', 'online_account', 'meeting', 'domain', 'project'];
         if (in_array($this->type, $extractedTypes, true)) {
             $this->dispatch('inspector-save');
 
@@ -1858,7 +1830,6 @@ new class extends Component
                 'physical_mail' => $this->savePhysicalMail(),
                 'bill' => $this->saveBill(),
                 'document' => $this->saveDocument(),
-                'project' => $this->saveProject(),
                 'contract' => $this->saveContract(),
                 'insurance' => $this->saveInsurance(),
                 'account' => $this->saveAccount(),
@@ -2400,41 +2371,7 @@ new class extends Component
     }
 
 
-    private function saveProject(): void
-    {
-        $data = $this->validate([
-            'project_name' => 'required|string|max:255',
-            'project_slug' => 'nullable|string|max:255',
-            'project_color' => 'nullable|string|size:7|starts_with:#',
-            'project_billable' => 'boolean',
-            'project_hourly_rate' => 'nullable|numeric',
-            'project_hourly_rate_currency' => 'nullable|string|size:3',
-            'project_client_id' => 'nullable|integer|exists:contacts,id',
-            'project_archived' => 'boolean',
-            'notes' => 'nullable|string|max:5000',
-        ]);
-
-        $slug = $data['project_slug'] ?: Str::slug($data['project_name']);
-
-        $payload = [
-            'name' => $data['project_name'],
-            'slug' => $slug,
-            'color' => $data['project_color'] ?: null,
-            'billable' => (bool) $data['project_billable'],
-            'hourly_rate' => $data['project_hourly_rate'] !== '' ? (float) $data['project_hourly_rate'] : null,
-            'hourly_rate_currency' => $data['project_hourly_rate_currency'] ?: null,
-            'client_contact_id' => $data['project_client_id'] ?: null,
-            'archived' => (bool) $data['project_archived'],
-            'notes' => $data['notes'] ?: null,
-        ];
-
-        if ($this->id) {
-            Project::findOrFail($this->id)->update($payload);
-        } else {
-            $payload['user_id'] = auth()->id();
-            $this->id = Project::create($payload)->id;
-        }
-    }
+    // saveProject moved to App\Livewire\Inspector\ProjectForm.
 
     private function saveContract(): void
     {
@@ -3504,7 +3441,9 @@ new class extends Component
                 @case('meeting')
                     @livewire('inspector.meeting-form', ['id' => $id], key('meeting-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
                     @break
-                @case('project') @include('partials.inspector.forms.project')        @break
+                @case('project')
+                    @livewire('inspector.project-form', ['id' => $id], key('project-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
+                    @break
                 @case('contract') @include('partials.inspector.forms.contract')      @break
                 @case('insurance') @include('partials.inspector.forms.insurance')    @break
                 @case('account') @include('partials.inspector.forms.account')        @break
