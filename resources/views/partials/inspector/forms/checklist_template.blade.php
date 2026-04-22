@@ -24,6 +24,7 @@
                 <option value="daily">{{ __('Daily') }}</option>
                 <option value="weekdays">{{ __('Weekdays (Mon–Fri)') }}</option>
                 <option value="weekends">{{ __('Weekends (Sat–Sun)') }}</option>
+                <option value="one_off">{{ __('One-off (single occurrence on start date)') }}</option>
                 <option value="custom">{{ __('Custom RRULE') }}</option>
             </select>
         </div>

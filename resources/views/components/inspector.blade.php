@@ -3551,6 +3551,10 @@ new class extends Component
         'daily' => 'FREQ=DAILY',
         'weekdays' => 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR',
         'weekends' => 'FREQ=WEEKLY;BYDAY=SA,SU',
+        // One-off: expands to a single occurrence on dtstart. Needed for
+        // onboarding checklists + project / move-house / welcome-a-pet
+        // one-time lists where a cadence doesn't fit.
+        'one_off' => 'FREQ=DAILY;COUNT=1',
     ];
 
     private function loadChecklistTemplate(): void
@@ -3590,7 +3594,7 @@ new class extends Component
             'checklist_name' => 'required|string|max:120',
             'checklist_description' => 'nullable|string|max:2000',
             'checklist_time_of_day' => ['required', Rule::in(['morning', 'midday', 'evening', 'night', 'anytime'])],
-            'checklist_recurrence_mode' => ['required', Rule::in(['daily', 'weekdays', 'weekends', 'custom'])],
+            'checklist_recurrence_mode' => ['required', Rule::in(['daily', 'weekdays', 'weekends', 'one_off', 'custom'])],
             'checklist_rrule' => 'nullable|string|max:255',
             'checklist_dtstart' => 'required|date',
             'checklist_paused_until' => 'nullable|date',

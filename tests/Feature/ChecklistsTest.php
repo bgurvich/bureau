@@ -44,6 +44,33 @@ it('persists a custom RRULE when recurrence_mode is custom', function () {
     expect(ChecklistTemplate::first()->rrule)->toBe('FREQ=WEEKLY;BYDAY=MO,WE,FR');
 });
 
+it('persists FREQ=DAILY;COUNT=1 when recurrence_mode is one_off', function () {
+    Livewire::test('inspector')
+        ->call('openInspector', 'checklist_template')
+        ->set('checklist_name', 'Welcome-a-pet — first week')
+        ->set('checklist_recurrence_mode', 'one_off')
+        ->set('checklist_dtstart', '2026-06-01')
+        ->call('save');
+
+    $template = ChecklistTemplate::first();
+    expect($template->rrule)->toBe('FREQ=DAILY;COUNT=1')
+        ->and($template->dtstart->toDateString())->toBe('2026-06-01');
+});
+
+it('reopening a one-off checklist restores recurrence_mode = one_off (not custom)', function () {
+    $template = ChecklistTemplate::create([
+        'name' => 'Onboarding step 1',
+        'time_of_day' => 'anytime',
+        'rrule' => 'FREQ=DAILY;COUNT=1',
+        'dtstart' => now()->toDateString(),
+        'active' => true,
+    ]);
+
+    Livewire::test('inspector')
+        ->call('openInspector', 'checklist_template', $template->id)
+        ->assertSet('checklist_recurrence_mode', 'one_off');
+});
+
 it('ticks an item lazily and creates a run for today', function () {
     $t = ChecklistTemplate::create([
         'name' => 'Evening', 'time_of_day' => 'evening', 'rrule' => 'FREQ=DAILY',

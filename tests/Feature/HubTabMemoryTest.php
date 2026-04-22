@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Models\UserHubPreference;
+use App\Support\CurrentHousehold;
 use App\Support\HubTabMemory;
 use Livewire\Livewire;
 
@@ -44,12 +45,12 @@ it('preferences are scoped per user+household (cross-user / cross-household isol
 
     // User A still sees their own pref.
     $this->actingAs($userA);
-    \App\Support\CurrentHousehold::set($userA->defaultHousehold);
+    CurrentHousehold::set($userA->defaultHousehold);
     expect(HubTabMemory::remembered('pets'))->toBe('vaccinations');
 
     // User B still sees theirs.
     $this->actingAs($userB);
-    \App\Support\CurrentHousehold::set($userB->defaultHousehold);
+    CurrentHousehold::set($userB->defaultHousehold);
     expect(HubTabMemory::remembered('pets'))->toBe('checkups');
 });
 
