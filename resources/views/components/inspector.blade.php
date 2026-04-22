@@ -1423,7 +1423,6 @@ new class extends Component
         $this->insurance_deductible_currency = $currency;
         $this->account_currency = $currency;
         $this->sale_currency = $currency;
-        $this->budget_currency = $currency;
         $this->subscription_currency = $currency;
         $this->issued_on = now()->toDateString();
         $this->due_on = now()->addDays(14)->toDateString();
@@ -1547,7 +1546,7 @@ new class extends Component
         $label = ucfirst($category->kind).' · '.$category->name;
         $targets = $modelKey && property_exists($this, $modelKey)
             ? [$modelKey]
-            : ['budget_category_id', 'rule_category_id', 'category_id'];
+            : ['rule_category_id', 'category_id'];
         foreach ($targets as $model) {
             $this->dispatch('ss-option-added', model: $model, id: $category->id, label: $label);
         }
@@ -1586,7 +1585,6 @@ new class extends Component
             'inventory' => $this->loadInventory(),
             'appointment' => $this->loadAppointment(),
             'reminder' => $this->loadReminder(),
-            'budget_cap' => $this->loadBudgetCap(),
             'category_rule' => $this->loadCategoryRule(),
             'tag_rule' => $this->loadTagRule(),
             'subscription' => $this->loadSubscription(),
@@ -1932,7 +1930,7 @@ new class extends Component
         // persists on its own. The child fires `inspector-form-saved`
         // back and the shell's onFormSaved() listener closes the drawer.
         // Add a type to this array after extracting its child form.
-        $extractedTypes = ['pet', 'pet_vaccination', 'pet_checkup', 'time_entry', 'transfer', 'savings_goal'];
+        $extractedTypes = ['pet', 'pet_vaccination', 'pet_checkup', 'time_entry', 'transfer', 'savings_goal', 'budget_cap'];
         if (in_array($this->type, $extractedTypes, true)) {
             $this->dispatch('inspector-save');
 
@@ -1962,7 +1960,6 @@ new class extends Component
                 'inventory' => $this->saveInventory(),
                 'appointment' => $this->saveAppointment(),
                 'reminder' => $this->saveReminder(),
-                'budget_cap' => $this->saveBudgetCap(),
                 'category_rule' => $this->saveCategoryRule(),
                 'tag_rule' => $this->saveTagRule(),
                 'subscription' => $this->saveSubscription(),
@@ -3098,45 +3095,7 @@ new class extends Component
 
     // savings_goal load/save moved to App\Livewire\Inspector\SavingsGoalForm.
 
-    // ── Budget cap ───────────────────────────────────────────────────────
-    public ?int $budget_category_id = null;
-
-    public string $budget_monthly_cap = '';
-
-    public string $budget_currency = 'USD';
-
-    public bool $budget_active = true;
-
-    private function loadBudgetCap(): void
-    {
-        $c = \App\Models\BudgetCap::findOrFail($this->id);
-        $this->budget_category_id = $c->category_id;
-        $this->budget_monthly_cap = (string) $c->monthly_cap;
-        $this->budget_currency = $c->currency;
-        $this->budget_active = (bool) $c->active;
-    }
-
-    private function saveBudgetCap(): void
-    {
-        $data = $this->validate([
-            'budget_category_id' => 'required|integer|exists:categories,id',
-            'budget_monthly_cap' => 'required|numeric|min:0',
-            'budget_currency' => 'required|string|size:3|alpha',
-            'budget_active' => 'boolean',
-        ]);
-        $payload = [
-            'category_id' => $data['budget_category_id'],
-            'monthly_cap' => (float) $data['budget_monthly_cap'],
-            'currency' => strtoupper($data['budget_currency']),
-            'active' => $data['budget_active'],
-        ];
-
-        if ($this->id) {
-            \App\Models\BudgetCap::findOrFail($this->id)->forceFill($payload)->save();
-        } else {
-            $this->id = \App\Models\BudgetCap::forceCreate($payload)->id;
-        }
-    }
+    // budget_cap extracted to App\Livewire\Inspector\BudgetCapForm.
 
     // ── Category rule ────────────────────────────────────────────────────
     public ?int $rule_category_id = null;
@@ -3925,7 +3884,9 @@ new class extends Component
                 @case('savings_goal')
                     @livewire('inspector.savings-goal-form', ['id' => $id], key('savings-goal-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
                     @break
-                @case('budget_cap') @include('partials.inspector.forms.budget_cap') @break
+                @case('budget_cap')
+                    @livewire('inspector.budget-cap-form', ['id' => $id], key('budget-cap-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
+                    @break
                 @case('category_rule') @include('partials.inspector.forms.category_rule') @break
                 @case('tag_rule') @include('partials.inspector.forms.tag_rule') @break
                 @case('subscription') @include('partials.inspector.forms.subscription') @break

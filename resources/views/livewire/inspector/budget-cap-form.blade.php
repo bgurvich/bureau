@@ -25,5 +25,4 @@
                class="rounded border-neutral-700 bg-neutral-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
         <span>{{ __('Active — counts toward the attention radar') }}</span>
     </label>
-    @include('partials.inspector.fields.admin')
 </form>

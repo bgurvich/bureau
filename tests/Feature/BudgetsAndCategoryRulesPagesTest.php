@@ -42,8 +42,7 @@ it('creates a budget envelope via the inspector', function () {
     authedInHousehold();
     $cat = pageCat('Dining');
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'budget_cap')
+    Livewire::test('inspector.budget-cap-form')
         ->set('budget_category_id', $cat->id)
         ->set('budget_monthly_cap', '300')
         ->set('budget_currency', 'USD')
@@ -58,8 +57,7 @@ it('edits an envelope via the inspector', function () {
     $cat = pageCat('Utilities');
     $cap = BudgetCap::forceCreate(['category_id' => $cat->id, 'monthly_cap' => 100, 'currency' => 'USD', 'active' => true]);
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'budget_cap', $cap->id)
+    Livewire::test('inspector.budget-cap-form', ['id' => $cap->id])
         ->assertSet('budget_monthly_cap', '100.0000')
         ->set('budget_monthly_cap', '250')
         ->call('save');
