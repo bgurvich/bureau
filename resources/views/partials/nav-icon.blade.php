@@ -109,6 +109,11 @@
             <path d="M16 3v5h5"/>
             @break
 
+        @case('book')
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/>
+            @break
+
         @case('stethoscope')
             <path d="M4 3v5a4 4 0 0 0 8 0V3"/>
             <path d="M6 3H4"/>

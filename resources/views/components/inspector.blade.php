@@ -1682,6 +1682,9 @@ new class extends Component
                 @case('tax_estimated_payment')
                     @livewire('inspector.tax-estimated-payment-form', ['id' => $id, 'parentId' => $subentityParentId], key('tax-estimated-payment-form-'.($id ?? 'new').'-'.($subentityParentId ?? '0').'-'.($asModal ? 'm' : 'p')))
                     @break
+                @case('journal_entry')
+                    @livewire('inspector.journal-entry-form', ['id' => $id], key('journal-entry-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
+                    @break
                 @case('property')
                     @livewire('inspector.property-form', ['id' => $id], key('property-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
                     @break

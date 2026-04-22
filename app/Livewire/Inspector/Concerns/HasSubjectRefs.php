@@ -10,6 +10,7 @@ use App\Models\Contract;
 use App\Models\Document;
 use App\Models\HealthProvider;
 use App\Models\InventoryItem;
+use App\Models\JournalEntry;
 use App\Models\OnlineAccount;
 use App\Models\Project;
 use App\Models\Property;
@@ -54,6 +55,7 @@ trait HasSubjectRefs
         'health_provider' => HealthProvider::class,
         'online_account' => OnlineAccount::class,
         'recurring_rule' => RecurringRule::class,
+        'journal_entry' => JournalEntry::class,
     ];
 
     /** @return array<int, array{ref: string, label: string, kind_label: string, name: string}> */
@@ -256,6 +258,7 @@ trait HasSubjectRefs
             'health_provider' => __('Health provider'),
             'online_account' => __('Online account'),
             'recurring_rule' => __('Bill'),
+            'journal_entry' => __('Journal entry'),
             default => ucfirst($kind),
         };
     }
@@ -275,6 +278,7 @@ trait HasSubjectRefs
             HealthProvider::class => 'name',
             OnlineAccount::class => 'service_name',
             RecurringRule::class => 'title',
+            JournalEntry::class => 'title',
             default => 'name',
         };
     }

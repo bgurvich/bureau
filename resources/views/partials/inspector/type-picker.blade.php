@@ -14,6 +14,7 @@
         __('Life') => [
             ['task', __('Task'), 'T'],
             ['note', __('Note'), 'N'],
+            ['journal_entry', __('Journal'), 'J'],
             ['contact', __('Contact'), 'C'],
             ['meeting', __('Meeting'), 'M'],
             ['reminder', __('Reminder'), 'R'],

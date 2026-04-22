@@ -119,6 +119,7 @@ Route::middleware(['auth', 'preferences', 'household'])->group(function () {
     Route::livewire('/post', 'physical-mail-index')->name('records.post');
     Route::livewire('/documents', 'documents-index')->name('records.documents');
     Route::livewire('/notes', 'notes-index')->name('records.notes');
+    Route::livewire('/journal', 'journal-index')->name('life.journal');
     Route::livewire('/time/projects', 'projects-index')->name('time.projects');
     Route::livewire('/time/entries', 'time-entries-index')->name('time.entries');
     Route::livewire('/properties', 'properties-index')->name('assets.properties');

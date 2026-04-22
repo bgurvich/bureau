@@ -554,4 +554,24 @@ class Enums
             'Q4' => __('Q4'),
         ];
     }
+
+    /** Journal mood vocabulary — short tokens the picker surfaces.
+     *  The schema stores free strings so adding one-off moods via
+     *  typed input still works; this is only the curated menu. */
+    /** @return array<string, string> */
+    public static function journalMoods(): array
+    {
+        return [
+            'good' => __('Good'),
+            'great' => __('Great'),
+            'neutral' => __('Neutral'),
+            'low' => __('Low'),
+            'anxious' => __('Anxious'),
+            'tired' => __('Tired'),
+            'excited' => __('Excited'),
+            'grateful' => __('Grateful'),
+            'frustrated' => __('Frustrated'),
+            'reflective' => __('Reflective'),
+        ];
+    }
 }
