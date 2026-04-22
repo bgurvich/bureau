@@ -218,8 +218,7 @@ it('creates a one-off bill via the Bill form', function () {
         'type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0,
     ]);
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'bill')
+    Livewire::test('inspector.bill-form')
         ->set('bill_title', 'Emergency plumber')
         ->set('amount', '-350')
         ->set('currency', 'USD')
@@ -228,8 +227,7 @@ it('creates a one-off bill via the Bill form', function () {
         ->set('due_on', '2026-04-24')
         ->set('is_recurring', false)
         ->set('autopay', false)
-        ->call('save')
-        ->assertSet('open', false);
+        ->call('save');
 
     $rule = RecurringRule::first();
     expect($rule)->not->toBeNull()
@@ -250,8 +248,7 @@ it('creates a recurring monthly bill via the Bill form', function () {
         'type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0,
     ]);
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'bill')
+    Livewire::test('inspector.bill-form')
         ->set('bill_title', 'Rent')
         ->set('amount', '-2200')
         ->set('currency', 'USD')
@@ -291,10 +288,16 @@ it('mark-paid pre-fills the Transaction form from the projection', function () {
         'status' => 'projected',
     ]);
 
+    // Shell delegation: markPaid flips the drawer to the transaction
+    // form and hands the projection id to the child via mount param.
     Livewire::test('inspector')
         ->call('markPaid', $projection->id)
         ->assertSet('open', true)
         ->assertSet('type', 'transaction')
+        ->assertSet('projection_prefill_id', $projection->id);
+
+    // Child prefill: TransactionForm reads `projectionId` at mount time.
+    Livewire::test('inspector.transaction-form', ['projectionId' => $projection->id])
         ->assertSet('amount', '-60.0000')
         ->assertSet('account_id', $account->id)
         ->assertSet('description', 'Internet')
@@ -598,8 +601,7 @@ it('mark-paid save auto-matches the projection', function () {
         'status' => 'overdue',
     ]);
 
-    Livewire::test('inspector')
-        ->call('markPaid', $projection->id)
+    Livewire::test('inspector.transaction-form', ['projectionId' => $projection->id])
         ->call('save');
 
     $fresh = $projection->fresh();

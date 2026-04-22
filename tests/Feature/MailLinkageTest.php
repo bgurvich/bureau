@@ -63,8 +63,7 @@ it('Inspector auto-mark cascades processed_at to the MailMessage', function () {
     [$mail, $media] = mailWithScan();
     $account = Account::create(['type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'bill', null, $media->id)
+    Livewire::test('inspector.bill-form', ['mediaId' => $media->id])
         ->set('account_id', $account->id)
         ->call('save');
 

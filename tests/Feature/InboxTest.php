@@ -93,8 +93,7 @@ it('creating a bill from a scan marks the media processed', function () {
         'type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0,
     ]);
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'bill', null, $m->id)
+    Livewire::test('inspector.bill-form', ['mediaId' => $m->id])
         ->set('account_id', $account->id)
         ->call('save');
 
@@ -109,8 +108,7 @@ it('already-attached scans are excluded from the Inbox', function () {
         'type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0,
     ]);
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'bill', null, $m->id)
+    Livewire::test('inspector.bill-form', ['mediaId' => $m->id])
         ->set('account_id', $account->id)
         ->call('save');
 

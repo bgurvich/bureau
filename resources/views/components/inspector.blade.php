@@ -1,48 +1,63 @@
 <?php
 
+use App\Exceptions\PeriodLockedException;
 use App\Models\Account;
 use App\Models\Appointment;
+use App\Models\BudgetCap;
 use App\Models\Category;
+use App\Models\CategoryRule;
+use App\Models\ChecklistTemplate;
+use App\Models\ChecklistTemplateItem;
 use App\Models\Contact;
 use App\Models\Contract;
 use App\Models\Document;
+use App\Models\Domain;
 use App\Models\HealthProvider;
 use App\Models\InsurancePolicy;
 use App\Models\InsurancePolicySubject;
 use App\Models\InventoryItem;
+use App\Models\MailMessage;
+use App\Models\Media;
 use App\Models\Meeting;
-use App\Models\OnlineAccount;
-use App\Models\PhysicalMail;
 use App\Models\Note;
+use App\Models\OnlineAccount;
 use App\Models\Pet;
+use App\Models\PhysicalMail;
 use App\Models\Project;
 use App\Models\Property;
 use App\Models\RecurringProjection;
 use App\Models\RecurringRule;
-use App\Models\Task;
-use App\Models\Transaction;
+use App\Models\Reminder;
+use App\Models\SavingsGoal;
+use App\Models\Subscription;
 use App\Models\Tag;
+use App\Models\TagRule;
+use App\Models\Task;
+use App\Models\TimeEntry;
+use App\Models\Transaction;
 use App\Models\User;
 use App\Models\Vehicle;
 use App\Support\CurrentHousehold;
 use App\Support\Enums;
 use App\Support\Formatting;
-use App\Support\ProjectionMatchResult;
 use App\Support\ProjectionMatcher;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\MorphToMany;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
-use App\Models\Media;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\On;
 use Livewire\Component;
+use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 use Livewire\WithFileUploads;
 
 new class extends Component
 {
     use WithFileUploads;
 
-    /** @var array<int, \Livewire\Features\SupportFileUploads\TemporaryUploadedFile> */
+    /** @var array<int, TemporaryUploadedFile> */
     public array $photoUpload = [];
 
     public bool $open = false;
@@ -322,6 +337,14 @@ new class extends Component
 
     public ?int $ambiguousTransactionId = null;
 
+    /**
+     * Set by markPaid() to hand a RecurringProjection's values to the
+     * extracted TransactionForm at mount time. Cleared after the child
+     * mounts so subsequent openInspector('transaction') calls don't
+     * redundantly prefill.
+     */
+    public ?int $projection_prefill_id = null;
+
     #[On('inspector-open')]
     public function openInspector(string $type = '', ?int $id = null, ?int $mediaId = null): void
     {
@@ -371,6 +394,21 @@ new class extends Component
         if ($this->open) {
             $this->close();
         }
+    }
+
+    /**
+     * TransactionForm detected multiple candidate RecurringProjections
+     * for the just-saved transaction. Swap the drawer body to the picker
+     * UI — linkProjection + skipProjectionLink live on this shell and
+     * operate on $ambiguousTransactionId + $ambiguousCandidates.
+     *
+     * @param  array<int, array{id:int, title:string, due_on:string, amount:string}>  $candidates
+     */
+    #[On('inspector-projection-candidates')]
+    public function onProjectionCandidates(int $transactionId, array $candidates): void
+    {
+        $this->ambiguousTransactionId = $transactionId;
+        $this->ambiguousCandidates = $candidates;
     }
 
     private function doOpen(string $type, ?int $id, ?int $mediaId = null, ?int $parentId = null): void
@@ -575,7 +613,7 @@ new class extends Component
             $kindLabel = $this->subjectKindLabel($kind);
             $nameCol = $this->subjectNameColumn($class);
 
-            /** @var \Illuminate\Database\Eloquent\Collection<int, \Illuminate\Database\Eloquent\Model> $rows */
+            /** @var Illuminate\Database\Eloquent\Collection<int, Model> $rows */
             $rows = $class::query()
                 ->where($nameCol, 'like', $term)
                 ->orderBy($nameCol)
@@ -635,7 +673,7 @@ new class extends Component
             $nameCol = $this->subjectNameColumn($class);
             $kindLabel = $this->subjectKindLabel($kind);
 
-            /** @var \Illuminate\Database\Eloquent\Collection<int, \Illuminate\Database\Eloquent\Model> $rows */
+            /** @var Illuminate\Database\Eloquent\Collection<int, Model> $rows */
             $rows = $class::query()->whereIn('id', $ids)->get()->keyBy('id');
             foreach ($ids as $id) {
                 $row = $rows->get($id);
@@ -766,7 +804,7 @@ new class extends Component
      *
      * @return array<int, string>
      */
-    private function subjectRefsFrom(\Illuminate\Database\Eloquent\Model $model): array
+    private function subjectRefsFrom(Model $model): array
     {
         if (! method_exists($model, 'subjects')) {
             return [];
@@ -806,7 +844,7 @@ new class extends Component
         return $out;
     }
 
-    private function attachSourceMediaTo(\Illuminate\Database\Eloquent\Model $record, string $role = 'receipt'): void
+    private function attachSourceMediaTo(Model $record, string $role = 'receipt'): void
     {
         if (! $this->source_media_id) {
             return;
@@ -818,7 +856,7 @@ new class extends Component
         if (! $media) {
             return;
         }
-        /** @var \Illuminate\Database\Eloquent\Relations\MorphToMany $rel */
+        /** @var MorphToMany $rel */
         $rel = $record->media();
         if (! $rel->where('media.id', $this->source_media_id)->exists()) {
             $rel->attach($this->source_media_id, ['role' => $role]);
@@ -827,7 +865,7 @@ new class extends Component
         // no longer belongs in the "Unprocessed" inbox.
         if ($media->processed_at === null) {
             $media->forceFill(['processed_at' => now()])->save();
-            \App\Models\MailMessage::cascadeProcessedFromMedia($media->id);
+            MailMessage::cascadeProcessedFromMedia($media->id);
         }
     }
 
@@ -853,7 +891,7 @@ new class extends Component
             'note' => [Note::class, 'user_id'],
             'physical_mail' => [PhysicalMail::class, null],
             'project' => [Project::class, 'user_id'],
-            'checklist_template' => [\App\Models\ChecklistTemplate::class, 'user_id'],
+            'checklist_template' => [ChecklistTemplate::class, 'user_id'],
             'transaction' => [Transaction::class, null],
             'bill' => [RecurringRule::class, null],
             'appointment' => [Appointment::class, null],
@@ -868,7 +906,7 @@ new class extends Component
             return;
         }
 
-        /** @var \Illuminate\Database\Eloquent\Model|null $model */
+        /** @var Model|null $model */
         $model = $class::find($this->id);
         if (! $model) {
             return;
@@ -887,16 +925,16 @@ new class extends Component
      * record via the HasMedia trait. Used by any form partial that renders
      * a thumbnail strip — inventory first, others can opt in similarly.
      *
-     * @return \Illuminate\Support\Collection<int, \App\Models\Media>
+     * @return Collection<int, Media>
      */
-    public function inspectorPhotos(): \Illuminate\Support\Collection
+    public function inspectorPhotos(): Collection
     {
         [$class] = $this->adminModelMap();
         if (! $class || ! $this->id || ! method_exists($class, 'media')) {
             return collect();
         }
 
-        /** @var \Illuminate\Database\Eloquent\Model|null $model */
+        /** @var Model|null $model */
         $model = $class::find($this->id);
         if (! $model) {
             return collect();
@@ -1034,7 +1072,7 @@ new class extends Component
             return;
         }
 
-        /** @var \Illuminate\Database\Eloquent\Model|null $model */
+        /** @var Model|null $model */
         $model = $class::with('tags:id,name')->find($this->id);
         if (! $model) {
             return;
@@ -1076,7 +1114,7 @@ new class extends Component
             return;
         }
 
-        /** @var \Illuminate\Database\Eloquent\Model|null $model */
+        /** @var Model|null $model */
         $model = $class::find($this->id);
         if (! $model) {
             return;
@@ -1151,10 +1189,10 @@ new class extends Component
     #[Computed]
     public function categoryPickerOptions(): array
     {
-        return \App\Models\Category::with('parent:id,name')
+        return Category::with('parent:id,name')
             ->orderBy('name')
             ->get(['id', 'name', 'kind', 'parent_id'])
-            ->mapWithKeys(fn (\App\Models\Category $c) => [$c->id => $c->displayLabel()])
+            ->mapWithKeys(fn (Category $c) => [$c->id => $c->displayLabel()])
             ->all();
     }
 
@@ -1172,7 +1210,7 @@ new class extends Component
     #[Computed]
     public function counterpartyPickerOptions(): array
     {
-        return \App\Models\Contact::orderBy('display_name')->pluck('display_name', 'id')->all();
+        return Contact::orderBy('display_name')->pluck('display_name', 'id')->all();
     }
 
     /**
@@ -1185,7 +1223,7 @@ new class extends Component
     #[Computed]
     public function recurringOutflowRulePickerOptions(): array
     {
-        return \App\Models\RecurringRule::where('active', true)
+        return RecurringRule::where('active', true)
             ->where('amount', '<=', 0)
             ->orderBy('title')
             ->get(['id', 'title', 'amount', 'currency'])
@@ -1203,7 +1241,7 @@ new class extends Component
     #[Computed]
     public function openContractPickerOptions(): array
     {
-        return \App\Models\Contract::whereNotIn('state', ['ended', 'cancelled'])
+        return Contract::whereNotIn('state', ['ended', 'cancelled'])
             ->orderBy('title')
             ->pluck('title', 'id')
             ->all();
@@ -1215,13 +1253,13 @@ new class extends Component
         if ($name === '') {
             return;
         }
-        $slug = \Illuminate\Support\Str::slug($name);
+        $slug = Str::slug($name);
         $base = $slug === '' ? 'cat-'.bin2hex(random_bytes(3)) : $slug;
         $suffix = 0;
-        while (\App\Models\Category::where('slug', $suffix ? "{$base}-{$suffix}" : $base)->exists()) {
+        while (Category::where('slug', $suffix ? "{$base}-{$suffix}" : $base)->exists()) {
             $suffix++;
         }
-        $category = \App\Models\Category::create([
+        $category = Category::create([
             'name' => $name,
             'slug' => $suffix ? "{$base}-{$suffix}" : $base,
             'kind' => 'expense',
@@ -1402,7 +1440,7 @@ new class extends Component
                 'checklist_template' => $this->saveChecklistTemplate(),
                 default => null,
             };
-        } catch (\App\Exceptions\PeriodLockedException $e) {
+        } catch (PeriodLockedException $e) {
             $this->errorMessage = $e->getMessage();
 
             return;
@@ -1449,7 +1487,7 @@ new class extends Component
 
         $newOwner = $this->admin_owner_id ?: null;
 
-        /** @var \Illuminate\Database\Eloquent\Model|null $model */
+        /** @var Model|null $model */
         $model = $class::find($this->id);
         if (! $model) {
             return;
@@ -1510,7 +1548,7 @@ new class extends Component
             if ($matchResult->isAmbiguous()) {
                 $this->ambiguousTransactionId = $transaction->id;
                 $this->ambiguousCandidates = array_map(
-                    fn (\App\Models\RecurringProjection $p) => [
+                    fn (RecurringProjection $p) => [
                         'id' => (int) $p->id,
                         'title' => (string) ($p->rule?->title ?? __('Bill')),
                         'due_on' => $p->due_on?->toDateString() ?? '—',
@@ -1539,7 +1577,7 @@ new class extends Component
         if (! in_array($projectionId, $allowed, true)) {
             return;
         }
-        \App\Models\RecurringProjection::where('id', $projectionId)
+        RecurringProjection::where('id', $projectionId)
             ->update([
                 'status' => 'matched',
                 'matched_transaction_id' => $this->ambiguousTransactionId,
@@ -1636,7 +1674,7 @@ new class extends Component
                 'yearly' => 'FREQ=YEARLY',
                 default => 'FREQ=DAILY',
             }
-            : 'FREQ=DAILY;COUNT=1';
+        : 'FREQ=DAILY;COUNT=1';
 
         $payload = [
             'kind' => 'bill',
@@ -1838,7 +1876,7 @@ new class extends Component
         $key = match ($class) {
             Vehicle::class => 'vehicle',
             Property::class => 'property',
-            \App\Models\User::class => 'user',
+            User::class => 'user',
             default => 'unknown',
         };
 
@@ -1857,7 +1895,7 @@ new class extends Component
         $class = match ($key) {
             'vehicle' => Vehicle::class,
             'property' => Property::class,
-            'user' => \App\Models\User::class,
+            'user' => User::class,
             default => null,
         };
 
@@ -1911,7 +1949,7 @@ new class extends Component
 
     private function loadChecklistTemplate(): void
     {
-        $t = \App\Models\ChecklistTemplate::with(['items' => fn ($q) => $q->orderBy('position')])
+        $t = ChecklistTemplate::with(['items' => fn ($q) => $q->orderBy('position')])
             ->findOrFail($this->id);
 
         $this->checklist_name = $t->name;
@@ -1972,11 +2010,11 @@ new class extends Component
         ];
 
         if ($this->id) {
-            $template = \App\Models\ChecklistTemplate::findOrFail($this->id);
+            $template = ChecklistTemplate::findOrFail($this->id);
             $template->update($payload);
         } else {
             $payload['user_id'] = auth()->id();
-            $template = \App\Models\ChecklistTemplate::create($payload);
+            $template = ChecklistTemplate::create($payload);
             $this->id = $template->id;
         }
 
@@ -1990,7 +2028,7 @@ new class extends Component
      * taken from the payload's array order, so drag-less reordering via the
      * up/down buttons is enough.
      */
-    private function persistChecklistItems(\App\Models\ChecklistTemplate $template): void
+    private function persistChecklistItems(ChecklistTemplate $template): void
     {
         $existingIds = $template->items()->pluck('id')->map(fn ($i) => (int) $i)->all();
         $keepIds = [];
@@ -2006,7 +2044,7 @@ new class extends Component
             $existingId = isset($row['id']) && is_numeric($row['id']) ? (int) $row['id'] : null;
 
             if ($existingId && in_array($existingId, $existingIds, true)) {
-                \App\Models\ChecklistTemplateItem::where('id', $existingId)->update([
+                ChecklistTemplateItem::where('id', $existingId)->update([
                     'label' => $label,
                     'active' => $active,
                     'position' => $position,
@@ -2025,7 +2063,7 @@ new class extends Component
 
         $toDelete = array_diff($existingIds, $keepIds);
         if ($toDelete !== []) {
-            \App\Models\ChecklistTemplateItem::whereIn('id', $toDelete)->delete();
+            ChecklistTemplateItem::whereIn('id', $toDelete)->delete();
         }
     }
 
@@ -2106,7 +2144,7 @@ new class extends Component
 
     // transfer create+validate+pickers moved to App\Livewire\Inspector\TransferForm.
 
-    /** @return \Illuminate\Database\Eloquent\Collection<int, Property> */
+    /** @return Illuminate\Database\Eloquent\Collection<int, Property> */
     #[Computed]
     public function propertyOptions()
     {
@@ -2145,23 +2183,15 @@ new class extends Component
         }
         $this->resetExcept(['open', 'asModal']);
 
-        $projection = RecurringProjection::with('rule')->findOrFail($projectionId);
-        $rule = $projection->rule;
-
+        // TransactionForm reads `projection_prefill_id` on mount and
+        // seeds amount/description/account from the projection itself.
+        // Blade `key()` on the child depends on this id so the child
+        // component re-mounts with the fresh projection context.
         $this->type = 'transaction';
         $this->id = null;
+        $this->projection_prefill_id = $projectionId;
         $this->open = true;
         $this->errorMessage = null;
-        $this->seedDefaults();
-
-        $this->amount = (string) $projection->amount;
-        $this->currency = $projection->currency ?? 'USD';
-        $this->description = $rule?->title ?? '';
-        $this->account_id = $rule?->account_id;
-        $this->category_id = $rule?->category_id;
-        $this->counterparty_contact_id = $rule?->counterparty_contact_id;
-        $this->occurred_on = $projection->due_on?->toDateString() ?? now()->toDateString();
-        $this->status = 'cleared';
 
         $this->dispatch('inspector-body-shown');
     }
@@ -2217,22 +2247,22 @@ new class extends Component
                 'insurance' => Contract::findOrFail($this->id)->delete(),
                 'account' => Account::findOrFail($this->id)->delete(),
                 'online_account' => OnlineAccount::findOrFail($this->id)->delete(),
-                'domain' => \App\Models\Domain::findOrFail($this->id)->delete(),
+                'domain' => Domain::findOrFail($this->id)->delete(),
                 'property' => Property::findOrFail($this->id)->delete(),
                 'vehicle' => Vehicle::findOrFail($this->id)->delete(),
                 'pet' => Pet::findOrFail($this->id)->delete(),
                 'inventory' => InventoryItem::findOrFail($this->id)->delete(),
-                'reminder' => \App\Models\Reminder::findOrFail($this->id)->delete(),
-                'savings_goal' => \App\Models\SavingsGoal::findOrFail($this->id)->delete(),
-                'budget_cap' => \App\Models\BudgetCap::findOrFail($this->id)->delete(),
-                'category_rule' => \App\Models\CategoryRule::findOrFail($this->id)->delete(),
-                'tag_rule' => \App\Models\TagRule::findOrFail($this->id)->delete(),
-                'subscription' => \App\Models\Subscription::findOrFail($this->id)->delete(),
-                'checklist_template' => \App\Models\ChecklistTemplate::findOrFail($this->id)->delete(),
-                'time_entry' => \App\Models\TimeEntry::findOrFail($this->id)->delete(),
+                'reminder' => Reminder::findOrFail($this->id)->delete(),
+                'savings_goal' => SavingsGoal::findOrFail($this->id)->delete(),
+                'budget_cap' => BudgetCap::findOrFail($this->id)->delete(),
+                'category_rule' => CategoryRule::findOrFail($this->id)->delete(),
+                'tag_rule' => TagRule::findOrFail($this->id)->delete(),
+                'subscription' => Subscription::findOrFail($this->id)->delete(),
+                'checklist_template' => ChecklistTemplate::findOrFail($this->id)->delete(),
+                'time_entry' => TimeEntry::findOrFail($this->id)->delete(),
                 default => null,
             };
-        } catch (\App\Exceptions\PeriodLockedException $e) {
+        } catch (PeriodLockedException $e) {
             $this->errorMessage = $e->getMessage();
 
             return;
@@ -2288,7 +2318,7 @@ new class extends Component
     /**
      * Household members available as owner targets in the Admin section.
      *
-     * @return \Illuminate\Support\Collection<int, User>
+     * @return Collection<int, User>
      */
     #[Computed]
     public function householdUsers()
@@ -2484,11 +2514,15 @@ new class extends Component
                 @case('task')
                     @livewire('inspector.task-form', ['id' => $id], key('task-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
                     @break
-                @case('transaction') @include('partials.inspector.forms.transaction')@break
+                @case('transaction')
+                    @livewire('inspector.transaction-form', ['id' => $id, 'mediaId' => $source_media_id, 'projectionId' => $projection_prefill_id], key('transaction-form-'.($id ?? 'new').'-'.($source_media_id ?? '0').'-'.($projection_prefill_id ?? '0').'-'.($asModal ? 'm' : 'p')))
+                    @break
                 @case('contact')
                     @livewire('inspector.contact-form', ['id' => $id], key('contact-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
                     @break
-                @case('bill')    @include('partials.inspector.forms.bill')           @break
+                @case('bill')
+                    @livewire('inspector.bill-form', ['id' => $id, 'mediaId' => $source_media_id], key('bill-form-'.($id ?? 'new').'-'.($source_media_id ?? '0').'-'.($asModal ? 'm' : 'p')))
+                    @break
                 @case('note')
                     @livewire('inspector.note-form', ['id' => $id], key('note-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
                     @break
@@ -2504,8 +2538,12 @@ new class extends Component
                 @case('project')
                     @livewire('inspector.project-form', ['id' => $id], key('project-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
                     @break
-                @case('contract') @include('partials.inspector.forms.contract')      @break
-                @case('insurance') @include('partials.inspector.forms.insurance')    @break
+                @case('contract')
+                    @livewire('inspector.contract-form', ['id' => $id], key('contract-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
+                    @break
+                @case('insurance')
+                    @livewire('inspector.insurance-form', ['id' => $id], key('insurance-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
+                    @break
                 @case('account')
                     @livewire('inspector.account-form', ['id' => $id], key('account-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
                     @break
@@ -2563,7 +2601,9 @@ new class extends Component
                 @case('subscription')
                     @livewire('inspector.subscription-form', ['id' => $id], key('subscription-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
                     @break
-                @case('checklist_template') @include('partials.inspector.forms.checklist_template') @break
+                @case('checklist_template')
+                    @livewire('inspector.checklist-template-form', ['id' => $id], key('checklist-template-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
+                    @break
                 @case('time_entry')
                     @livewire('inspector.time-entry-form', ['id' => $id], key('time-entry-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
                     @break

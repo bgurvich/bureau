@@ -43,9 +43,7 @@ it('prefills the bill form from a Media ocr_extracted payload', function () {
     authedInHousehold();
     $m = ocrReadyMedia();
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'bill', null, $m->id)
-        ->assertSet('type', 'bill')
+    Livewire::test('inspector.bill-form', ['mediaId' => $m->id])
         ->assertSet('bill_title', 'Pacific Gas & Electric')
         ->assertSet('amount', '86.64')
         ->assertSet('issued_on', '2026-04-17')
@@ -96,11 +94,9 @@ it('attaches the source Media to a saved bill with role=receipt', function () {
     $account = Account::create(['type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
     $m = ocrReadyMedia();
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'bill', null, $m->id)
+    Livewire::test('inspector.bill-form', ['mediaId' => $m->id])
         ->set('account_id', $account->id)
-        ->call('save')
-        ->assertSet('open', false);
+        ->call('save');
 
     $rule = RecurringRule::firstOrFail();
     $pivot = $rule->media()->where('media.id', $m->id)->first()?->pivot;
@@ -134,8 +130,7 @@ it('is a no-op when Media has no extracted data', function () {
         'mime' => 'image/png', 'size' => 1, 'ocr_status' => 'done', 'ocr_text' => 'some',
     ]);
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'bill', null, $m->id)
+    Livewire::test('inspector.bill-form', ['mediaId' => $m->id])
         ->assertSet('bill_title', '')
         ->assertSet('source_media_id', $m->id);
 });
@@ -154,8 +149,7 @@ it('falls back due_on to issued_on when the document has no due date', function 
     authedInHousehold();
     $m = ocrReadyMedia(['due_on' => null]);
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'bill', null, $m->id)
+    Livewire::test('inspector.bill-form', ['mediaId' => $m->id])
         ->assertSet('issued_on', '2026-04-17')
         ->assertSet('due_on', '2026-04-17');
 });
