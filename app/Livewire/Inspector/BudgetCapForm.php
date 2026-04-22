@@ -4,23 +4,22 @@ declare(strict_types=1);
 
 namespace App\Livewire\Inspector;
 
+use App\Livewire\Inspector\Concerns\WithCategoryPicker;
 use App\Models\BudgetCap;
-use App\Models\Category;
 use App\Support\CurrentHousehold;
 use Illuminate\Contracts\View\View;
-use Illuminate\Support\Str;
-use Livewire\Attributes\Computed;
 use Livewire\Attributes\On;
 use Livewire\Component;
 
 /**
- * Extracted BudgetCap form. Not tracked by the admin panel. Needs its
- * own categoryPickerOptions + createCategoryInline for the inline-create
- * searchable-select (same behavior as the shell's shared helpers, just
- * scoped to this child component so the select's events land on it).
+ * Extracted BudgetCap form. Not tracked by the admin panel. Uses the
+ * WithCategoryPicker trait for the inline-create searchable-select so
+ * the picker's events land back on this child (not the parent shell).
  */
 class BudgetCapForm extends Component
 {
+    use WithCategoryPicker;
+
     public ?int $id = null;
 
     public ?int $budget_category_id = null;
@@ -73,35 +72,9 @@ class BudgetCapForm extends Component
         $this->dispatch('inspector-form-saved', type: 'budget_cap', id: $this->id);
     }
 
-    /** @return array<int, string> */
-    #[Computed]
-    public function categoryPickerOptions(): array
+    protected function defaultCategoryPickerModel(): string
     {
-        return Category::orderBy('name')->pluck('name', 'id')->all();
-    }
-
-    public function createCategoryInline(string $name, ?string $modelKey = null): void
-    {
-        $name = trim($name);
-        if ($name === '') {
-            return;
-        }
-        $slug = Str::slug($name);
-        $base = $slug === '' ? 'cat-'.bin2hex(random_bytes(3)) : $slug;
-        $suffix = 0;
-        while (Category::where('slug', $suffix ? "{$base}-{$suffix}" : $base)->exists()) {
-            $suffix++;
-        }
-        $category = Category::create([
-            'name' => $name,
-            'slug' => $suffix ? "{$base}-{$suffix}" : $base,
-            'kind' => 'expense',
-        ]);
-
-        unset($this->categoryPickerOptions);
-
-        $label = ucfirst($category->kind).' · '.$category->name;
-        $this->dispatch('ss-option-added', model: $modelKey ?: 'budget_category_id', id: $category->id, label: $label);
+        return 'budget_category_id';
     }
 
     public function render(): View

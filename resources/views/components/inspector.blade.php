@@ -1546,7 +1546,7 @@ new class extends Component
         $label = ucfirst($category->kind).' · '.$category->name;
         $targets = $modelKey && property_exists($this, $modelKey)
             ? [$modelKey]
-            : ['rule_category_id', 'category_id'];
+            : ['category_id'];
         foreach ($targets as $model) {
             $this->dispatch('ss-option-added', model: $model, id: $category->id, label: $label);
         }
@@ -1585,8 +1585,6 @@ new class extends Component
             'inventory' => $this->loadInventory(),
             'appointment' => $this->loadAppointment(),
             'reminder' => $this->loadReminder(),
-            'category_rule' => $this->loadCategoryRule(),
-            'tag_rule' => $this->loadTagRule(),
             'subscription' => $this->loadSubscription(),
             'checklist_template' => $this->loadChecklistTemplate(),
             default => null,
@@ -1930,7 +1928,7 @@ new class extends Component
         // persists on its own. The child fires `inspector-form-saved`
         // back and the shell's onFormSaved() listener closes the drawer.
         // Add a type to this array after extracting its child form.
-        $extractedTypes = ['pet', 'pet_vaccination', 'pet_checkup', 'time_entry', 'transfer', 'savings_goal', 'budget_cap'];
+        $extractedTypes = ['pet', 'pet_vaccination', 'pet_checkup', 'time_entry', 'transfer', 'savings_goal', 'budget_cap', 'category_rule', 'tag_rule'];
         if (in_array($this->type, $extractedTypes, true)) {
             $this->dispatch('inspector-save');
 
@@ -1960,8 +1958,6 @@ new class extends Component
                 'inventory' => $this->saveInventory(),
                 'appointment' => $this->saveAppointment(),
                 'reminder' => $this->saveReminder(),
-                'category_rule' => $this->saveCategoryRule(),
-                'tag_rule' => $this->saveTagRule(),
                 'subscription' => $this->saveSubscription(),
                 'checklist_template' => $this->saveChecklistTemplate(),
                 default => null,
@@ -3097,106 +3093,7 @@ new class extends Component
 
     // budget_cap extracted to App\Livewire\Inspector\BudgetCapForm.
 
-    // ── Category rule ────────────────────────────────────────────────────
-    public ?int $rule_category_id = null;
-
-    public string $rule_pattern_type = 'contains';
-
-    public string $rule_pattern = '';
-
-    public int $rule_priority = 100;
-
-    public bool $rule_active = true;
-
-    // ── Tag rule ─────────────────────────────────────────────────────────
-    public ?int $tag_rule_tag_id = null;
-
-    public string $tag_rule_pattern_type = 'contains';
-
-    public string $tag_rule_pattern = '';
-
-    public int $tag_rule_priority = 100;
-
-    public bool $tag_rule_active = true;
-
-    private function loadCategoryRule(): void
-    {
-        $r = \App\Models\CategoryRule::findOrFail($this->id);
-        $this->rule_category_id = $r->category_id;
-        $this->rule_pattern_type = $r->pattern_type;
-        $this->rule_pattern = $r->pattern;
-        $this->rule_priority = (int) $r->priority;
-        $this->rule_active = (bool) $r->active;
-    }
-
-    private function saveCategoryRule(): void
-    {
-        $data = $this->validate([
-            'rule_category_id' => 'required|integer|exists:categories,id',
-            'rule_pattern_type' => ['required', \Illuminate\Validation\Rule::in(['contains', 'regex'])],
-            'rule_pattern' => 'required|string|max:500',
-            'rule_priority' => 'integer|min:0|max:1000',
-            'rule_active' => 'boolean',
-        ]);
-        $payload = [
-            'category_id' => $data['rule_category_id'],
-            'pattern_type' => $data['rule_pattern_type'],
-            'pattern' => $data['rule_pattern'],
-            'priority' => (int) ($data['rule_priority'] ?? 100),
-            'active' => $data['rule_active'],
-        ];
-
-        if ($this->id) {
-            \App\Models\CategoryRule::findOrFail($this->id)->forceFill($payload)->save();
-        } else {
-            $this->id = \App\Models\CategoryRule::forceCreate($payload)->id;
-        }
-    }
-
-    private function loadTagRule(): void
-    {
-        $r = \App\Models\TagRule::findOrFail($this->id);
-        $this->tag_rule_tag_id = $r->tag_id;
-        $this->tag_rule_pattern_type = $r->pattern_type;
-        $this->tag_rule_pattern = $r->pattern;
-        $this->tag_rule_priority = (int) $r->priority;
-        $this->tag_rule_active = (bool) $r->active;
-    }
-
-    private function saveTagRule(): void
-    {
-        $data = $this->validate([
-            'tag_rule_tag_id' => 'required|integer|exists:tags,id',
-            'tag_rule_pattern_type' => ['required', \Illuminate\Validation\Rule::in(['contains', 'regex'])],
-            'tag_rule_pattern' => 'required|string|max:500',
-            'tag_rule_priority' => 'integer|min:0|max:1000',
-            'tag_rule_active' => 'boolean',
-        ]);
-        $payload = [
-            'tag_id' => $data['tag_rule_tag_id'],
-            'pattern_type' => $data['tag_rule_pattern_type'],
-            'pattern' => $data['tag_rule_pattern'],
-            'priority' => (int) ($data['tag_rule_priority'] ?? 100),
-            'active' => $data['tag_rule_active'],
-        ];
-
-        if ($this->id) {
-            \App\Models\TagRule::findOrFail($this->id)->forceFill($payload)->save();
-        } else {
-            $this->id = \App\Models\TagRule::forceCreate($payload)->id;
-        }
-    }
-
-    /**
-     * Tag options for the tag-rule inspector, keyed by id → name.
-     *
-     * @return array<int, string>
-     */
-    #[Computed]
-    public function tagPickerOptions(): array
-    {
-        return \App\Models\Tag::orderBy('name')->pluck('name', 'id')->all();
-    }
+    // category_rule + tag_rule extracted to App\Livewire\Inspector\{CategoryRuleForm,TagRuleForm}.
 
     // ── Subscription ─────────────────────────────────────────────────────
     private function loadSubscription(): void
@@ -3887,8 +3784,12 @@ new class extends Component
                 @case('budget_cap')
                     @livewire('inspector.budget-cap-form', ['id' => $id], key('budget-cap-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
                     @break
-                @case('category_rule') @include('partials.inspector.forms.category_rule') @break
-                @case('tag_rule') @include('partials.inspector.forms.tag_rule') @break
+                @case('category_rule')
+                    @livewire('inspector.category-rule-form', ['id' => $id], key('category-rule-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
+                    @break
+                @case('tag_rule')
+                    @livewire('inspector.tag-rule-form', ['id' => $id], key('tag-rule-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
+                    @break
                 @case('subscription') @include('partials.inspector.forms.subscription') @break
                 @case('checklist_template') @include('partials.inspector.forms.checklist_template') @break
                 @case('time_entry')

@@ -78,8 +78,7 @@ it('creates a rule via the inspector', function () {
     authedInHousehold();
     $cat = pageCat('Coffee');
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'category_rule')
+    Livewire::test('inspector.category-rule-form')
         ->set('rule_category_id', $cat->id)
         ->set('rule_pattern_type', 'contains')
         ->set('rule_pattern', 'starbucks')

@@ -16,8 +16,7 @@ it('creates a tag rule via the inspector', function () {
     authedInHousehold();
     $tag = Tag::create(['name' => 'coffee', 'slug' => 'coffee']);
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'tag_rule')
+    Livewire::test('inspector.tag-rule-form')
         ->set('tag_rule_tag_id', $tag->id)
         ->set('tag_rule_pattern_type', 'contains')
         ->set('tag_rule_pattern', 'starbucks')
@@ -32,8 +31,7 @@ it('edits a tag rule via the inspector', function () {
     $tag = Tag::create(['name' => 'travel', 'slug' => 'travel']);
     $rule = TagRule::forceCreate(['tag_id' => $tag->id, 'pattern_type' => 'contains', 'pattern' => 'flight', 'active' => true]);
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'tag_rule', $rule->id)
+    Livewire::test('inspector.tag-rule-form', ['id' => $rule->id])
         ->assertSet('tag_rule_pattern', 'flight')
         ->set('tag_rule_pattern', 'flights|hotels')
         ->set('tag_rule_pattern_type', 'regex')
