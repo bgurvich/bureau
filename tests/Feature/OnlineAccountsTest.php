@@ -40,8 +40,7 @@ it('creates an online account through the Inspector', function () {
     authedInHousehold();
     $spouse = Contact::create(['kind' => 'person', 'display_name' => 'Partner']);
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'online_account')
+    Livewire::test('inspector.online-account-form')
         ->set('oa_service_name', 'GitHub')
         ->set('oa_kind', 'developer')
         ->set('oa_url', 'https://github.com/login')
@@ -50,8 +49,7 @@ it('creates an online account through the Inspector', function () {
         ->set('oa_importance_tier', 'high')
         ->set('oa_recovery_contact_id', $spouse->id)
         ->set('oa_in_case_of_pack', true)
-        ->call('save')
-        ->assertSet('open', false);
+        ->call('save');
 
     $oa = OnlineAccount::firstWhere('service_name', 'GitHub');
     expect($oa)->not->toBeNull()

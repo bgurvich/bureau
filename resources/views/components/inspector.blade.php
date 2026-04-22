@@ -514,28 +514,8 @@ new class extends Component
 
     public bool $account_include_in_net_worth = true;
 
-    // online_account
-    public string $oa_kind = 'other';
-
-    public string $oa_service_name = '';
-
-    public string $oa_url = '';
-
-    public string $oa_login_email = '';
-
-    public string $oa_username = '';
-
-    public string $oa_mfa_method = 'none';
-
-    public ?int $oa_recovery_contact_id = null;
-
-    public ?int $oa_linked_contract_id = null;
-
-    public string $oa_importance_tier = 'medium';
-
-    public bool $oa_in_case_of_pack = false;
-
-    public string $oa_notes = '';
+    // online_account extracted to App\Livewire\Inspector\OnlineAccountForm;
+    // the shell hosts the child via @livewire in the render switch.
 
     // insurance (contract + policy + one covered subject)
     public string $insurance_title = '';
@@ -1119,7 +1099,6 @@ new class extends Component
             'note' => [Note::class, 'user_id'],
             'physical_mail' => [PhysicalMail::class, null],
             'project' => [Project::class, 'user_id'],
-            'online_account' => [OnlineAccount::class, 'user_id'],
             'checklist_template' => [\App\Models\ChecklistTemplate::class, 'user_id'],
             'transaction' => [Transaction::class, null],
             'bill' => [RecurringRule::class, null],
@@ -1553,7 +1532,6 @@ new class extends Component
             'contract' => $this->loadContract(),
             'insurance' => $this->loadInsurance(),
             'account' => $this->loadAccount(),
-            'online_account' => $this->loadOnlineAccount(),
             'property' => $this->loadProperty(),
             'vehicle' => $this->loadVehicle(),
             // pet / pet_vaccination / pet_checkup all run as extracted
@@ -1767,23 +1745,6 @@ new class extends Component
         $this->notes = $a->notes ?? '';
     }
 
-    private function loadOnlineAccount(): void
-    {
-        $o = OnlineAccount::where(fn ($q) => $q->where('user_id', auth()->id())->orWhereNull('user_id'))
-            ->findOrFail($this->id);
-        $this->oa_kind = $o->kind ?: 'other';
-        $this->oa_service_name = $o->service_name;
-        $this->oa_url = $o->url ?? '';
-        $this->oa_login_email = $o->login_email ?? '';
-        $this->oa_username = $o->username ?? '';
-        $this->oa_mfa_method = $o->mfa_method ?: 'none';
-        $this->oa_recovery_contact_id = $o->recovery_contact_id;
-        $this->oa_linked_contract_id = $o->linked_contract_id;
-        $this->oa_importance_tier = $o->importance_tier ?: 'medium';
-        $this->oa_in_case_of_pack = (bool) $o->in_case_of_pack;
-        $this->oa_notes = $o->notes ?? '';
-    }
-
     private function loadInsurance(): void
     {
         $c = Contract::with(['insurancePolicy.subjects', 'contacts'])->findOrFail($this->id);
@@ -1903,7 +1864,7 @@ new class extends Component
         // persists on its own. The child fires `inspector-form-saved`
         // back and the shell's onFormSaved() listener closes the drawer.
         // Add a type to this array after extracting its child form.
-        $extractedTypes = ['pet', 'pet_vaccination', 'pet_checkup', 'time_entry', 'transfer', 'savings_goal', 'budget_cap', 'category_rule', 'tag_rule', 'reminder', 'subscription'];
+        $extractedTypes = ['pet', 'pet_vaccination', 'pet_checkup', 'time_entry', 'transfer', 'savings_goal', 'budget_cap', 'category_rule', 'tag_rule', 'reminder', 'subscription', 'online_account'];
         if (in_array($this->type, $extractedTypes, true)) {
             $this->dispatch('inspector-save');
 
@@ -1924,7 +1885,6 @@ new class extends Component
                 'contract' => $this->saveContract(),
                 'insurance' => $this->saveInsurance(),
                 'account' => $this->saveAccount(),
-                'online_account' => $this->saveOnlineAccount(),
                 'property' => $this->saveProperty(),
                 'vehicle' => $this->saveVehicle(),
                 // pet / pet_vaccination / pet_checkup are extracted; the
@@ -2617,44 +2577,6 @@ new class extends Component
         } else {
             $payload['user_id'] = auth()->id();
             $this->id = Account::create($payload)->id;
-        }
-    }
-
-    private function saveOnlineAccount(): void
-    {
-        $data = $this->validate([
-            'oa_kind' => ['required', Rule::in(array_keys(Enums::onlineAccountKinds()))],
-            'oa_service_name' => 'required|string|max:255',
-            'oa_url' => 'nullable|string|max:500',
-            'oa_login_email' => 'nullable|string|max:255',
-            'oa_username' => 'nullable|string|max:255',
-            'oa_mfa_method' => ['required', Rule::in(array_keys(Enums::mfaMethods()))],
-            'oa_recovery_contact_id' => 'nullable|integer|exists:contacts,id',
-            'oa_linked_contract_id' => 'nullable|integer|exists:contracts,id',
-            'oa_importance_tier' => ['required', Rule::in(array_keys(Enums::importanceTiers()))],
-            'oa_in_case_of_pack' => 'boolean',
-            'oa_notes' => 'nullable|string|max:5000',
-        ]);
-
-        $payload = [
-            'kind' => $data['oa_kind'],
-            'service_name' => $data['oa_service_name'],
-            'url' => $data['oa_url'] ?: null,
-            'login_email' => $data['oa_login_email'] ?: null,
-            'username' => $data['oa_username'] ?: null,
-            'mfa_method' => $data['oa_mfa_method'],
-            'recovery_contact_id' => $data['oa_recovery_contact_id'] ?: null,
-            'linked_contract_id' => $data['oa_linked_contract_id'] ?: null,
-            'importance_tier' => $data['oa_importance_tier'],
-            'in_case_of_pack' => (bool) $data['oa_in_case_of_pack'],
-            'notes' => $data['oa_notes'] ?: null,
-        ];
-
-        if ($this->id) {
-            OnlineAccount::findOrFail($this->id)->update($payload);
-        } else {
-            $payload['user_id'] = auth()->id();
-            $this->id = OnlineAccount::create($payload)->id;
         }
     }
 
@@ -3631,7 +3553,9 @@ new class extends Component
                 @case('contract') @include('partials.inspector.forms.contract')      @break
                 @case('insurance') @include('partials.inspector.forms.insurance')    @break
                 @case('account') @include('partials.inspector.forms.account')        @break
-                @case('online_account') @include('partials.inspector.forms.online_account') @break
+                @case('online_account')
+                    @livewire('inspector.online-account-form', ['id' => $id], key('online-account-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
+                    @break
                 @case('property') @include('partials.inspector.forms.property')      @break
                 @case('vehicle') @include('partials.inspector.forms.vehicle')        @break
                 @case('pet')
