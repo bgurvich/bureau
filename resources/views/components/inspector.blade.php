@@ -145,18 +145,8 @@ new class extends Component
 
     public ?int $savings_account_id = null;
 
-    // time entry (manual / backlog)
-    public string $te_activity_date = '';
-
-    public string $te_hours = '';
-
-    public ?int $te_project_id = null;
-
-    public ?int $te_task_id = null;
-
-    public string $te_description = '';
-
-    public bool $te_billable = false;
+    // time_entry extracted to App\Livewire\Inspector\TimeEntryForm;
+    // the shell hosts the child via @livewire in the render switch.
 
     // transfer (manual — creates two mirror transactions + a Transfer row,
     // OR links one/two existing unpaired transactions to avoid duplicates)
@@ -1470,7 +1460,6 @@ new class extends Component
         $this->doc_issued_on = now()->toDateString();
         $this->starts_at = now()->addDay()->startOfHour()->format('Y-m-d\TH:i');
         $this->ends_at = now()->addDay()->startOfHour()->addMinutes(30)->format('Y-m-d\TH:i');
-        $this->te_activity_date = now()->toDateString();
         $this->transfer_occurred_on = now()->toDateString();
         $this->transfer_currency = $currency;
 
@@ -1635,7 +1624,6 @@ new class extends Component
             'tag_rule' => $this->loadTagRule(),
             'subscription' => $this->loadSubscription(),
             'checklist_template' => $this->loadChecklistTemplate(),
-            'time_entry' => $this->loadTimeEntry(),
             default => null,
         };
     }
@@ -1977,7 +1965,7 @@ new class extends Component
         // persists on its own. The child fires `inspector-form-saved`
         // back and the shell's onFormSaved() listener closes the drawer.
         // Add a type to this array after extracting its child form.
-        $extractedTypes = ['pet', 'pet_vaccination', 'pet_checkup'];
+        $extractedTypes = ['pet', 'pet_vaccination', 'pet_checkup', 'time_entry'];
         if (in_array($this->type, $extractedTypes, true)) {
             $this->dispatch('inspector-save');
 
@@ -2013,7 +2001,6 @@ new class extends Component
                 'tag_rule' => $this->saveTagRule(),
                 'subscription' => $this->saveSubscription(),
                 'checklist_template' => $this->saveChecklistTemplate(),
-                'time_entry' => $this->saveTimeEntry(),
                 'transfer' => $this->saveTransfer(),
                 default => null,
             };
@@ -3602,53 +3589,7 @@ new class extends Component
     // entries the user cares about "I worked 2.5h on X yesterday", not the
     // clock times, so we accept a date + hours and synthesize the clock
     // window (09:00 in the user's tz → +duration) to satisfy NOT NULL.
-    private function loadTimeEntry(): void
-    {
-        $e = \App\Models\TimeEntry::findOrFail($this->id);
-        $this->te_activity_date = $e->activity_date?->toDateString() ?? '';
-        $this->te_hours = $e->duration_seconds
-            ? rtrim(rtrim(number_format($e->duration_seconds / 3600, 2, '.', ''), '0'), '.')
-            : '';
-        $this->te_project_id = $e->project_id;
-        $this->te_task_id = $e->task_id;
-        $this->te_description = $e->description ?? '';
-        $this->te_billable = (bool) $e->billable;
-    }
-
-    private function saveTimeEntry(): void
-    {
-        $data = $this->validate([
-            'te_activity_date' => 'required|date',
-            'te_hours' => 'required|numeric|min:0.01|max:24',
-            'te_project_id' => 'nullable|integer|exists:projects,id',
-            'te_task_id' => 'nullable|integer|exists:tasks,id',
-            'te_description' => 'nullable|string|max:1000',
-            'te_billable' => 'boolean',
-        ]);
-
-        $tz = auth()->user()?->timezone ?: config('app.timezone', 'UTC');
-        $durationSeconds = (int) round((float) $data['te_hours'] * 3600);
-        $startedAt = \Carbon\CarbonImmutable::parse($data['te_activity_date'].' 09:00', $tz)->utc();
-        $endedAt = $startedAt->addSeconds($durationSeconds);
-
-        $payload = [
-            'activity_date' => $data['te_activity_date'],
-            'started_at' => $startedAt,
-            'ended_at' => $endedAt,
-            'duration_seconds' => $durationSeconds,
-            'project_id' => $data['te_project_id'] ?: null,
-            'task_id' => $data['te_task_id'] ?: null,
-            'description' => $data['te_description'] ?: null,
-            'billable' => (bool) ($data['te_billable'] ?? false),
-        ];
-
-        if ($this->id) {
-            \App\Models\TimeEntry::findOrFail($this->id)->update($payload);
-        } else {
-            $payload['user_id'] = auth()->id();
-            $this->id = \App\Models\TimeEntry::create($payload)->id;
-        }
-    }
+    // loadTimeEntry + saveTimeEntry moved to App\Livewire\Inspector\TimeEntryForm.
 
     // ── Transfer (manual) ────────────────────────────────────────────────
     //
@@ -4280,7 +4221,9 @@ new class extends Component
                 @case('tag_rule') @include('partials.inspector.forms.tag_rule') @break
                 @case('subscription') @include('partials.inspector.forms.subscription') @break
                 @case('checklist_template') @include('partials.inspector.forms.checklist_template') @break
-                @case('time_entry') @include('partials.inspector.forms.time_entry') @break
+                @case('time_entry')
+                    @livewire('inspector.time-entry-form', ['id' => $id], key('time-entry-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
+                    @break
                 @case('transfer') @include('partials.inspector.forms.transfer') @break
             @endswitch
             @endif

@@ -8,13 +8,12 @@ it('creates a manual backlog time entry from the inspector', function () {
     $user = authedInHousehold();
     $project = Project::create(['user_id' => $user->id, 'name' => 'Client work', 'slug' => 'client-work']);
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'time_entry')
-        ->set('te_activity_date', '2026-04-15')
-        ->set('te_hours', '2.5')
-        ->set('te_project_id', $project->id)
-        ->set('te_description', 'Wrote the spec')
-        ->set('te_billable', true)
+    Livewire::test('inspector.time-entry-form')
+        ->set('activity_date', '2026-04-15')
+        ->set('hours', '2.5')
+        ->set('project_id', $project->id)
+        ->set('description', 'Wrote the spec')
+        ->set('billable', true)
         ->call('save')
         ->assertHasNoErrors();
 
@@ -33,12 +32,11 @@ it('creates a manual backlog time entry from the inspector', function () {
 it('rejects a time entry with missing date or non-positive hours', function () {
     authedInHousehold();
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'time_entry')
-        ->set('te_activity_date', '')
-        ->set('te_hours', '0')
+    Livewire::test('inspector.time-entry-form')
+        ->set('activity_date', '')
+        ->set('hours', '0')
         ->call('save')
-        ->assertHasErrors(['te_activity_date', 'te_hours']);
+        ->assertHasErrors(['activity_date', 'hours']);
 });
 
 it('edits an existing time entry', function () {
@@ -53,11 +51,10 @@ it('edits an existing time entry', function () {
         'billable' => false,
     ]);
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'time_entry', $entry->id)
-        ->assertSet('te_hours', '1')
-        ->set('te_hours', '1.5')
-        ->set('te_description', 'Updated')
+    Livewire::test('inspector.time-entry-form', ['id' => $entry->id])
+        ->assertSet('hours', '1')
+        ->set('hours', '1.5')
+        ->set('description', 'Updated')
         ->call('save')
         ->assertHasNoErrors();
 
