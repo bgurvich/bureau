@@ -1842,7 +1842,7 @@ new class extends Component
         // persists on its own. The child fires `inspector-form-saved`
         // back and the shell's onFormSaved() listener closes the drawer.
         // Add a type to this array after extracting its child form.
-        $extractedTypes = ['pet', 'pet_vaccination', 'pet_checkup', 'time_entry', 'transfer', 'savings_goal', 'budget_cap', 'category_rule', 'tag_rule', 'reminder', 'subscription', 'online_account', 'meeting'];
+        $extractedTypes = ['pet', 'pet_vaccination', 'pet_checkup', 'time_entry', 'transfer', 'savings_goal', 'budget_cap', 'category_rule', 'tag_rule', 'reminder', 'subscription', 'online_account', 'meeting', 'domain'];
         if (in_array($this->type, $extractedTypes, true)) {
             $this->dispatch('inspector-save');
 
@@ -3230,6 +3230,7 @@ new class extends Component
                 'insurance' => Contract::findOrFail($this->id)->delete(),
                 'account' => Account::findOrFail($this->id)->delete(),
                 'online_account' => OnlineAccount::findOrFail($this->id)->delete(),
+                'domain' => \App\Models\Domain::findOrFail($this->id)->delete(),
                 'property' => Property::findOrFail($this->id)->delete(),
                 'vehicle' => Vehicle::findOrFail($this->id)->delete(),
                 'pet' => Pet::findOrFail($this->id)->delete(),
@@ -3342,6 +3343,7 @@ new class extends Component
             'insurance' => __('insurance policy'),
             'account' => __('account'),
             'online_account' => __('online account'),
+            'domain' => __('domain'),
             'property' => __('property'),
             'vehicle' => __('vehicle'),
             'pet' => __('pet'),
@@ -3508,6 +3510,9 @@ new class extends Component
                 @case('account') @include('partials.inspector.forms.account')        @break
                 @case('online_account')
                     @livewire('inspector.online-account-form', ['id' => $id], key('online-account-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
+                    @break
+                @case('domain')
+                    @livewire('inspector.domain-form', ['id' => $id], key('domain-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
                     @break
                 @case('property') @include('partials.inspector.forms.property')      @break
                 @case('vehicle') @include('partials.inspector.forms.vehicle')        @break

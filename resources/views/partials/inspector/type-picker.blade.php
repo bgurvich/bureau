@@ -27,6 +27,7 @@
             ['property', __('Property'), 'H'],
             ['vehicle', __('Vehicle'), 'V'],
             ['inventory', __('Inventory item'), 'I'],
+            ['domain', __('Domain'), null],
         ],
         __('Records') => [
             ['document', __('Document'), 'D'],
