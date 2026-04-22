@@ -102,20 +102,8 @@ new class extends Component
 
     public string $inventory_listing_posted_at = '';
 
-    // Appointment
-    public string $appointment_purpose = '';
-
-    public string $appointment_starts_at = '';
-
-    public string $appointment_ends_at = '';
-
-    public string $appointment_location = '';
-
-    public string $appointment_state = 'scheduled';
-
-    public ?int $appointment_provider_id = null;
-
-    public bool $appointment_self_subject = true;
+    // appointment extracted to App\Livewire\Inspector\AppointmentForm;
+    // the shell hosts the child via @livewire in the render switch.
 
     // reminder extracted to App\Livewire\Inspector\ReminderForm;
     // the shell hosts the child via @livewire in the render switch.
@@ -1417,7 +1405,6 @@ new class extends Component
             // class-based components — they load + persist their own
             // state. The shell only manages open/close + parent id.
             'inventory' => $this->loadInventory(),
-            'appointment' => $this->loadAppointment(),
             'checklist_template' => $this->loadChecklistTemplate(),
             default => null,
         };
@@ -1668,7 +1655,7 @@ new class extends Component
         // persists on its own. The child fires `inspector-form-saved`
         // back and the shell's onFormSaved() listener closes the drawer.
         // Add a type to this array after extracting its child form.
-        $extractedTypes = ['pet', 'pet_vaccination', 'pet_checkup', 'time_entry', 'transfer', 'savings_goal', 'budget_cap', 'category_rule', 'tag_rule', 'reminder', 'subscription', 'online_account', 'meeting', 'domain', 'project', 'account', 'contact'];
+        $extractedTypes = ['pet', 'pet_vaccination', 'pet_checkup', 'time_entry', 'transfer', 'savings_goal', 'budget_cap', 'category_rule', 'tag_rule', 'reminder', 'subscription', 'online_account', 'meeting', 'domain', 'project', 'account', 'contact', 'appointment'];
         if (in_array($this->type, $extractedTypes, true)) {
             $this->dispatch('inspector-save');
 
@@ -1691,7 +1678,6 @@ new class extends Component
                 // $extractedTypes early-return above keeps them from
                 // reaching this match.
                 'inventory' => $this->saveInventory(),
-                'appointment' => $this->saveAppointment(),
                 'checklist_template' => $this->saveChecklistTemplate(),
                 default => null,
             };
@@ -2468,58 +2454,7 @@ new class extends Component
         }
     }
 
-    private function loadAppointment(): void
-    {
-        $a = Appointment::findOrFail($this->id);
-        $this->appointment_purpose = $a->purpose ?? '';
-        $this->appointment_starts_at = $a->starts_at?->format('Y-m-d\TH:i') ?? '';
-        $this->appointment_ends_at = $a->ends_at?->format('Y-m-d\TH:i') ?? '';
-        $this->appointment_location = $a->location ?? '';
-        $this->appointment_state = $a->state ?? 'scheduled';
-        $this->appointment_provider_id = $a->provider_id;
-        // Subject is polymorphic User|Pet. Today we only support self (current user).
-        $this->appointment_self_subject = $a->subject_type === \App\Models\User::class
-            && $a->subject_id === auth()->id();
-        $this->notes = $a->notes ?? '';
-    }
-
-    private function saveAppointment(): void
-    {
-        $data = $this->validate([
-            'appointment_purpose' => 'nullable|string|max:255',
-            'appointment_starts_at' => 'required|date',
-            'appointment_ends_at' => 'nullable|date|after:appointment_starts_at',
-            'appointment_location' => 'nullable|string|max:255',
-            'appointment_state' => 'nullable|in:scheduled,completed,cancelled,no_show',
-            'appointment_provider_id' => 'nullable|integer|exists:health_providers,id',
-            'appointment_self_subject' => 'boolean',
-            'notes' => 'nullable|string|max:5000',
-        ]);
-
-        $payload = [
-            'purpose' => $data['appointment_purpose'] ?: null,
-            'starts_at' => $data['appointment_starts_at'],
-            'ends_at' => $data['appointment_ends_at'] ?: null,
-            'location' => $data['appointment_location'] ?: null,
-            'state' => $data['appointment_state'] ?: 'scheduled',
-            'provider_id' => $data['appointment_provider_id'] ?: null,
-            'notes' => $data['notes'] ?: null,
-        ];
-
-        if (($data['appointment_self_subject'] ?? false)) {
-            $payload['subject_type'] = \App\Models\User::class;
-            $payload['subject_id'] = auth()->id();
-        } else {
-            $payload['subject_type'] = null;
-            $payload['subject_id'] = null;
-        }
-
-        if ($this->id) {
-            Appointment::findOrFail($this->id)->update($payload);
-        } else {
-            $this->id = Appointment::create($payload)->id;
-        }
-    }
+    // appointment load/save moved to App\Livewire\Inspector\AppointmentForm.
 
     // reminder load/save moved to App\Livewire\Inspector\ReminderForm.
 
@@ -3166,7 +3101,9 @@ new class extends Component
                     ], key('pet-checkup-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
                     @break
                 @case('inventory') @include('partials.inspector.forms.inventory')    @break
-                @case('appointment') @include('partials.inspector.forms.appointment') @break
+                @case('appointment')
+                    @livewire('inspector.appointment-form', ['id' => $id], key('appointment-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
+                    @break
                 @case('reminder')
                     @livewire('inspector.reminder-form', ['id' => $id], key('reminder-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
                     @break

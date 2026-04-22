@@ -9,8 +9,7 @@ it('creates an appointment via the Inspector with subject = current user', funct
     $user = authedInHousehold();
     $provider = HealthProvider::create(['name' => 'Dr Chen', 'specialty' => 'dentist']);
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'appointment')
+    Livewire::test('inspector.appointment-form')
         ->set('appointment_purpose', 'Cleaning')
         ->set('appointment_starts_at', '2026-05-01T10:00')
         ->set('appointment_ends_at', '2026-05-01T10:45')
@@ -36,8 +35,7 @@ it('edits an existing appointment via the Inspector', function () {
         'state' => 'scheduled',
     ]);
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'appointment', $a->id)
+    Livewire::test('inspector.appointment-form', ['id' => $a->id])
         ->assertSet('appointment_purpose', 'Original')
         ->set('appointment_purpose', 'Rescheduled follow-up')
         ->set('appointment_state', 'completed')
@@ -51,8 +49,7 @@ it('edits an existing appointment via the Inspector', function () {
 it('rejects an appointment with no starts_at', function () {
     authedInHousehold();
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'appointment')
+    Livewire::test('inspector.appointment-form')
         ->set('appointment_purpose', 'No time given')
         ->call('save')
         ->assertHasErrors(['appointment_starts_at']);
