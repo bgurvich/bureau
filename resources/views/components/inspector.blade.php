@@ -148,23 +148,8 @@ new class extends Component
     // time_entry extracted to App\Livewire\Inspector\TimeEntryForm;
     // the shell hosts the child via @livewire in the render switch.
 
-    // transfer (manual — creates two mirror transactions + a Transfer row,
-    // OR links one/two existing unpaired transactions to avoid duplicates)
-    public string $transfer_occurred_on = '';
-
-    public ?int $transfer_from_account_id = null;
-
-    public ?int $transfer_to_account_id = null;
-
-    public string $transfer_amount = '';
-
-    public string $transfer_currency = 'USD';
-
-    public string $transfer_description = '';
-
-    public ?int $transfer_from_transaction_id = null;
-
-    public ?int $transfer_to_transaction_id = null;
+    // transfer extracted to App\Livewire\Inspector\TransferForm;
+    // the shell hosts the child via @livewire in the render switch.
 
     // checklist template (recurring ritual with per-day run tracking)
     public string $checklist_name = '';
@@ -1460,8 +1445,6 @@ new class extends Component
         $this->doc_issued_on = now()->toDateString();
         $this->starts_at = now()->addDay()->startOfHour()->format('Y-m-d\TH:i');
         $this->ends_at = now()->addDay()->startOfHour()->addMinutes(30)->format('Y-m-d\TH:i');
-        $this->transfer_occurred_on = now()->toDateString();
-        $this->transfer_currency = $currency;
 
         // Physical mail defaults — received today, classified as "other"
         // until the user picks a kind, no processed-at (belongs to the
@@ -1965,7 +1948,7 @@ new class extends Component
         // persists on its own. The child fires `inspector-form-saved`
         // back and the shell's onFormSaved() listener closes the drawer.
         // Add a type to this array after extracting its child form.
-        $extractedTypes = ['pet', 'pet_vaccination', 'pet_checkup', 'time_entry'];
+        $extractedTypes = ['pet', 'pet_vaccination', 'pet_checkup', 'time_entry', 'transfer'];
         if (in_array($this->type, $extractedTypes, true)) {
             $this->dispatch('inspector-save');
 
@@ -2001,7 +1984,6 @@ new class extends Component
                 'tag_rule' => $this->saveTagRule(),
                 'subscription' => $this->saveSubscription(),
                 'checklist_template' => $this->saveChecklistTemplate(),
-                'transfer' => $this->saveTransfer(),
                 default => null,
             };
         } catch (\App\Exceptions\PeriodLockedException $e) {
@@ -3591,223 +3573,7 @@ new class extends Component
     // window (09:00 in the user's tz → +duration) to satisfy NOT NULL.
     // loadTimeEntry + saveTimeEntry moved to App\Livewire\Inspector\TimeEntryForm.
 
-    // ── Transfer (manual) ────────────────────────────────────────────────
-    //
-    // Builds a Transfer that links two sides. Each side is either an
-    // existing unpaired Transaction the user picks (for the
-    // already-imported case) or a fresh mirror Transaction we create
-    // here. Picking an existing transaction on a side reuses it; leaving
-    // the picker blank synthesizes the row. The combinations:
-    //
-    //   both pickers filled    — pure linkage, no new transactions.
-    //   one picker filled      — create the missing side; link the picked.
-    //   neither filled         — create both sides from the form fields.
-    //
-    // Create-only via the inspector for v1 — editing accounts or amount
-    // after the fact would require rewriting both linked transactions,
-    // which is risky; for now the user edits the underlying Transactions
-    // directly (or deletes the transfer and re-creates it). Same-currency
-    // only.
-    private function saveTransfer(): void
-    {
-        $data = $this->validate([
-            'transfer_occurred_on' => 'required|date',
-            'transfer_from_account_id' => 'required|integer|exists:accounts,id|different:transfer_to_account_id',
-            'transfer_to_account_id' => 'required|integer|exists:accounts,id',
-            'transfer_amount' => 'required|numeric|min:0.01',
-            'transfer_currency' => 'required|string|size:3|alpha',
-            'transfer_description' => 'nullable|string|max:500',
-            'transfer_from_transaction_id' => 'nullable|integer|exists:transactions,id',
-            'transfer_to_transaction_id' => 'nullable|integer|exists:transactions,id',
-        ]);
-
-        if ($this->id) {
-            // Editing transfers is not supported via the inspector — see comment above.
-            return;
-        }
-
-        $household = CurrentHousehold::get();
-        abort_unless($household, 403);
-
-        $amount = abs((float) $data['transfer_amount']);
-        $currency = strtoupper($data['transfer_currency']);
-        $description = $data['transfer_description'] ?: __('Transfer');
-        $fromAccountId = (int) $data['transfer_from_account_id'];
-        $toAccountId = (int) $data['transfer_to_account_id'];
-
-        $fromTxn = $data['transfer_from_transaction_id']
-            ? Transaction::find($data['transfer_from_transaction_id'])
-            : null;
-        $toTxn = $data['transfer_to_transaction_id']
-            ? Transaction::find($data['transfer_to_transaction_id'])
-            : null;
-
-        // Guardrails for picked transactions: each must belong to the
-        // matching account, have the expected sign, and not already be
-        // wired up to another Transfer.
-        $pickedError = $this->validatePickedTransferTransactions(
-            $fromTxn, $toTxn, $fromAccountId, $toAccountId
-        );
-        if ($pickedError !== null) {
-            throw \Illuminate\Validation\ValidationException::withMessages([
-                'transfer_from_transaction_id' => $pickedError,
-            ]);
-        }
-
-        \Illuminate\Support\Facades\DB::transaction(function () use (
-            $household, $data, $amount, $currency, $description,
-            $fromAccountId, $toAccountId, &$fromTxn, &$toTxn
-        ) {
-            if (! $fromTxn) {
-                $fromTxn = Transaction::create([
-                    'household_id' => $household->id,
-                    'account_id' => $fromAccountId,
-                    'occurred_on' => $data['transfer_occurred_on'],
-                    'amount' => -$amount,
-                    'currency' => $currency,
-                    'description' => $description,
-                    'status' => 'cleared',
-                    'import_source' => 'manual:transfer',
-                    'reconciled_at' => now(),
-                ]);
-            }
-
-            if (! $toTxn) {
-                $toTxn = Transaction::create([
-                    'household_id' => $household->id,
-                    'account_id' => $toAccountId,
-                    'occurred_on' => $data['transfer_occurred_on'],
-                    'amount' => $amount,
-                    'currency' => $currency,
-                    'description' => $description,
-                    'status' => 'cleared',
-                    'import_source' => 'manual:transfer',
-                    'reconciled_at' => now(),
-                ]);
-            }
-
-            $transfer = \App\Models\Transfer::create([
-                'household_id' => $household->id,
-                'occurred_on' => $data['transfer_occurred_on'],
-                'from_account_id' => $fromTxn->account_id,
-                'from_amount' => $fromTxn->amount,
-                'from_currency' => $fromTxn->currency,
-                'from_transaction_id' => $fromTxn->id,
-                'to_account_id' => $toTxn->account_id,
-                'to_amount' => $toTxn->amount,
-                'to_currency' => $toTxn->currency,
-                'to_transaction_id' => $toTxn->id,
-                'description' => $description,
-                'status' => 'cleared',
-            ]);
-
-            $this->id = $transfer->id;
-        });
-    }
-
-    private function validatePickedTransferTransactions(
-        ?Transaction $fromTxn,
-        ?Transaction $toTxn,
-        int $fromAccountId,
-        int $toAccountId,
-    ): ?string {
-        $alreadyPaired = function (Transaction $t): bool {
-            return \App\Models\Transfer::query()
-                ->where(function ($q) use ($t) {
-                    $q->where('from_transaction_id', $t->id)
-                        ->orWhere('to_transaction_id', $t->id);
-                })->exists();
-        };
-
-        if ($fromTxn) {
-            if ($fromTxn->account_id !== $fromAccountId) {
-                return __('The picked outflow transaction is in a different account.');
-            }
-            if ((float) $fromTxn->amount >= 0) {
-                return __('The picked outflow transaction must be a debit.');
-            }
-            if ($alreadyPaired($fromTxn)) {
-                return __('That outflow transaction is already part of another transfer.');
-            }
-        }
-
-        if ($toTxn) {
-            if ($toTxn->account_id !== $toAccountId) {
-                return __('The picked inflow transaction is in a different account.');
-            }
-            if ((float) $toTxn->amount <= 0) {
-                return __('The picked inflow transaction must be a credit.');
-            }
-            if ($alreadyPaired($toTxn)) {
-                return __('That inflow transaction is already part of another transfer.');
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * Unpaired outflow transactions (debits) eligible as the "from" side
-     * of a manual transfer. Filters by the selected from_account to keep
-     * the dropdown tight; falls back to the full unpaired set when no
-     * account is selected yet.
-     *
-     * @return array<int, string>
-     */
-    #[Computed]
-    public function transferOutflowPickerOptions(): array
-    {
-        return $this->unpairedTransferCandidates('outflow', $this->transfer_from_account_id);
-    }
-
-    /**
-     * Unpaired inflow transactions (credits) eligible as the "to" side.
-     *
-     * @return array<int, string>
-     */
-    #[Computed]
-    public function transferInflowPickerOptions(): array
-    {
-        return $this->unpairedTransferCandidates('inflow', $this->transfer_to_account_id);
-    }
-
-    /**
-     * @return array<int, string>
-     */
-    private function unpairedTransferCandidates(string $direction, ?int $accountId): array
-    {
-        $pairedIds = \App\Models\Transfer::query()
-            ->whereNotNull('from_transaction_id')->pluck('from_transaction_id')
-            ->merge(\App\Models\Transfer::query()->whereNotNull('to_transaction_id')->pluck('to_transaction_id'))
-            ->unique()
-            ->all();
-
-        $query = Transaction::query()
-            ->whereNotIn('id', $pairedIds)
-            ->when($accountId, fn ($q) => $q->where('account_id', $accountId));
-
-        if ($direction === 'outflow') {
-            $query->where('amount', '<', 0);
-        } else {
-            $query->where('amount', '>', 0);
-        }
-
-        return $query
-            ->orderByDesc('occurred_on')
-            ->limit(100)
-            ->with('account:id,name')
-            ->get(['id', 'account_id', 'occurred_on', 'amount', 'currency', 'description'])
-            ->mapWithKeys(function ($t) {
-                $date = $t->occurred_on ? $t->occurred_on->toDateString() : '—';
-                $account = $t->account?->name ?? '—';
-                $amount = Formatting::money(abs((float) $t->amount), $t->currency ?? 'USD');
-                $desc = (string) ($t->description ?? '');
-                $label = trim($date.' · '.$account.' · '.$amount.($desc !== '' ? ' · '.\Illuminate\Support\Str::limit($desc, 40) : ''));
-
-                return [$t->id => $label];
-            })
-            ->all();
-    }
+    // transfer create+validate+pickers moved to App\Livewire\Inspector\TransferForm.
 
     /** @return \Illuminate\Database\Eloquent\Collection<int, Property> */
     #[Computed]
@@ -4224,7 +3990,9 @@ new class extends Component
                 @case('time_entry')
                     @livewire('inspector.time-entry-form', ['id' => $id], key('time-entry-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
                     @break
-                @case('transfer') @include('partials.inspector.forms.transfer') @break
+                @case('transfer')
+                    @livewire('inspector.transfer-form', ['id' => $id], key('transfer-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
+                    @break
             @endswitch
             @endif
         </div>

@@ -10,8 +10,7 @@ it('creates a transfer with both mirror transactions when no existing rows are p
     $from = Account::create(['type' => 'checking', 'name' => 'Checking', 'currency' => 'USD', 'opening_balance' => 0]);
     $to = Account::create(['type' => 'savings', 'name' => 'Savings', 'currency' => 'USD', 'opening_balance' => 0]);
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'transfer')
+    Livewire::test('inspector.transfer-form')
         ->set('transfer_occurred_on', '2026-04-15')
         ->set('transfer_from_account_id', $from->id)
         ->set('transfer_to_account_id', $to->id)
@@ -46,8 +45,7 @@ it('links existing unpaired transactions instead of duplicating them', function 
         'status' => 'cleared',
     ]);
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'transfer')
+    Livewire::test('inspector.transfer-form')
         ->set('transfer_occurred_on', '2026-04-15')
         ->set('transfer_from_account_id', $from->id)
         ->set('transfer_to_account_id', $to->id)
@@ -58,7 +56,6 @@ it('links existing unpaired transactions instead of duplicating them', function 
         ->call('save')
         ->assertHasNoErrors();
 
-    // No new transactions created — we reused the imported pair.
     expect(Transaction::count())->toBe(2);
     $transfer = Transfer::firstOrFail();
     expect($transfer->from_transaction_id)->toBe($debit->id)
@@ -75,8 +72,7 @@ it('creates the missing side when only one existing transaction is linked', func
         'status' => 'cleared',
     ]);
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'transfer')
+    Livewire::test('inspector.transfer-form')
         ->set('transfer_occurred_on', '2026-04-15')
         ->set('transfer_from_account_id', $from->id)
         ->set('transfer_to_account_id', $to->id)
@@ -86,7 +82,6 @@ it('creates the missing side when only one existing transaction is linked', func
         ->call('save')
         ->assertHasNoErrors();
 
-    // The inflow mirror gets created; the outflow is the imported debit.
     expect(Transaction::count())->toBe(2);
     $transfer = Transfer::firstOrFail();
     expect($transfer->from_transaction_id)->toBe($debit->id)
@@ -114,8 +109,7 @@ it('rejects linking a transaction that is already part of another transfer', fun
         'status' => 'cleared',
     ]);
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'transfer')
+    Livewire::test('inspector.transfer-form')
         ->set('transfer_occurred_on', '2026-04-15')
         ->set('transfer_from_account_id', $from->id)
         ->set('transfer_to_account_id', $to->id)
@@ -132,8 +126,7 @@ it('rejects when from and to accounts are the same', function () {
     authedInHousehold();
     $acct = Account::create(['type' => 'checking', 'name' => 'Checking', 'currency' => 'USD', 'opening_balance' => 0]);
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'transfer')
+    Livewire::test('inspector.transfer-form')
         ->set('transfer_occurred_on', '2026-04-15')
         ->set('transfer_from_account_id', $acct->id)
         ->set('transfer_to_account_id', $acct->id)
