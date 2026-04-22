@@ -143,6 +143,15 @@
             <path d="M13 3a9 9 0 0 1 8 8h-8V3Z"/>
             @break
 
+        @case('paw')
+            {{-- four toe-beans + a heel pad — simplified paw print. --}}
+            <circle cx="5.5" cy="9" r="1.5"/>
+            <circle cx="9" cy="5" r="1.5"/>
+            <circle cx="15" cy="5" r="1.5"/>
+            <circle cx="18.5" cy="9" r="1.5"/>
+            <path d="M7 17a5 5 0 0 1 10 0 2 2 0 0 1-2 2h-6a2 2 0 0 1-2-2Z"/>
+            @break
+
         @default
             <circle cx="12" cy="12" r="3"/>
     @endswitch

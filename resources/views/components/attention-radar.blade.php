@@ -5,6 +5,8 @@ use App\Models\ChecklistRun;
 use App\Models\Contract;
 use App\Models\InventoryItem;
 use App\Models\Media;
+use App\Models\PetCheckup;
+use App\Models\PetVaccination;
 use App\Models\RecurringProjection;
 use App\Models\Reminder;
 use App\Models\Task;
@@ -186,6 +188,32 @@ new class extends Component
         return $this->unfinishedRitualsForBucket('evening', 22);
     }
 
+    /**
+     * Pet vaccinations expiring in the next 30 days OR already expired —
+     * wider window than the alerts-bell (14d) because the radar is the
+     * "what's on my mind this month" surface. Placeholder rows (never
+     * administered) don't count here since they're not actionable yet.
+     */
+    #[Computed]
+    public function expiringPetVaccinations(): int
+    {
+        return PetVaccination::query()
+            ->whereNotNull('administered_on')
+            ->whereNotNull('valid_until')
+            ->where('valid_until', '<=', now()->addDays(30)->toDateString())
+            ->count();
+    }
+
+    /** Pet checkups whose next_due_on has passed. */
+    #[Computed]
+    public function overduePetCheckups(): int
+    {
+        return PetCheckup::query()
+            ->whereNotNull('next_due_on')
+            ->where('next_due_on', '<', now()->toDateString())
+            ->count();
+    }
+
     #[Computed]
     public function total(): int
     {
@@ -202,7 +230,9 @@ new class extends Component
             + $this->spendingAnomalies
             + $this->savingsGoalsReadyToClose
             + $this->unfinishedMorningRituals
-            + $this->unfinishedEveningRituals;
+            + $this->unfinishedEveningRituals
+            + $this->expiringPetVaccinations
+            + $this->overduePetCheckups;
     }
 };
 ?>
@@ -313,6 +343,24 @@ new class extends Component
                         {{ __('Unfinished evening routine') }}
                     </a>
                     <span class="tabular-nums text-amber-400">{{ $this->unfinishedEveningRituals }}</span>
+                </li>
+            @endif
+            @if ($this->expiringPetVaccinations)
+                <li class="flex items-baseline justify-between">
+                    <a href="{{ route('pets.index', ['tab' => 'vaccinations']) }}"
+                       class="text-neutral-300 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                        {{ __('Pet vaccines expiring / expired') }}
+                    </a>
+                    <span class="tabular-nums text-amber-400">{{ $this->expiringPetVaccinations }}</span>
+                </li>
+            @endif
+            @if ($this->overduePetCheckups)
+                <li class="flex items-baseline justify-between">
+                    <a href="{{ route('pets.index', ['tab' => 'checkups']) }}"
+                       class="text-neutral-300 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                        {{ __('Overdue pet checkups') }}
+                    </a>
+                    <span class="tabular-nums text-rose-400">{{ $this->overduePetCheckups }}</span>
                 </li>
             @endif
         </ul>
