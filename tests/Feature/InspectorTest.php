@@ -434,12 +434,11 @@ it('transfers ownership via the Admin picker', function () {
         'opening_balance' => 500, 'user_id' => $me->id,
     ]);
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'account', $account->id)
+    Livewire::test('inspector.account-form', ['id' => $account->id])
         ->assertSet('admin_owner_id', $me->id)
         ->set('admin_owner_id', $spouse->id)
         ->call('save')
-        ->assertSet('open', false);
+        ->assertHasNoErrors();
 
     expect($account->fresh()->user_id)->toBe($spouse->id);
 });
@@ -452,8 +451,7 @@ it('releases ownership to Shared when the picker is cleared', function () {
         'opening_balance' => 100, 'user_id' => $me->id,
     ]);
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'account', $account->id)
+    Livewire::test('inspector.account-form', ['id' => $account->id])
         ->set('admin_owner_id', null)
         ->call('save');
 
@@ -464,8 +462,7 @@ it('creates a gift-card account with vendor and expiry', function () {
     authedInHousehold();
     $vendor = Contact::create(['kind' => 'org', 'display_name' => 'Amazon']);
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'account')
+    Livewire::test('inspector.account-form')
         ->set('account_name', 'Amazon GC')
         ->set('account_type', 'gift_card')
         ->set('account_currency', 'USD')
@@ -473,7 +470,7 @@ it('creates a gift-card account with vendor and expiry', function () {
         ->set('account_vendor_id', $vendor->id)
         ->set('account_expires_on', '2027-01-15')
         ->call('save')
-        ->assertSet('open', false);
+        ->assertHasNoErrors();
 
     $acct = Account::firstWhere('name', 'Amazon GC');
     expect($acct)->not->toBeNull()

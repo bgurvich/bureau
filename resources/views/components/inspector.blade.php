@@ -465,30 +465,8 @@ new class extends Component
 
     public string $inventory_return_by = '';
 
-    // account
-    public string $account_name = '';
-
-    public string $account_type = 'checking';
-
-    public string $account_currency = 'USD';
-
-    public string $account_opening_balance = '0';
-
-    public string $account_institution = '';
-
-    public ?int $account_vendor_id = null;
-
-    public string $account_expires_on = '';
-
-    public string $account_number_mask = '';
-
-    public string $account_opened_on = '';
-
-    public string $account_closed_on = '';
-
-    public bool $account_is_active = true;
-
-    public bool $account_include_in_net_worth = true;
+    // account extracted to App\Livewire\Inspector\AccountForm;
+    // the shell hosts the child via @livewire in the render switch.
 
     // online_account extracted to App\Livewire\Inspector\OnlineAccountForm;
     // the shell hosts the child via @livewire in the render switch.
@@ -1352,7 +1330,6 @@ new class extends Component
         $this->insurance_premium_currency = $currency;
         $this->insurance_coverage_currency = $currency;
         $this->insurance_deductible_currency = $currency;
-        $this->account_currency = $currency;
         $this->sale_currency = $currency;
         $this->issued_on = now()->toDateString();
         $this->due_on = now()->addDays(14)->toDateString();
@@ -1505,7 +1482,6 @@ new class extends Component
             'document' => $this->loadDocument(),
             'contract' => $this->loadContract(),
             'insurance' => $this->loadInsurance(),
-            'account' => $this->loadAccount(),
             'property' => $this->loadProperty(),
             'vehicle' => $this->loadVehicle(),
             // pet / pet_vaccination / pet_checkup all run as extracted
@@ -1676,24 +1652,7 @@ new class extends Component
         $this->notes = $c->notes ?? '';
     }
 
-    private function loadAccount(): void
-    {
-        $a = Account::where(fn ($q) => $q->where('user_id', auth()->id())->orWhereNull('user_id'))
-            ->findOrFail($this->id);
-        $this->account_name = $a->name;
-        $this->account_type = $a->type;
-        $this->account_currency = $a->currency ?: $this->householdCurrency();
-        $this->account_opening_balance = $a->opening_balance !== null ? (string) $a->opening_balance : '0';
-        $this->account_institution = $a->institution ?? '';
-        $this->account_vendor_id = $a->vendor_contact_id;
-        $this->account_expires_on = $a->expires_on?->toDateString() ?? '';
-        $this->account_is_active = (bool) ($a->is_active ?? true);
-        $this->account_include_in_net_worth = (bool) ($a->include_in_net_worth ?? true);
-        $this->account_number_mask = $a->account_number_mask ?? '';
-        $this->account_opened_on = $a->opened_on?->toDateString() ?? '';
-        $this->account_closed_on = $a->closed_on?->toDateString() ?? '';
-        $this->notes = $a->notes ?? '';
-    }
+    // loadAccount moved to App\Livewire\Inspector\AccountForm.
 
     private function loadInsurance(): void
     {
@@ -1814,7 +1773,7 @@ new class extends Component
         // persists on its own. The child fires `inspector-form-saved`
         // back and the shell's onFormSaved() listener closes the drawer.
         // Add a type to this array after extracting its child form.
-        $extractedTypes = ['pet', 'pet_vaccination', 'pet_checkup', 'time_entry', 'transfer', 'savings_goal', 'budget_cap', 'category_rule', 'tag_rule', 'reminder', 'subscription', 'online_account', 'meeting', 'domain', 'project'];
+        $extractedTypes = ['pet', 'pet_vaccination', 'pet_checkup', 'time_entry', 'transfer', 'savings_goal', 'budget_cap', 'category_rule', 'tag_rule', 'reminder', 'subscription', 'online_account', 'meeting', 'domain', 'project', 'account'];
         if (in_array($this->type, $extractedTypes, true)) {
             $this->dispatch('inspector-save');
 
@@ -1832,7 +1791,6 @@ new class extends Component
                 'document' => $this->saveDocument(),
                 'contract' => $this->saveContract(),
                 'insurance' => $this->saveInsurance(),
-                'account' => $this->saveAccount(),
                 'property' => $this->saveProperty(),
                 'vehicle' => $this->saveVehicle(),
                 // pet / pet_vaccination / pet_checkup are extracted; the
@@ -2423,47 +2381,7 @@ new class extends Component
         }
     }
 
-    private function saveAccount(): void
-    {
-        $data = $this->validate([
-            'account_name' => 'required|string|max:255',
-            'account_type' => ['required', Rule::in(array_keys(Enums::accountTypes()))],
-            'account_currency' => 'required|string|size:3',
-            'account_opening_balance' => 'required|numeric',
-            'account_institution' => 'nullable|string|max:255',
-            'account_vendor_id' => 'nullable|integer|exists:contacts,id',
-            'account_expires_on' => 'nullable|date',
-            'account_is_active' => 'boolean',
-            'account_include_in_net_worth' => 'boolean',
-            'account_number_mask' => 'nullable|string|max:32',
-            'account_opened_on' => 'nullable|date',
-            'account_closed_on' => 'nullable|date|after_or_equal:account_opened_on',
-            'notes' => 'nullable|string|max:5000',
-        ]);
-
-        $payload = [
-            'name' => $data['account_name'],
-            'type' => $data['account_type'],
-            'currency' => strtoupper($data['account_currency']),
-            'opening_balance' => (float) $data['account_opening_balance'],
-            'institution' => $data['account_institution'] ?: null,
-            'vendor_contact_id' => $data['account_vendor_id'] ?: null,
-            'expires_on' => $data['account_expires_on'] ?: null,
-            'is_active' => (bool) $data['account_is_active'],
-            'include_in_net_worth' => (bool) $data['account_include_in_net_worth'],
-            'account_number_mask' => $data['account_number_mask'] ?: null,
-            'opened_on' => $data['account_opened_on'] ?: null,
-            'closed_on' => $data['account_closed_on'] ?: null,
-            'notes' => $data['notes'] ?: null,
-        ];
-
-        if ($this->id) {
-            Account::findOrFail($this->id)->update($payload);
-        } else {
-            $payload['user_id'] = auth()->id();
-            $this->id = Account::create($payload)->id;
-        }
-    }
+    // saveAccount moved to App\Livewire\Inspector\AccountForm.
 
     private function saveInsurance(): void
     {
@@ -3446,7 +3364,9 @@ new class extends Component
                     @break
                 @case('contract') @include('partials.inspector.forms.contract')      @break
                 @case('insurance') @include('partials.inspector.forms.insurance')    @break
-                @case('account') @include('partials.inspector.forms.account')        @break
+                @case('account')
+                    @livewire('inspector.account-form', ['id' => $id], key('account-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
+                    @break
                 @case('online_account')
                     @livewire('inspector.online-account-form', ['id' => $id], key('online-account-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
                     @break
