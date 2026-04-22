@@ -7,16 +7,12 @@ use App\Models\BudgetCap;
 use App\Models\Category;
 use App\Models\CategoryRule;
 use App\Models\ChecklistTemplate;
-use App\Models\ChecklistTemplateItem;
 use App\Models\Contact;
 use App\Models\Contract;
 use App\Models\Document;
 use App\Models\Domain;
 use App\Models\HealthProvider;
-use App\Models\InsurancePolicy;
-use App\Models\InsurancePolicySubject;
 use App\Models\InventoryItem;
-use App\Models\MailMessage;
 use App\Models\Media;
 use App\Models\Meeting;
 use App\Models\Note;
@@ -38,15 +34,11 @@ use App\Models\Transaction;
 use App\Models\User;
 use App\Models\Vehicle;
 use App\Support\CurrentHousehold;
-use App\Support\Enums;
 use App\Support\Formatting;
 use App\Support\ProjectionMatcher;
-use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
-use Illuminate\Validation\Rule;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\On;
 use Livewire\Component;
@@ -411,6 +403,44 @@ new class extends Component
         $this->ambiguousCandidates = $candidates;
     }
 
+    /**
+     * Resolve multi-hit ambiguity: link the chosen projection to the
+     * just-saved transaction and clear the picker state.
+     */
+    public function linkProjection(int $projectionId): void
+    {
+        if (! $this->ambiguousTransactionId) {
+            return;
+        }
+        // Only link projections the matcher proposed — defense against a
+        // race where $ambiguousCandidates is stale but the component
+        // still receives a click.
+        $allowed = array_column($this->ambiguousCandidates, 'id');
+        if (! in_array($projectionId, $allowed, true)) {
+            return;
+        }
+        RecurringProjection::where('id', $projectionId)
+            ->update([
+                'status' => 'matched',
+                'matched_transaction_id' => $this->ambiguousTransactionId,
+                'matched_at' => now(),
+                'unmatched_at' => null,
+            ]);
+        $this->ambiguousCandidates = [];
+        $this->ambiguousTransactionId = null;
+        $this->dispatch('inspector-saved');
+        $this->close();
+    }
+
+    /** Skip the picker — save the transaction without linking. */
+    public function skipProjectionLink(): void
+    {
+        $this->ambiguousCandidates = [];
+        $this->ambiguousTransactionId = null;
+        $this->dispatch('inspector-saved');
+        $this->close();
+    }
+
     private function doOpen(string $type, ?int $id, ?int $mediaId = null, ?int $parentId = null): void
     {
         $this->resetExcept(['open', 'asModal']);
@@ -419,154 +449,21 @@ new class extends Component
         $this->open = true;
         $this->errorMessage = null;
 
-        if ($id) {
-            $this->loadRecord();
-            $this->loadAdminMeta();
-            $this->loadTagList();
-        } else {
-            $this->seedDefaults();
-            if ($mediaId) {
-                $this->source_media_id = $mediaId;
-                $this->prefillFromMedia($mediaId);
-            }
-            // Pre-seed the parent FK for extracted sub-entity forms; the
-            // child's mount() reads this via the `petId` prop passed from
-            // the @case('pet_vaccination' | 'pet_checkup') render switch.
-            $this->subentityParentId = $parentId;
+        // Child form mount() reads $id / $mediaId / $projection_prefill_id
+        // and handles its own hydration. Shell just latches the three
+        // inputs so the @livewire(...) call in the @case switch can pass
+        // them to the child as mount params.
+        if ($mediaId) {
+            $this->source_media_id = $mediaId;
         }
+        // Pre-seed the parent FK for sub-entity forms (pet_vaccination,
+        // pet_checkup); the child's mount() reads this via the `petId`
+        // prop passed from the corresponding @case render switch.
+        $this->subentityParentId = $parentId;
 
         $this->dispatch('inspector-body-shown');
     }
 
-    /**
-     * Apply extracted OCR fields from a Media row onto the new-record form for
-     * bill/transaction types. Reads `Media::ocr_extracted` (written by the
-     * ExtractOcrStructure job) and maps vendor / amount / dates / category
-     * hint onto the matching form state. Leaves untouched fields at their
-     * seeded defaults so the user can override anything.
-     */
-    private function prefillFromMedia(int $mediaId): void
-    {
-        $media = Media::find($mediaId);
-        if (! $media) {
-            return;
-        }
-        $data = $media->ocr_extracted;
-        if (! is_array($data) || $data === []) {
-            return;
-        }
-
-        $vendor = is_string($data['vendor'] ?? null) ? trim((string) $data['vendor']) : '';
-        $amount = is_numeric($data['amount'] ?? null) ? (float) $data['amount'] : null;
-        $taxAmount = is_numeric($data['tax_amount'] ?? null) ? (float) $data['tax_amount'] : null;
-        $issuedOn = is_string($data['issued_on'] ?? null) ? $data['issued_on'] : null;
-        $dueOn = is_string($data['due_on'] ?? null) ? $data['due_on'] : null;
-        $categoryHint = is_string($data['category_suggestion'] ?? null) ? trim((string) $data['category_suggestion']) : '';
-        $currency = is_string($data['currency'] ?? null) && preg_match('/^[A-Z]{3}$/', strtoupper((string) $data['currency']))
-            ? strtoupper((string) $data['currency'])
-            : null;
-
-        if ($this->type === 'bill') {
-            if ($vendor !== '') {
-                $this->bill_title = $vendor;
-            }
-            if ($amount !== null) {
-                // Bills are an expense direction — store a positive magnitude;
-                // the ledger represents the outflow elsewhere.
-                $this->amount = number_format(abs($amount), 2, '.', '');
-            }
-            if ($issuedOn) {
-                $this->issued_on = $issuedOn;
-            }
-            if ($dueOn) {
-                $this->due_on = $dueOn;
-            } elseif ($issuedOn) {
-                // No due date on doc — default to issue date so the projection is sane.
-                $this->due_on = $issuedOn;
-            }
-        } elseif ($this->type === 'transaction') {
-            if ($vendor !== '') {
-                $this->description = $vendor;
-            }
-            if ($amount !== null) {
-                // Transaction amounts are signed; receipts/bills are outflows → negative.
-                $this->amount = number_format(-abs($amount), 2, '.', '');
-            }
-            if ($issuedOn) {
-                $this->occurred_on = $issuedOn;
-            }
-            if ($taxAmount !== null) {
-                $this->tax_amount = number_format($taxAmount, 2, '.', '');
-            }
-        } else {
-            return;
-        }
-
-        if ($currency) {
-            $this->currency = $currency;
-        }
-
-        $contactId = $vendor !== '' ? $this->resolveCounterpartyContact($vendor) : null;
-        if ($contactId !== null) {
-            $this->counterparty_contact_id = $contactId;
-        }
-
-        if ($categoryHint !== '') {
-            $categoryId = $this->resolveCategoryBySuggestion($categoryHint, $this->type === 'transaction' ? 'expense' : null);
-            if ($categoryId !== null) {
-                $this->category_id = $categoryId;
-            }
-        }
-    }
-
-    private function resolveCounterpartyContact(string $vendor): ?int
-    {
-        $vendor = trim($vendor);
-        if ($vendor === '') {
-            return null;
-        }
-
-        // Exact case-insensitive match on display_name or organization wins;
-        // fall back to a LIKE on display_name so "Pacific Gas & Electric" finds "PG&E"-style entries only if
-        // the user explicitly aliased them. Keep the match conservative — wrong counterparty is worse than empty.
-        $exact = Contact::query()
-            ->where(function ($q) use ($vendor) {
-                $q->whereRaw('LOWER(display_name) = ?', [mb_strtolower($vendor)])
-                    ->orWhereRaw('LOWER(organization) = ?', [mb_strtolower($vendor)]);
-            })
-            ->value('id');
-        if ($exact) {
-            return (int) $exact;
-        }
-
-        return null;
-    }
-
-    private function resolveCategoryBySuggestion(string $suggestion, ?string $kind): ?int
-    {
-        $suggestion = mb_strtolower(trim($suggestion));
-        if ($suggestion === '') {
-            return null;
-        }
-
-        $q = Category::query();
-        if ($kind) {
-            $q->where('kind', $kind);
-        }
-
-        return $q->where(function ($sub) use ($suggestion) {
-            $sub->whereRaw('LOWER(slug) = ?', [$suggestion])
-                ->orWhereRaw('LOWER(name) = ?', [$suggestion])
-                ->orWhereRaw('LOWER(slug) LIKE ?', ['%'.$suggestion.'%'])
-                ->orWhereRaw('LOWER(name) LIKE ?', ['%'.$suggestion.'%']);
-        })->value('id');
-    }
-
-    /**
-     * Attach the OCR-source Media row to a freshly created Bill/Transaction so
-     * the scan lives on the record going forward. Called from saveBill /
-     * saveTransaction after the create path completes.
-     */
     /**
      * Map of short kind aliases (used in subject_refs strings and UI groups)
      * to the fully-qualified model class. Single source of truth for which
@@ -844,30 +741,8 @@ new class extends Component
         return $out;
     }
 
-    private function attachSourceMediaTo(Model $record, string $role = 'receipt'): void
-    {
-        if (! $this->source_media_id) {
-            return;
-        }
-        if (! method_exists($record, 'media')) {
-            return;
-        }
-        $media = Media::find($this->source_media_id);
-        if (! $media) {
-            return;
-        }
-        /** @var MorphToMany $rel */
-        $rel = $record->media();
-        if (! $rel->where('media.id', $this->source_media_id)->exists()) {
-            $rel->attach($this->source_media_id, ['role' => $role]);
-        }
-        // Auto-mark processed: user has turned the scan into a record, so it
-        // no longer belongs in the "Unprocessed" inbox.
-        if ($media->processed_at === null) {
-            $media->forceFill(['processed_at' => now()])->save();
-            MailMessage::cascadeProcessedFromMedia($media->id);
-        }
-    }
+    // attachSourceMediaTo() moved to BillForm + TransactionForm; each
+    // child attaches the OCR-scan source to its own record on create.
 
     /**
      * Populate the read-only Admin section (owner / created / updated) from
@@ -1144,39 +1019,10 @@ new class extends Component
         $this->resetExcept(['asModal']);
     }
 
-    private function seedDefaults(): void
-    {
-        $currency = $this->householdCurrency();
-
-        $this->occurred_on = now()->toDateString();
-        $this->due_at = now()->addDay()->startOfHour()->format('Y-m-d\TH:i');
-        $this->currency = $currency;
-        $this->contract_monthly_cost_currency = $currency;
-        $this->insurance_premium_currency = $currency;
-        $this->insurance_coverage_currency = $currency;
-        $this->insurance_deductible_currency = $currency;
-        $this->issued_on = now()->toDateString();
-        $this->due_on = now()->addDays(14)->toDateString();
-
-        // Physical mail defaults — received today, classified as "other"
-        // until the user picks a kind, no processed-at (belongs to the
-        // inbox flow).
-
-        // Checklist defaults — daily routine starting today, two empty rows
-        // so the user sees the repeater shape without having to hit "Add
-        // item". Stored as a key-keyed map; insertion order = visual order.
-        $this->checklist_dtstart = now()->toDateString();
-        $this->checklist_recurrence_mode = 'daily';
-        $this->checklist_time_of_day = 'anytime';
-        $this->checklist_active = true;
-        $this->checklist_items = [];
-        for ($i = 0; $i < 2; $i++) {
-            $key = Str::uuid()->toString();
-            $this->checklist_items[$key] = [
-                'key' => $key, 'id' => null, 'label' => '', 'active' => true,
-            ];
-        }
-    }
+    // seedDefaults() was the shell's "on new record, populate default
+    // dates/currencies" helper. Every extracted form now seeds its own
+    // defaults in mount() when no id is passed, so the shell stays out
+    // of per-type business.
 
     /**
      * Shared options list for every Inspector form that picks a Category,
@@ -1289,129 +1135,10 @@ new class extends Component
         return CurrentHousehold::get()?->default_currency ?? 'USD';
     }
 
-    private function loadRecord(): void
-    {
-        match ($this->type) {
-            'transaction' => $this->loadTransaction(),
-            'bill' => $this->loadBill(),
-            'contract' => $this->loadContract(),
-            'insurance' => $this->loadInsurance(),
-            // pet / pet_vaccination / pet_checkup all run as extracted
-            // class-based components — they load + persist their own
-            // state. The shell only manages open/close + parent id.
-            'checklist_template' => $this->loadChecklistTemplate(),
-            default => null,
-        };
-    }
-
-    // loadTask moved to App\Livewire\Inspector\TaskForm.
-
-    private function loadTransaction(): void
-    {
-        $t = Transaction::findOrFail($this->id);
-        $this->account_id = $t->account_id;
-        $this->occurred_on = $t->occurred_on ? $t->occurred_on->toDateString() : '';
-        $this->amount = (string) $t->amount;
-        $this->currency = $t->currency;
-        $this->description = $t->description ?? '';
-        $this->category_id = $t->category_id;
-        $this->counterparty_contact_id = $t->counterparty_contact_id;
-        $this->status = $t->status;
-        $this->reference_number = $t->reference_number ?? '';
-        $this->tax_amount = $t->tax_amount !== null ? (string) $t->tax_amount : '';
-        $this->tax_code = $t->tax_code ?? '';
-        $this->memo = $t->memo ?? '';
-        $this->subject_refs = $this->subjectRefsFrom($t);
-    }
-
-    // loadContact moved to App\Livewire\Inspector\ContactForm.
-
-    // loadNote moved to App\Livewire\Inspector\NoteForm.
-
-    // physical_mail extracted to App\Livewire\Inspector\PhysicalMailForm.
-
-    private function loadBill(): void
-    {
-        $r = RecurringRule::findOrFail($this->id);
-        $this->bill_title = $r->title;
-        $this->amount = (string) $r->amount;
-        $this->currency = $r->currency ?: 'USD';
-        $this->account_id = $r->account_id;
-        $this->category_id = $r->category_id;
-        $this->counterparty_contact_id = $r->counterparty_contact_id;
-        $this->issued_on = $r->dtstart?->toDateString() ?? now()->toDateString();
-        $this->due_on = CarbonImmutable::parse($this->issued_on)
-            ->addDays((int) ($r->due_offset_days ?? 0))->toDateString();
-        $this->autopay = (bool) $r->autopay;
-        $this->is_recurring = ! str_contains($r->rrule, 'COUNT=1');
-        $this->frequency = match (true) {
-            str_contains($r->rrule, 'FREQ=MONTHLY') => 'monthly',
-            str_contains($r->rrule, 'FREQ=WEEKLY') => 'weekly',
-            str_contains($r->rrule, 'FREQ=YEARLY') => 'yearly',
-            default => 'monthly',
-        };
-        $this->bill_until = $r->until?->toDateString() ?? '';
-        $this->bill_lead_days = (int) ($r->lead_days ?? 7);
-    }
-
-    // loadDocument moved to App\Livewire\Inspector\DocumentForm.
-
-    // loadProject moved to App\Livewire\Inspector\ProjectForm.
-
-    private function loadContract(): void
-    {
-        $c = Contract::findOrFail($this->id);
-        $this->contract_kind = $c->kind;
-        $this->contract_title = $c->title;
-        $this->contract_starts_on = $c->starts_on?->toDateString() ?? '';
-        $this->contract_ends_on = $c->ends_on?->toDateString() ?? '';
-        $this->contract_trial_ends_on = $c->trial_ends_on?->toDateString() ?? '';
-        $this->contract_auto_renews = (bool) $c->auto_renews;
-        $this->contract_monthly_cost = $c->monthly_cost_amount !== null ? (string) $c->monthly_cost_amount : '';
-        $this->contract_monthly_cost_currency = $c->monthly_cost_currency ?: 'USD';
-        $this->contract_state = $c->state;
-        $this->contract_counterparty_id = $c->contacts()->first()?->id;
-        $this->contract_renewal_notice_days = $c->renewal_notice_days !== null ? (int) $c->renewal_notice_days : null;
-        $this->contract_cancellation_url = (string) ($c->cancellation_url ?? '');
-        $this->contract_cancellation_email = (string) ($c->cancellation_email ?? '');
-        $this->notes = $c->notes ?? '';
-    }
-
-    // loadAccount moved to App\Livewire\Inspector\AccountForm.
-
-    private function loadInsurance(): void
-    {
-        $c = Contract::with(['insurancePolicy.subjects', 'contacts'])->findOrFail($this->id);
-        $policy = $c->insurancePolicy;
-
-        $this->insurance_title = $c->title;
-        $this->insurance_starts_on = $c->starts_on?->toDateString() ?? '';
-        $this->insurance_ends_on = $c->ends_on?->toDateString() ?? '';
-        $this->insurance_auto_renews = (bool) $c->auto_renews;
-
-        $this->insurance_coverage_kind = $policy?->coverage_kind ?? 'auto';
-        $this->insurance_policy_number = $policy?->policy_number ?? '';
-        $this->insurance_carrier_id = $policy?->carrier_contact_id;
-        $this->insurance_premium_amount = $policy?->premium_amount !== null ? (string) $policy->premium_amount : '';
-        $this->insurance_premium_currency = $policy?->premium_currency ?: 'USD';
-        $this->insurance_premium_cadence = $policy?->premium_cadence ?: 'monthly';
-        $this->insurance_coverage_amount = $policy?->coverage_amount !== null ? (string) $policy->coverage_amount : '';
-        $this->insurance_coverage_currency = $policy?->coverage_currency ?: 'USD';
-        $this->insurance_deductible_amount = $policy?->deductible_amount !== null ? (string) $policy->deductible_amount : '';
-        $this->insurance_deductible_currency = $policy?->deductible_currency ?: 'USD';
-        $this->insurance_notes = $policy?->notes ?? '';
-
-        $subject = $policy?->subjects->first();
-        $this->insurance_subject = $subject
-            ? (string) $this->encodeSubject($subject->subject_type, $subject->subject_id)
-            : '';
-    }
-
-    // loadProperty moved to App\Livewire\Inspector\PropertyForm.
-
-    // loadVehicle moved to App\Livewire\Inspector\VehicleForm.
-
-    // loadInventory moved to App\Livewire\Inspector\InventoryForm.
+    // loadRecord() no longer runs — every type is an extracted child
+    // Livewire component that hydrates from its own mount($id). Kept
+    // removed intentionally: keeping a dispatcher would re-introduce
+    // shell-level state the extracted forms have already owned.
 
     public function save(): void
     {
@@ -1421,51 +1148,14 @@ new class extends Component
         // persists on its own. The child fires `inspector-form-saved`
         // back and the shell's onFormSaved() listener closes the drawer.
         // Add a type to this array after extracting its child form.
-        $extractedTypes = ['pet', 'pet_vaccination', 'pet_checkup', 'time_entry', 'transfer', 'savings_goal', 'budget_cap', 'category_rule', 'tag_rule', 'reminder', 'subscription', 'online_account', 'meeting', 'domain', 'project', 'account', 'contact', 'appointment', 'vehicle', 'property', 'physical_mail', 'note', 'task', 'document', 'inventory'];
-        if (in_array($this->type, $extractedTypes, true)) {
-            $this->dispatch('inspector-save');
-
-            return;
-        }
-
-        try {
-            match ($this->type) {
-                'transaction' => $this->saveTransaction(),
-                'bill' => $this->saveBill(),
-                'contract' => $this->saveContract(),
-                'insurance' => $this->saveInsurance(),
-                // pet / pet_vaccination / pet_checkup are extracted; the
-                // $extractedTypes early-return above keeps them from
-                // reaching this match.
-                'checklist_template' => $this->saveChecklistTemplate(),
-                default => null,
-            };
-        } catch (PeriodLockedException $e) {
-            $this->errorMessage = $e->getMessage();
-
-            return;
-        }
-
-        $this->persistAdminOwner();
-        $this->persistTagList();
-
-        // When a Transaction save produced multiple candidate projections,
-        // saveTransaction() has stashed them in $ambiguousCandidates. Keep
-        // the drawer open so the picker renders instead of silently closing
-        // after an un-linked save. linkProjection/skipProjectionLink close
-        // the drawer once the user decides.
-        if ($this->ambiguousCandidates !== []) {
-            return;
-        }
-
-        $this->dispatch('inspector-saved', type: $this->type);
-        if ($this->asModal) {
-            // Picker components (searchable-select) listen for this so they
-            // can refresh their option list and re-label the selected row
-            // without needing a full parent re-render.
-            $this->dispatch('subentity-edit-saved', type: $this->type, id: $this->id);
-        }
-        $this->close();
+        // Every inspector type now runs as an extracted child component.
+        // Shell fans out `inspector-save`; the matching child form
+        // validates + persists + fires `inspector-form-saved` back; the
+        // shell's onFormSaved() listener closes the drawer. TransactionForm
+        // additionally fires `inspector-projection-candidates` when
+        // ProjectionMatcher returns multi-hit; onProjectionCandidates()
+        // stashes them on the shell and the picker UI takes over.
+        $this->dispatch('inspector-save');
     }
 
     /**
@@ -1502,405 +1192,17 @@ new class extends Component
 
     // saveTask moved to App\Livewire\Inspector\TaskForm.
 
-    private function saveTransaction(): void
-    {
-        $data = $this->validate([
-            'account_id' => 'required|integer|exists:accounts,id',
-            'occurred_on' => 'required|date',
-            'amount' => 'required|numeric',
-            'currency' => 'required|string|size:3',
-            'description' => 'nullable|string|max:500',
-            'category_id' => 'nullable|integer|exists:categories,id',
-            'counterparty_contact_id' => 'nullable|integer|exists:contacts,id',
-            'status' => ['required', Rule::in(array_keys(Enums::transactionStatuses()))],
-            'reference_number' => 'nullable|string|max:64',
-            'tax_amount' => 'nullable|numeric',
-            'tax_code' => 'nullable|string|max:32',
-            'memo' => 'nullable|string|max:500',
-        ]);
+    // saveTransaction moved to App\Livewire\Inspector\TransactionForm.
+    // The form also owns prefillFromMedia / prefillFromProjection and
+    // fires `inspector-projection-candidates` on multi-hit matches.
 
-        $data['description'] = $data['description'] ?: null;
-        $data['reference_number'] = $data['reference_number'] ?: null;
-        $data['tax_amount'] = $data['tax_amount'] !== '' ? $data['tax_amount'] : null;
-        $data['tax_code'] = $data['tax_code'] ?: null;
-        $data['memo'] = $data['memo'] ?: null;
+    // saveBill moved to App\Livewire\Inspector\BillForm; autoFillInterestCounterparty
+    // + materializeInitialProjection + prefillFromMedia migrated with it.
 
-        $data['counterparty_contact_id'] = $this->autoFillInterestCounterparty(
-            $data['category_id'] ?? null,
-            $data['account_id'] ?? null,
-            $data['counterparty_contact_id'] ?? null,
-        );
+    // saveContract moved to App\Livewire\Inspector\ContractForm.
 
-        if ($this->id) {
-            $transaction = tap(Transaction::findOrFail($this->id))->update($data);
-        } else {
-            // Manual inspector insert: the user is looking at the row as they
-            // save it, so it enters the ledger already reconciled. Only
-            // machine-fed imports leave reconciled_at null.
-            $data['reconciled_at'] = now();
-            $transaction = Transaction::create($data);
-            $this->id = $transaction->id;
-            // resolve() (vs attempt()) surfaces the ambiguous-match case so we
-            // can pause the drawer close + show a picker. Single-hit and miss
-            // cases flow straight through (linked via side effect inside).
-            $matchResult = ProjectionMatcher::resolve($transaction);
-            $this->attachSourceMediaTo($transaction);
-            if ($matchResult->isAmbiguous()) {
-                $this->ambiguousTransactionId = $transaction->id;
-                $this->ambiguousCandidates = array_map(
-                    fn (RecurringProjection $p) => [
-                        'id' => (int) $p->id,
-                        'title' => (string) ($p->rule?->title ?? __('Bill')),
-                        'due_on' => $p->due_on?->toDateString() ?? '—',
-                        'amount' => (string) $p->amount,
-                    ],
-                    $matchResult->candidates,
-                );
-            }
-        }
-        $transaction->syncSubjects($this->parseSubjectRefs($this->subject_refs));
-    }
-
-    /**
-     * Resolve multi-hit ambiguity: link the chosen projection to the just-
-     * saved transaction and clear the picker state.
-     */
-    public function linkProjection(int $projectionId): void
-    {
-        if (! $this->ambiguousTransactionId) {
-            return;
-        }
-        // Only link projections the matcher proposed — defense against a
-        // race where $ambiguousCandidates is stale but the component still
-        // receives a click.
-        $allowed = array_column($this->ambiguousCandidates, 'id');
-        if (! in_array($projectionId, $allowed, true)) {
-            return;
-        }
-        RecurringProjection::where('id', $projectionId)
-            ->update([
-                'status' => 'matched',
-                'matched_transaction_id' => $this->ambiguousTransactionId,
-                'matched_at' => now(),
-                'unmatched_at' => null,
-            ]);
-        $this->ambiguousCandidates = [];
-        $this->ambiguousTransactionId = null;
-        $this->dispatch('inspector-saved');
-        $this->close();
-    }
-
-    /** Skip the picker — save the transaction without linking to any projection. */
-    public function skipProjectionLink(): void
-    {
-        $this->ambiguousCandidates = [];
-        $this->ambiguousTransactionId = null;
-        $this->dispatch('inspector-saved');
-        $this->close();
-    }
-
-    /**
-     * Real-time feedback: when the user picks the interest category (or swaps
-     * accounts while the category is already interest), pre-fill the
-     * counterparty from the account so they see the match immediately.
-     */
-    public function updatedCategoryId(): void
-    {
-        $this->counterparty_contact_id = $this->autoFillInterestCounterparty(
-            $this->category_id,
-            $this->account_id,
-            $this->counterparty_contact_id,
-        );
-    }
-
-    public function updatedAccountId(): void
-    {
-        $this->counterparty_contact_id = $this->autoFillInterestCounterparty(
-            $this->category_id,
-            $this->account_id,
-            $this->counterparty_contact_id,
-        );
-    }
-
-    /**
-     * Interest-paid / interest-earned transactions on an account always go to
-     * the account's counterparty (e.g. interest on an Amex card → Amex).
-     * Silently fill it in on save if the user left it blank.
-     */
-    private function autoFillInterestCounterparty(?int $categoryId, ?int $accountId, ?int $counterpartyId): ?int
-    {
-        if ($counterpartyId || ! $categoryId || ! $accountId) {
-            return $counterpartyId;
-        }
-
-        $slug = Category::where('id', $categoryId)->value('slug');
-        if (! in_array($slug, ['interest-paid', 'interest-earned'], true)) {
-            return $counterpartyId;
-        }
-
-        $account = Account::find($accountId);
-
-        return $account?->counterparty_contact_id ?? $account?->vendor_contact_id ?? null;
-    }
-
-    // saveContact + backfillCategoryToTransactions moved to App\Livewire\Inspector\ContactForm.
-
-    private function saveBill(): void
-    {
-        $data = $this->validate([
-            'bill_title' => 'required|string|max:255',
-            'amount' => 'required|numeric',
-            'currency' => 'required|string|size:3',
-            'account_id' => 'required|integer|exists:accounts,id',
-            'category_id' => 'nullable|integer|exists:categories,id',
-            'counterparty_contact_id' => 'nullable|integer|exists:contacts,id',
-            'issued_on' => 'required|date',
-            'due_on' => 'required|date|after_or_equal:issued_on',
-            'is_recurring' => 'boolean',
-            'frequency' => ['required', Rule::in(array_keys(Enums::billFrequencies()))],
-            'autopay' => 'boolean',
-            'bill_until' => 'nullable|date|after:issued_on',
-            'bill_lead_days' => 'required|integer|min:0|max:365',
-        ]);
-
-        $issued = CarbonImmutable::parse($data['issued_on']);
-        $due = CarbonImmutable::parse($data['due_on']);
-        $offset = max(0, $issued->diffInDays($due, absolute: false));
-
-        $rrule = $data['is_recurring']
-            ? match ($data['frequency']) {
-                'monthly' => 'FREQ=MONTHLY;BYMONTHDAY='.(int) $issued->format('d'),
-                'weekly' => 'FREQ=WEEKLY;BYDAY='.strtoupper(substr($issued->format('D'), 0, 2)),
-                'yearly' => 'FREQ=YEARLY',
-                default => 'FREQ=DAILY',
-            }
-        : 'FREQ=DAILY;COUNT=1';
-
-        $payload = [
-            'kind' => 'bill',
-            'title' => $data['bill_title'],
-            'amount' => (float) $data['amount'],
-            'currency' => strtoupper($data['currency']),
-            'account_id' => $data['account_id'],
-            'category_id' => $data['category_id'] ?: null,
-            'counterparty_contact_id' => $this->autoFillInterestCounterparty(
-                $data['category_id'] ?: null,
-                $data['account_id'] ?: null,
-                $data['counterparty_contact_id'] ?: null,
-            ),
-            'rrule' => $rrule,
-            'dtstart' => $issued->toDateString(),
-            'due_offset_days' => (int) $offset,
-            'autopay' => (bool) $data['autopay'],
-            'until' => $data['bill_until'] ?: null,
-            'lead_days' => (int) $data['bill_lead_days'],
-            'active' => true,
-        ];
-
-        if ($this->id) {
-            RecurringRule::findOrFail($this->id)->update($payload);
-        } else {
-            $rule = RecurringRule::create($payload);
-            $this->id = $rule->id;
-            $this->materializeInitialProjection($rule);
-            $this->attachSourceMediaTo($rule);
-        }
-    }
-
-    private function materializeInitialProjection(RecurringRule $rule): void
-    {
-        $issued = CarbonImmutable::parse($rule->dtstart);
-        $offset = (int) ($rule->due_offset_days ?? 0);
-        $due = $issued->addDays($offset);
-
-        RecurringProjection::firstOrCreate(
-            ['rule_id' => $rule->id, 'due_on' => $due->toDateString()],
-            [
-                'issued_on' => $issued->toDateString(),
-                'amount' => $rule->amount,
-                'currency' => $rule->currency,
-                'status' => $due->lt(CarbonImmutable::today()) ? 'overdue' : 'projected',
-                'autopay' => (bool) $rule->autopay,
-            ]
-        );
-    }
-
-    // saveNote moved to App\Livewire\Inspector\NoteForm.
-
-    // savePhysicalMail moved to App\Livewire\Inspector\PhysicalMailForm.
-
-    // saveDocument moved to App\Livewire\Inspector\DocumentForm.
-
-    // saveProject moved to App\Livewire\Inspector\ProjectForm.
-
-    private function saveContract(): void
-    {
-        $data = $this->validate([
-            'contract_kind' => ['required', Rule::in(array_keys(Enums::contractKinds()))],
-            'contract_title' => 'required|string|max:255',
-            'contract_starts_on' => 'nullable|date',
-            'contract_ends_on' => 'nullable|date|after_or_equal:contract_starts_on',
-            'contract_trial_ends_on' => 'nullable|date',
-            'contract_auto_renews' => 'boolean',
-            'contract_monthly_cost' => 'nullable|numeric',
-            'contract_monthly_cost_currency' => 'nullable|string|size:3',
-            'contract_state' => ['required', Rule::in(array_keys(Enums::contractStates()))],
-            'contract_counterparty_id' => 'nullable|integer|exists:contacts,id',
-            'contract_renewal_notice_days' => 'nullable|integer|min:0|max:365',
-            'contract_cancellation_url' => 'nullable|string|max:512|url',
-            'contract_cancellation_email' => 'nullable|string|max:255|email',
-            'notes' => 'nullable|string|max:5000',
-        ]);
-
-        $payload = [
-            'kind' => $data['contract_kind'],
-            'title' => $data['contract_title'],
-            'starts_on' => $data['contract_starts_on'] ?: null,
-            'ends_on' => $data['contract_ends_on'] ?: null,
-            'trial_ends_on' => $data['contract_trial_ends_on'] ?: null,
-            'auto_renews' => (bool) $data['contract_auto_renews'],
-            'monthly_cost_amount' => $data['contract_monthly_cost'] !== '' ? (float) $data['contract_monthly_cost'] : null,
-            'monthly_cost_currency' => $data['contract_monthly_cost_currency'] ?: null,
-            'state' => $data['contract_state'],
-            'renewal_notice_days' => $data['contract_renewal_notice_days'] !== null && $data['contract_renewal_notice_days'] !== '' ? (int) $data['contract_renewal_notice_days'] : null,
-            'cancellation_url' => trim((string) $data['contract_cancellation_url']) ?: null,
-            'cancellation_email' => trim((string) $data['contract_cancellation_email']) ?: null,
-            'notes' => $data['notes'] ?: null,
-        ];
-
-        if ($this->id) {
-            $contract = tap(Contract::findOrFail($this->id))->update($payload);
-        } else {
-            $payload['primary_user_id'] = auth()->id();
-            $contract = Contract::create($payload);
-            $this->id = $contract->id;
-        }
-
-        if ($data['contract_counterparty_id']) {
-            $contract->contacts()->sync([$data['contract_counterparty_id'] => ['party_role' => 'counterparty']]);
-        } else {
-            $contract->contacts()->detach();
-        }
-    }
-
-    // saveAccount moved to App\Livewire\Inspector\AccountForm.
-
-    private function saveInsurance(): void
-    {
-        $data = $this->validate([
-            'insurance_title' => 'required|string|max:255',
-            'insurance_coverage_kind' => ['required', Rule::in(array_keys(Enums::insuranceCoverageKinds()))],
-            'insurance_policy_number' => 'nullable|string|max:128',
-            'insurance_carrier_id' => 'nullable|integer|exists:contacts,id',
-            'insurance_starts_on' => 'nullable|date',
-            'insurance_ends_on' => 'nullable|date|after_or_equal:insurance_starts_on',
-            'insurance_auto_renews' => 'boolean',
-            'insurance_premium_amount' => 'nullable|numeric',
-            'insurance_premium_currency' => 'nullable|string|size:3',
-            'insurance_premium_cadence' => ['required', Rule::in(array_keys(Enums::insurancePremiumCadences()))],
-            'insurance_coverage_amount' => 'nullable|numeric',
-            'insurance_coverage_currency' => 'nullable|string|size:3',
-            'insurance_deductible_amount' => 'nullable|numeric',
-            'insurance_deductible_currency' => 'nullable|string|size:3',
-            'insurance_notes' => 'nullable|string|max:5000',
-            'insurance_subject' => 'nullable|string|max:64',
-        ]);
-
-        $divisor = Enums::cadenceToMonthlyDivisor($data['insurance_premium_cadence']);
-        $monthly = ($divisor !== null && $data['insurance_premium_amount'] !== '')
-            ? (float) $data['insurance_premium_amount'] / $divisor
-            : null;
-
-        $contractPayload = [
-            'kind' => 'insurance',
-            'title' => $data['insurance_title'],
-            'starts_on' => $data['insurance_starts_on'] ?: null,
-            'ends_on' => $data['insurance_ends_on'] ?: null,
-            'auto_renews' => (bool) $data['insurance_auto_renews'],
-            'monthly_cost_amount' => $monthly !== '' && $monthly !== null ? (float) $monthly : null,
-            'monthly_cost_currency' => $data['insurance_premium_currency'] ?: null,
-            'state' => 'active',
-        ];
-
-        if ($this->id) {
-            $contract = tap(Contract::findOrFail($this->id))->update($contractPayload);
-        } else {
-            $contractPayload['primary_user_id'] = auth()->id();
-            $contract = Contract::create($contractPayload);
-        }
-
-        if ($data['insurance_carrier_id']) {
-            $contract->contacts()->sync([$data['insurance_carrier_id'] => ['party_role' => 'carrier']]);
-        } else {
-            $contract->contacts()->detach();
-        }
-
-        $policyPayload = [
-            'contract_id' => $contract->id,
-            'coverage_kind' => $data['insurance_coverage_kind'],
-            'policy_number' => $data['insurance_policy_number'] ?: null,
-            'carrier_contact_id' => $data['insurance_carrier_id'] ?: null,
-            'premium_amount' => $data['insurance_premium_amount'] !== '' ? (float) $data['insurance_premium_amount'] : null,
-            'premium_currency' => $data['insurance_premium_currency'] ?: null,
-            'premium_cadence' => $data['insurance_premium_cadence'],
-            'coverage_amount' => $data['insurance_coverage_amount'] !== '' ? (float) $data['insurance_coverage_amount'] : null,
-            'coverage_currency' => $data['insurance_coverage_currency'] ?: null,
-            'deductible_amount' => $data['insurance_deductible_amount'] !== '' ? (float) $data['insurance_deductible_amount'] : null,
-            'deductible_currency' => $data['insurance_deductible_currency'] ?: null,
-            'notes' => $data['insurance_notes'] ?: null,
-        ];
-
-        $policy = InsurancePolicy::updateOrCreate(
-            ['contract_id' => $contract->id],
-            $policyPayload,
-        );
-
-        $policy->subjects()->delete();
-        if ($data['insurance_subject']) {
-            [$subjectType, $subjectId] = $this->decodeSubject($data['insurance_subject']);
-            if ($subjectType && $subjectId) {
-                InsurancePolicySubject::create([
-                    'policy_id' => $policy->id,
-                    'subject_type' => $subjectType,
-                    'subject_id' => $subjectId,
-                    'role' => 'covered',
-                ]);
-            }
-        }
-
-        $this->id = $contract->id;
-    }
-
-    private function encodeSubject(string $class, int $id): string
-    {
-        $key = match ($class) {
-            Vehicle::class => 'vehicle',
-            Property::class => 'property',
-            User::class => 'user',
-            default => 'unknown',
-        };
-
-        return $key.':'.$id;
-    }
-
-    /** @return array{0:?string,1:?int} */
-    private function decodeSubject(string $encoded): array
-    {
-        $parts = explode(':', $encoded, 2);
-        if (count($parts) !== 2) {
-            return [null, null];
-        }
-        [$key, $id] = $parts;
-
-        $class = match ($key) {
-            'vehicle' => Vehicle::class,
-            'property' => Property::class,
-            'user' => User::class,
-            default => null,
-        };
-
-        return [$class, ctype_digit($id) ? (int) $id : null];
-    }
+    // saveInsurance moved to App\Livewire\Inspector\InsuranceForm;
+    // encodeSubject + decodeSubject moved with it.
 
     // saveProperty moved to App\Livewire\Inspector\PropertyForm.
 
@@ -1947,192 +1249,10 @@ new class extends Component
         'one_off' => 'FREQ=DAILY;COUNT=1',
     ];
 
-    private function loadChecklistTemplate(): void
-    {
-        $t = ChecklistTemplate::with(['items' => fn ($q) => $q->orderBy('position')])
-            ->findOrFail($this->id);
-
-        $this->checklist_name = $t->name;
-        $this->checklist_description = $t->description ?? '';
-        $this->checklist_time_of_day = $t->time_of_day ?? 'anytime';
-        $this->checklist_rrule = $t->rrule ?? '';
-        $this->checklist_dtstart = $t->dtstart?->toDateString() ?? now()->toDateString();
-        $this->checklist_paused_until = $t->paused_until?->toDateString() ?? '';
-        $this->checklist_active = (bool) $t->active;
-        $this->checklist_recurrence_mode = $this->recurrenceModeForRrule($this->checklist_rrule);
-
-        // Repeater rows are stored as a key-keyed associative array so every
-        // `wire:model="checklist_items.{key}.label"` binding stays stable
-        // across drag-and-drop reorders. PHP arrays preserve insertion order,
-        // so the map also carries the visual order — no separate index list.
-        $rows = [];
-        foreach ($t->items as $i) {
-            $key = 'item-'.$i->id;
-            $rows[$key] = [
-                'key' => $key,
-                'id' => (int) $i->id,
-                'label' => (string) $i->label,
-                'active' => (bool) $i->active,
-            ];
-        }
-        $this->checklist_items = $rows;
-    }
-
-    private function saveChecklistTemplate(): void
-    {
-        $data = $this->validate([
-            'checklist_name' => 'required|string|max:120',
-            'checklist_description' => 'nullable|string|max:2000',
-            'checklist_time_of_day' => ['required', Rule::in(['morning', 'midday', 'evening', 'night', 'anytime'])],
-            'checklist_recurrence_mode' => ['required', Rule::in(['daily', 'weekdays', 'weekends', 'one_off', 'custom'])],
-            'checklist_rrule' => 'nullable|string|max:255',
-            'checklist_dtstart' => 'required|date',
-            'checklist_paused_until' => 'nullable|date',
-            'checklist_active' => 'boolean',
-            'checklist_items' => 'array',
-            'checklist_items.*.label' => 'nullable|string|max:255',
-            'checklist_items.*.active' => 'boolean',
-            'checklist_items.*.id' => 'nullable|integer',
-        ]);
-
-        $rrule = $data['checklist_recurrence_mode'] === 'custom'
-            ? trim($data['checklist_rrule'] ?? '')
-            : (self::CHECKLIST_PRESET_RRULES[$data['checklist_recurrence_mode']] ?? 'FREQ=DAILY');
-
-        $payload = [
-            'name' => $data['checklist_name'],
-            'description' => $data['checklist_description'] ?: null,
-            'time_of_day' => $data['checklist_time_of_day'],
-            'rrule' => $rrule !== '' ? $rrule : null,
-            'dtstart' => $data['checklist_dtstart'],
-            'paused_until' => $data['checklist_paused_until'] ?: null,
-            'active' => (bool) ($data['checklist_active'] ?? true),
-        ];
-
-        if ($this->id) {
-            $template = ChecklistTemplate::findOrFail($this->id);
-            $template->update($payload);
-        } else {
-            $payload['user_id'] = auth()->id();
-            $template = ChecklistTemplate::create($payload);
-            $this->id = $template->id;
-        }
-
-        $this->persistChecklistItems($template);
-    }
-
-    /**
-     * Sync the item-repeater rows onto the template: insert rows without an
-     * id, update rows that carry one, and delete rows the user removed in
-     * the UI (any persisted item not present in the payload). Positions are
-     * taken from the payload's array order, so drag-less reordering via the
-     * up/down buttons is enough.
-     */
-    private function persistChecklistItems(ChecklistTemplate $template): void
-    {
-        $existingIds = $template->items()->pluck('id')->map(fn ($i) => (int) $i)->all();
-        $keepIds = [];
-
-        $position = 0;
-        foreach ($this->checklist_items as $row) {
-            $label = trim((string) ($row['label'] ?? ''));
-            if ($label === '') {
-                // Skip empty rows entirely — treat as "user left blank".
-                continue;
-            }
-            $active = (bool) ($row['active'] ?? true);
-            $existingId = isset($row['id']) && is_numeric($row['id']) ? (int) $row['id'] : null;
-
-            if ($existingId && in_array($existingId, $existingIds, true)) {
-                ChecklistTemplateItem::where('id', $existingId)->update([
-                    'label' => $label,
-                    'active' => $active,
-                    'position' => $position,
-                ]);
-                $keepIds[] = $existingId;
-            } else {
-                $item = $template->items()->create([
-                    'label' => $label,
-                    'active' => $active,
-                    'position' => $position,
-                ]);
-                $keepIds[] = (int) $item->id;
-            }
-            $position++;
-        }
-
-        $toDelete = array_diff($existingIds, $keepIds);
-        if ($toDelete !== []) {
-            ChecklistTemplateItem::whereIn('id', $toDelete)->delete();
-        }
-    }
-
-    private function recurrenceModeForRrule(?string $rrule): string
-    {
-        $r = trim((string) $rrule);
-        if ($r === '') {
-            return 'daily';
-        }
-        foreach (self::CHECKLIST_PRESET_RRULES as $mode => $preset) {
-            if ($r === $preset) {
-                return $mode;
-            }
-        }
-
-        return 'custom';
-    }
-
-    public function addItem(): void
-    {
-        $key = Str::uuid()->toString();
-        $this->checklist_items[$key] = [
-            'key' => $key,
-            'id' => null,
-            'label' => '',
-            'active' => true,
-        ];
-    }
-
-    public function removeItem(string $key): void
-    {
-        unset($this->checklist_items[$key]);
-    }
-
-    /**
-     * Reorder `checklist_items` to match the supplied sequence of row keys.
-     * The Alpine drag handler computes the new order client-side and calls
-     * this method with the final DOM-order keys. Unknown keys are ignored;
-     * any rows whose keys aren't in the payload keep their relative order
-     * at the tail (defensive — e.g. if the DOM and server briefly diverge).
-     *
-     * Because `checklist_items` is a keyed assoc array whose insertion order
-     * is the visible order, reordering is just "rebuild the map in the new
-     * key order". wire:model bindings stay stable since each row is still
-     * reached via its UUID key.
-     *
-     * @param  array<int, string>  $orderedKeys
-     */
-    public function reorderItems(array $orderedKeys): void
-    {
-        if ($this->checklist_items === []) {
-            return;
-        }
-
-        $next = [];
-        foreach ($orderedKeys as $key) {
-            $k = (string) $key;
-            if (isset($this->checklist_items[$k])) {
-                $next[$k] = $this->checklist_items[$k];
-            }
-        }
-        foreach ($this->checklist_items as $k => $row) {
-            if (! isset($next[$k])) {
-                $next[$k] = $row;
-            }
-        }
-
-        $this->checklist_items = $next;
-    }
+    // Checklist-template load/save/repeater methods moved to
+    // App\Livewire\Inspector\ChecklistTemplateForm. The shell no longer
+    // stores checklist state or defines addItem/removeItem/reorderItems —
+    // the child component owns them and renders via @livewire.
 
     // ── Time entry (manual backlog) ──────────────────────────────────────
     //

@@ -10,8 +10,7 @@ beforeEach(function () {
 });
 
 it('creates a checklist template with items via the inspector', function () {
-    Livewire::test('inspector')
-        ->call('openInspector', 'checklist_template')
+    Livewire::test('inspector.checklist-template-form')
         ->set('checklist_name', 'Morning routine')
         ->set('checklist_description', 'First thing after waking up')
         ->set('checklist_time_of_day', 'morning')
@@ -21,8 +20,7 @@ it('creates a checklist template with items via the inspector', function () {
             'b' => ['key' => 'b', 'id' => null, 'label' => '10-min journal', 'active' => true],
             'c' => ['key' => 'c', 'id' => null, 'label' => '', 'active' => true], // empty row dropped
         ])
-        ->call('save')
-        ->assertSet('open', false);
+        ->call('save');
 
     $template = ChecklistTemplate::first();
     expect($template)->not->toBeNull()
@@ -34,8 +32,7 @@ it('creates a checklist template with items via the inspector', function () {
 });
 
 it('persists a custom RRULE when recurrence_mode is custom', function () {
-    Livewire::test('inspector')
-        ->call('openInspector', 'checklist_template')
+    Livewire::test('inspector.checklist-template-form')
         ->set('checklist_name', 'MWF workout')
         ->set('checklist_recurrence_mode', 'custom')
         ->set('checklist_rrule', 'FREQ=WEEKLY;BYDAY=MO,WE,FR')
@@ -45,8 +42,7 @@ it('persists a custom RRULE when recurrence_mode is custom', function () {
 });
 
 it('persists FREQ=DAILY;COUNT=1 when recurrence_mode is one_off', function () {
-    Livewire::test('inspector')
-        ->call('openInspector', 'checklist_template')
+    Livewire::test('inspector.checklist-template-form')
         ->set('checklist_name', 'Welcome-a-pet — first week')
         ->set('checklist_recurrence_mode', 'one_off')
         ->set('checklist_dtstart', '2026-06-01')
@@ -66,8 +62,7 @@ it('reopening a one-off checklist restores recurrence_mode = one_off (not custom
         'active' => true,
     ]);
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'checklist_template', $template->id)
+    Livewire::test('inspector.checklist-template-form', ['id' => $template->id])
         ->assertSet('checklist_recurrence_mode', 'one_off');
 });
 
@@ -166,8 +161,7 @@ it('deletes items and runs when a template is deleted', function () {
 });
 
 it('reorderItems rearranges the repeater to match the supplied keys', function () {
-    $result = Livewire::test('inspector')
-        ->call('openInspector', 'checklist_template')
+    $result = Livewire::test('inspector.checklist-template-form')
         ->set('checklist_items', [
             'k1' => ['key' => 'k1', 'id' => null, 'label' => 'first', 'active' => true],
             'k2' => ['key' => 'k2', 'id' => null, 'label' => 'second', 'active' => true],
@@ -188,8 +182,7 @@ it('removes an item by its key without disturbing sibling labels', function () {
     // used array_splice on a numeric index, so after a reorder the user's
     // "delete row X" click targeted the wrong row. With key-keyed storage
     // the call is unambiguous.
-    $result = Livewire::test('inspector')
-        ->call('openInspector', 'checklist_template')
+    $result = Livewire::test('inspector.checklist-template-form')
         ->set('checklist_items', [
             'k1' => ['key' => 'k1', 'id' => null, 'label' => 'one', 'active' => true],
             'k2' => ['key' => 'k2', 'id' => null, 'label' => 'two', 'active' => true],

@@ -1,5 +1,10 @@
 <form wire:submit="save" class="space-y-4" novalidate>
     <button type="submit" class="sr-only" tabindex="-1" aria-hidden="true">{{ __('Submit') }}</button>
+    @if ($errorMessage)
+        <div role="alert" class="rounded-md border border-rose-700 bg-rose-950/60 px-3 py-2 text-sm text-rose-100">
+            {{ $errorMessage }}
+        </div>
+    @endif
     <div class="grid grid-cols-2 gap-3">
         <div>
             <label for="i-txn-date" class="mb-1 block text-xs text-neutral-400">{{ __('Date') }}</label>

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Livewire\Inspector;
 
+use App\Exceptions\PeriodLockedException;
 use App\Livewire\Inspector\Concerns\HasAdminPanel;
 use App\Livewire\Inspector\Concerns\HasSubjectRefs;
 use App\Livewire\Inspector\Concerns\HasTagList;
@@ -71,6 +72,8 @@ class TransactionForm extends Component
     public string $memo = '';
 
     public ?int $source_media_id = null;
+
+    public ?string $errorMessage = null;
 
     public function mount(?int $id = null, ?int $mediaId = null, ?int $projectionId = null): void
     {
@@ -141,33 +144,44 @@ class TransactionForm extends Component
 
         /** @var array<int, array{id:int, title:string, due_on:string, amount:string}> $candidates */
         $candidates = [];
-        if ($this->id !== null) {
-            $transaction = tap(Transaction::findOrFail($this->id))->update($data);
-        } else {
-            // Manual inspector insert: the user is looking at the row as
-            // they save it, so it enters the ledger already reconciled.
-            // Only machine-fed imports leave reconciled_at null.
-            $data['reconciled_at'] = now();
-            $transaction = Transaction::create($data);
-            $this->id = (int) $transaction->id;
+        $this->errorMessage = null;
+        try {
+            if ($this->id !== null) {
+                $transaction = tap(Transaction::findOrFail($this->id))->update($data);
+            } else {
+                // Manual inspector insert: the user is looking at the
+                // row as they save it, so it enters the ledger already
+                // reconciled. Only machine-fed imports leave
+                // reconciled_at null.
+                $data['reconciled_at'] = now();
+                $transaction = Transaction::create($data);
+                $this->id = (int) $transaction->id;
 
-            $matchResult = ProjectionMatcher::resolve($transaction);
-            $this->attachSourceMediaTo($transaction);
+                $matchResult = ProjectionMatcher::resolve($transaction);
+                $this->attachSourceMediaTo($transaction);
 
-            if ($matchResult->isAmbiguous()) {
-                $candidates = array_map(
-                    fn (RecurringProjection $p): array => [
-                        'id' => (int) $p->id,
-                        'title' => (string) ($p->rule->title ?? __('Bill')),
-                        'due_on' => $p->due_on->toDateString(),
-                        'amount' => (string) $p->amount,
-                    ],
-                    $matchResult->candidates,
-                );
+                if ($matchResult->isAmbiguous()) {
+                    $candidates = array_map(
+                        fn (RecurringProjection $p): array => [
+                            'id' => (int) $p->id,
+                            'title' => (string) ($p->rule->title ?? __('Bill')),
+                            'due_on' => $p->due_on->toDateString(),
+                            'amount' => (string) $p->amount,
+                        ],
+                        $matchResult->candidates,
+                    );
+                }
             }
-        }
 
-        $transaction->syncSubjects($this->parseSubjectRefs($this->subject_refs));
+            $transaction->syncSubjects($this->parseSubjectRefs($this->subject_refs));
+        } catch (PeriodLockedException $e) {
+            // Period-locks guard against backdated edits to historic
+            // months. Surface the message in the form so the drawer
+            // stays open with the user's pending edits intact.
+            $this->errorMessage = $e->getMessage();
+
+            return;
+        }
 
         $this->persistAdminOwner();
         $this->persistTagList();

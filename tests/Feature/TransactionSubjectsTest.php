@@ -28,8 +28,7 @@ it('Inspector saves transaction subjects on create and reloads on edit', functio
     $vehicle = Vehicle::create(['kind' => 'car', 'model' => 'Civic']);
     $contract = Contract::create(['kind' => 'insurance', 'title' => 'Geico']);
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'transaction')
+    Livewire::test('inspector.transaction-form')
         ->set('account_id', $account->id)
         ->set('occurred_on', '2026-03-15')
         ->set('amount', '-180.00')
@@ -45,7 +44,7 @@ it('Inspector saves transaction subjects on create and reloads on edit', functio
         ->and($subjectIds)->toContain($contract->id);
 
     // Reopen — subject_refs populated.
-    $c = Livewire::test('inspector')->call('openInspector', 'transaction', $txn->id);
+    $c = Livewire::test('inspector.transaction-form', ['id' => $txn->id]);
     expect($c->get('subject_refs'))->toContain('vehicle:'.$vehicle->id)
         ->and($c->get('subject_refs'))->toContain('contract:'.$contract->id);
 });

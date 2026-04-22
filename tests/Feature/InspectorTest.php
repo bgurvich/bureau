@@ -113,8 +113,7 @@ it('creates a transaction', function () {
         'type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0,
     ]);
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'transaction')
+    Livewire::test('inspector.transaction-form')
         ->set('account_id', $account->id)
         ->set('occurred_on', '2026-04-10')
         ->set('amount', '-42.50')
@@ -136,15 +135,13 @@ it('surfaces a period-lock error instead of throwing', function () {
     ]);
     PeriodLock::create(['locked_through' => '2026-03-31', 'locked_at' => now()]);
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'transaction')
+    Livewire::test('inspector.transaction-form')
         ->set('account_id', $account->id)
         ->set('occurred_on', '2026-03-15')
         ->set('amount', '-10')
         ->set('currency', 'USD')
         ->set('status', 'cleared')
         ->call('save')
-        ->assertSet('open', true)  // stays open so the user sees the error
         ->assertSet('errorMessage', fn ($v) => is_string($v) && str_contains($v, '2026-03-31'));
 
     expect(Transaction::count())->toBe(0);
@@ -172,8 +169,7 @@ it('requires a title on task save', function () {
 it('auto-creates a counterparty contact from a typed name', function () {
     authedInHousehold();
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'transaction')
+    Livewire::test('inspector.transaction-form')
         ->call('createCounterparty', 'Brand New Vendor Inc')
         ->assertDispatched('ss-option-added',
             model: 'counterparty_contact_id',
@@ -188,8 +184,7 @@ it('auto-creates a counterparty contact from a typed name', function () {
 it('ignores empty names for counterparty auto-create', function () {
     authedInHousehold();
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'transaction')
+    Livewire::test('inspector.transaction-form')
         ->call('createCounterparty', '   ');
 
     expect(Contact::count())->toBe(0);
@@ -310,8 +305,7 @@ it('creates an insurance policy with a covered vehicle', function () {
     $vehicle = Vehicle::create(['kind' => 'car', 'make' => 'Honda', 'model' => 'Civic', 'year' => 2020]);
     $carrier = Contact::create(['kind' => 'org', 'display_name' => 'Acme Mutual']);
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'insurance')
+    Livewire::test('inspector.insurance-form')
         ->set('insurance_title', 'Civic auto policy')
         ->set('insurance_coverage_kind', 'auto')
         ->set('insurance_policy_number', 'AUTO-42')
@@ -322,8 +316,7 @@ it('creates an insurance policy with a covered vehicle', function () {
         ->set('insurance_coverage_amount', '50000')
         ->set('insurance_deductible_amount', '500')
         ->set('insurance_subject', 'vehicle:'.$vehicle->id)
-        ->call('save')
-        ->assertSet('open', false);
+        ->call('save');
 
     $contract = Contract::firstWhere('title', 'Civic auto policy');
     expect($contract)->not->toBeNull()
@@ -364,14 +357,12 @@ it('edits an existing insurance policy and reassigns its subject', function () {
         'role' => 'covered',
     ]);
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'insurance', $contract->id)
+    Livewire::test('inspector.insurance-form', ['id' => $contract->id])
         ->assertSet('insurance_policy_number', 'OLD')
         ->assertSet('insurance_subject', 'vehicle:'.$vehicleA->id)
         ->set('insurance_policy_number', 'NEW')
         ->set('insurance_subject', 'vehicle:'.$vehicleB->id)
-        ->call('save')
-        ->assertSet('open', false);
+        ->call('save');
 
     $policy->refresh()->load('subjects');
     expect($policy->policy_number)->toBe('NEW')
@@ -479,15 +470,13 @@ it('saves a subscription contract with a trial end date', function () {
     authedInHousehold();
     $vendor = Contact::create(['kind' => 'org', 'display_name' => 'Equinox Gym']);
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'contract')
+    Livewire::test('inspector.contract-form')
         ->set('contract_kind', 'subscription')
         ->set('contract_title', 'Gym membership')
         ->set('contract_state', 'active')
         ->set('contract_counterparty_id', $vendor->id)
         ->set('contract_trial_ends_on', now()->addDays(14)->toDateString())
-        ->call('save')
-        ->assertSet('open', false);
+        ->call('save');
 
     $contract = Contract::firstWhere('title', 'Gym membership');
     expect($contract)->not->toBeNull()

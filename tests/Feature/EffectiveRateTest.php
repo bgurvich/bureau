@@ -91,8 +91,7 @@ it('auto-fills the counterparty on an interest-paid transaction from the account
     ]);
     $interest = Category::where('slug', 'interest-paid')->value('id');
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'transaction')
+    Livewire::test('inspector.transaction-form')
         ->set('account_id', $account->id)
         ->set('occurred_on', now()->toDateString())
         ->set('amount', '-12.50')
@@ -117,8 +116,7 @@ it('real-time fills counterparty the moment the user picks interest category', f
     ]);
     $interest = Category::where('slug', 'interest-paid')->value('id');
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'transaction')
+    Livewire::test('inspector.transaction-form')
         ->set('account_id', $account->id)
         ->set('category_id', $interest)
         ->assertSet('counterparty_contact_id', $amex->id);
@@ -193,8 +191,7 @@ it('does not overwrite an explicitly set counterparty on interest transactions',
     ]);
     $interest = Category::where('slug', 'interest-paid')->value('id');
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'transaction')
+    Livewire::test('inspector.transaction-form')
         ->set('account_id', $account->id)
         ->set('occurred_on', now()->toDateString())
         ->set('amount', '-10')

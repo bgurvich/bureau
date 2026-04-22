@@ -60,8 +60,7 @@ it('prefills the transaction form with a signed amount and issue date', function
         'category_suggestion' => 'groceries',
     ]);
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'transaction', null, $m->id)
+    Livewire::test('inspector.transaction-form', ['mediaId' => $m->id])
         ->assertSet('description', 'Whole Foods')
         ->assertSet('amount', '-37.99')
         ->assertSet('occurred_on', '2026-04-15')
@@ -74,8 +73,7 @@ it('auto-resolves counterparty to an existing contact', function () {
     $c = Contact::create(['kind' => 'org', 'display_name' => 'Whole Foods']);
     $m = ocrReadyMedia(['vendor' => 'Whole Foods', 'category_suggestion' => null]);
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'transaction', null, $m->id)
+    Livewire::test('inspector.transaction-form', ['mediaId' => $m->id])
         ->assertSet('counterparty_contact_id', $c->id);
 });
 
@@ -84,8 +82,7 @@ it('auto-resolves category by suggestion name', function () {
     $cat = Category::create(['kind' => 'expense', 'name' => 'Utilities', 'slug' => 'utilities']);
     $m = ocrReadyMedia();
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'transaction', null, $m->id)
+    Livewire::test('inspector.transaction-form', ['mediaId' => $m->id])
         ->assertSet('category_id', $cat->id);
 });
 
@@ -113,8 +110,7 @@ it('attaches the source Media to a saved transaction', function () {
         'category_suggestion' => null,
     ]);
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'transaction', null, $m->id)
+    Livewire::test('inspector.transaction-form', ['mediaId' => $m->id])
         ->set('account_id', $account->id)
         ->set('status', 'cleared')
         ->call('save');
@@ -139,8 +135,7 @@ it('leaves category and counterparty blank when nothing matches', function () {
     authedInHousehold();
     $m = ocrReadyMedia(['vendor' => 'No Such Vendor', 'category_suggestion' => 'mythical-budget-line']);
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'transaction', null, $m->id)
+    Livewire::test('inspector.transaction-form', ['mediaId' => $m->id])
         ->assertSet('counterparty_contact_id', null)
         ->assertSet('category_id', null);
 });

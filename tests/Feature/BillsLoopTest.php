@@ -204,8 +204,10 @@ it('Inspector shows a picker when a new transaction matches 2+ projections', fun
         ]);
     }
 
-    $c = Livewire::test('inspector')
-        ->call('openInspector', 'transaction')
+    // Child fires inspector-projection-candidates when the matcher
+    // returns multi-hit. Assert the dispatched payload (transactionId
+    // + candidates) and that no DB match landed yet.
+    $child = Livewire::test('inspector.transaction-form')
         ->set('account_id', $account->id)
         ->set('amount', '-1000')
         ->set('occurred_on', '2026-04-01')
@@ -213,20 +215,27 @@ it('Inspector shows a picker when a new transaction matches 2+ projections', fun
         ->set('description', 'Rent')
         ->call('save');
 
-    // Drawer stays open, picker is populated, no projection linked yet.
-    $candidates = $c->get('ambiguousCandidates');
-    expect($candidates)->toHaveCount(2)
-        ->and($c->get('ambiguousTransactionId'))->not->toBeNull()
-        ->and(RecurringProjection::where('status', 'matched')->count())->toBe(0);
+    $child->assertDispatched('inspector-projection-candidates');
+    expect(RecurringProjection::where('status', 'matched')->count())->toBe(0);
 
-    // User picks one → that projection is linked, drawer closes.
+    // Shell owns the picker UI — feed it the candidates the child
+    // dispatched, then exercise linkProjection() end-to-end.
+    $txnId = Transaction::firstWhere('amount', -1000)->id;
+    $candidates = RecurringProjection::orderBy('due_on')->get()
+        ->map(fn ($p) => ['id' => (int) $p->id, 'title' => 'Rent', 'due_on' => $p->due_on->toDateString(), 'amount' => (string) $p->amount])
+        ->all();
+
+    $shell = Livewire::test('inspector')
+        ->call('onProjectionCandidates', $txnId, $candidates);
+    expect($shell->get('ambiguousCandidates'))->toHaveCount(2)
+        ->and($shell->get('ambiguousTransactionId'))->toBe($txnId);
+
     $chosenId = $candidates[0]['id'];
-    $c->call('linkProjection', $chosenId);
+    $shell->call('linkProjection', $chosenId);
 
     $matched = RecurringProjection::where('status', 'matched')->first();
     expect($matched?->id)->toBe($chosenId)
-        ->and($c->get('ambiguousCandidates'))->toBe([])
-        ->and($c->get('open'))->toBeFalse();
+        ->and($shell->get('ambiguousCandidates'))->toBe([]);
 });
 
 it('Inspector skipProjectionLink leaves the transaction unlinked', function () {
@@ -245,16 +254,15 @@ it('Inspector skipProjectionLink leaves the transaction unlinked', function () {
         ]);
     }
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'transaction')
+    Livewire::test('inspector.transaction-form')
         ->set('account_id', $account->id)
         ->set('amount', '-50')
         ->set('occurred_on', '2026-04-01')
         ->set('currency', 'USD')
         ->set('description', 'x')
-        ->call('save')
-        ->call('skipProjectionLink')
-        ->assertSet('open', false);
+        ->call('save');
+
+    Livewire::test('inspector')->call('skipProjectionLink');
 
     expect(RecurringProjection::where('status', 'matched')->count())->toBe(0)
         ->and(Transaction::where('amount', -50)->count())->toBe(1);
@@ -295,8 +303,7 @@ it('auto-matches via the Inspector when a transaction is saved', function () {
         'status' => 'projected',
     ]);
 
-    Livewire::test('inspector')
-        ->call('openInspector', 'transaction')
+    Livewire::test('inspector.transaction-form')
         ->set('account_id', $account->id)
         ->set('occurred_on', '2026-04-11')
         ->set('amount', '-60')
