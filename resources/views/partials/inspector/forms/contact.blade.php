@@ -61,10 +61,72 @@
             {{ __('Customer') }}
         </label>
     </div>
+    {{-- Roles — multi-value relationship axis (separate from the
+         vendor/customer flags above, which are domain roles the
+         accounting side cares about). Grouped by category so the
+         checkbox grid stays scannable even as the list grows. --}}
+    <fieldset class="rounded-lg border border-neutral-800 p-3">
+        <legend class="px-1 text-xs text-neutral-400">{{ __('Roles') }}</legend>
+        <div class="grid gap-3 sm:grid-cols-2">
+            @foreach (App\Support\Enums::contactRoleGroups() as $groupKey => $group)
+                <div>
+                    <div class="mb-1 text-[10px] uppercase tracking-wider text-neutral-500">{{ $group['label'] }}</div>
+                    <div class="flex flex-wrap gap-2 text-xs text-neutral-300">
+                        @foreach ($group['slugs'] as $slug)
+                            <label class="flex items-center gap-1.5">
+                                <input wire:model="contact_roles" type="checkbox" value="{{ $slug }}"
+                                       class="rounded border-neutral-700 bg-neutral-950">
+                                <span>{{ App\Support\Enums::contactRoles()[$slug] ?? $slug }}</span>
+                            </label>
+                        @endforeach
+                    </div>
+                </div>
+            @endforeach
+        </div>
+    </fieldset>
     <div>
         <label for="i-ct-tid" class="mb-1 block text-xs text-neutral-400">{{ __('Tax ID') }}</label>
         <input wire:model="tax_id" id="i-ct-tid" type="text"
                class="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+    </div>
+    @if ($kind === 'person')
+        <div class="grid grid-cols-2 gap-3">
+            <div>
+                <label for="i-ct-bday" class="mb-1 block text-xs text-neutral-400">{{ __('Birthday') }}</label>
+                <input wire:model="birthday" id="i-ct-bday" type="date"
+                       class="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+            </div>
+            <label class="mt-6 flex items-center gap-2 text-xs text-neutral-300">
+                <input wire:model="birthday_year_known" type="checkbox" class="rounded border-neutral-700 bg-neutral-950">
+                {{ __('Year known') }}
+                <span class="text-neutral-500">{{ __('(uncheck if you only know month/day)') }}</span>
+            </label>
+        </div>
+    @endif
+    <div>
+        <label for="i-ct-cat" class="mb-1 block text-xs text-neutral-400">{{ __('Default category') }}</label>
+        <x-ui.searchable-select
+            id="i-ct-cat"
+            model="contact_category_id"
+            :options="['' => '—'] + $this->categoryPickerOptions"
+            placeholder="—"
+            edit-inspector-type="category" />
+        <p class="mt-1 text-[11px] text-neutral-500">
+            {{ __('Transactions with this counterparty auto-inherit this category unless a category is set explicitly.') }}
+        </p>
+        @if ($id && $contact_category_id)
+            <div class="mt-2 flex items-center gap-2">
+                <button type="button"
+                        wire:click.stop="backfillCategoryToTransactions"
+                        wire:confirm="{{ __('Apply this category to every uncategorised transaction for this contact?') }}"
+                        class="rounded-md border border-emerald-700/50 bg-emerald-900/20 px-2 py-1 text-[11px] text-emerald-200 hover:bg-emerald-900/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                    {{ __('Apply to uncategorised transactions') }}
+                </button>
+                @if ($contactBackfillMessage)
+                    <span role="status" class="text-[11px] text-emerald-300">{{ $contactBackfillMessage }}</span>
+                @endif
+            </div>
+        @endif
     </div>
     <div>
         <label for="i-ct-patterns" class="mb-1 block text-xs text-neutral-400">{{ __('Match patterns') }}</label>

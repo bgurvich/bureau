@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AddressAutocompleteController;
 use App\Http\Controllers\BookkeeperExportController;
+use App\Http\Controllers\ContactsExportController;
 use App\Http\Controllers\GmailOAuthController;
 use App\Http\Controllers\MagicLinkController;
 use App\Http\Controllers\MediaFileController;
@@ -91,6 +92,7 @@ Route::middleware(['auth', 'preferences', 'household'])->group(function () {
     Route::livewire('/life/checklists/today', 'checklists-today')->name('life.checklists.today');
     Route::livewire('/schedule', 'schedule-hub')->name('life.schedule');
     Route::livewire('/contacts', 'contacts-index')->name('relationships.contacts');
+    Route::get('/contacts/export', ContactsExportController::class)->name('relationships.contacts.export');
     Route::livewire('/contracts', 'contracts-index')->name('relationships.contracts');
     Route::livewire('/insurance', 'insurance-index')->name('relationships.insurance');
     Route::livewire('/records', 'records-hub')->name('records.index');
@@ -103,6 +105,7 @@ Route::middleware(['auth', 'preferences', 'household'])->group(function () {
     Route::livewire('/vehicles', 'vehicles-index')->name('assets.vehicles');
     Route::livewire('/inventory', 'inventory-index')->name('assets.inventory');
     Route::livewire('/assets', 'assets-hub')->name('assets.index');
+    Route::livewire('/pets', 'pets-hub')->name('pets.index');
     Route::livewire('/health', 'health-hub')->name('health.index');
     Route::livewire('/health/providers', 'health-providers-index')->name('health.providers');
     Route::livewire('/health/prescriptions', 'prescriptions-index')->name('health.prescriptions');

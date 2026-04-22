@@ -26,12 +26,20 @@ class Contact extends Model
         'favorite' => 'boolean',
         'is_vendor' => 'boolean',
         'is_customer' => 'boolean',
+        'contact_roles' => 'array',
+        'birthday' => 'date',
     ];
 
     /** @return BelongsTo<Media, $this> */
     public function photo(): BelongsTo
     {
         return $this->belongsTo(Media::class, 'photo_media_id');
+    }
+
+    /** @return BelongsTo<Category, $this> */
+    public function category(): BelongsTo
+    {
+        return $this->belongsTo(Category::class);
     }
 
     /** @return BelongsToMany<Contract, $this> */

@@ -172,6 +172,54 @@ class Enums
         ];
     }
 
+    /**
+     * Relationship roles for a Contact. Multi-value (a contact can be
+     * both friend and colleague). Grouped by category in contactRoleGroups();
+     * this flat map is for the bare slug→label lookup used on lists + chips.
+     *
+     * @return array<string, string>
+     */
+    public static function contactRoles(): array
+    {
+        return [
+            // personal
+            'family' => __('Family'),
+            'friend' => __('Friend'),
+            'colleague' => __('Colleague'),
+            'neighbor' => __('Neighbor'),
+            'acquaintance' => __('Acquaintance'),
+            // professional services (household-facing)
+            'doctor' => __('Doctor / medical'),
+            'lawyer' => __('Lawyer'),
+            'accountant' => __('Accountant'),
+            'financial_advisor' => __('Financial advisor'),
+            'contractor' => __('Contractor / handyman'),
+            'mechanic' => __('Mechanic'),
+            // emergency / critical
+            'emergency_contact' => __('Emergency contact'),
+            // household
+            'landlord' => __('Landlord'),
+            'tenant' => __('Tenant'),
+            'roommate' => __('Roommate'),
+        ];
+    }
+
+    /**
+     * Role groups for the inspector checkbox grid. Label per group,
+     * slugs listed in display order inside each group.
+     *
+     * @return array<string, array{label: string, slugs: array<int, string>}>
+     */
+    public static function contactRoleGroups(): array
+    {
+        return [
+            'personal' => ['label' => __('Personal'), 'slugs' => ['family', 'friend', 'colleague', 'neighbor', 'acquaintance']],
+            'professional' => ['label' => __('Professional services'), 'slugs' => ['doctor', 'lawyer', 'accountant', 'financial_advisor', 'contractor', 'mechanic']],
+            'emergency' => ['label' => __('Emergency'), 'slugs' => ['emergency_contact']],
+            'household' => ['label' => __('Household'), 'slugs' => ['landlord', 'tenant', 'roommate']],
+        ];
+    }
+
     /** Property kind. */
     /**
      * @return array<string, string>

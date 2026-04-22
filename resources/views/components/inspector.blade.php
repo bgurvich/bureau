@@ -50,6 +50,21 @@ new class extends Component
 
     public ?int $id = null;
 
+    /**
+     * When true, this inspector instance listens on `subentity-edit-open`
+     * instead of `inspector-open`, and renders as a centered modal on
+     * top of the primary drawer (instead of replacing it). Used by
+     * searchable-select's edit-inspector-type pencil so clicking a
+     * picker's edit button inside an open drawer doesn't wipe the
+     * parent form's state.
+     */
+    public bool $asModal = false;
+
+    public function mount(bool $asModal = false): void
+    {
+        $this->asModal = $asModal;
+    }
+
     // shared-ish fields
     public string $title = '';
 
@@ -299,6 +314,37 @@ new class extends Component
      */
     public string $contact_match_patterns = '';
 
+    /** Default spending category for this contact — freshly-created
+     *  transactions with this counterparty auto-inherit it. */
+    public ?int $contact_category_id = null;
+
+    /** User-facing status line for the "apply to uncategorised"
+     *  backfill action on the contact inspector. */
+    public ?string $contactBackfillMessage = null;
+
+    /**
+     * Relationship roles selected on the inspector checkbox grid.
+     * Subset of Enums::contactRoles() keys.
+     *
+     * @var array<int, string>
+     */
+    public array $contact_roles = [];
+
+    /**
+     * Birthday as Y-m-d. Empty string means "no birthday on file".
+     * When the user only knows the month/day, they pick any year with
+     * the right MM-DD; saveContact rewrites it as 1900-MM-DD via the
+     * `birthday_year_known` flag below.
+     */
+    public string $birthday = '';
+
+    /**
+     * True when the stored year is real; false means "only month/day
+     * known" → persist as 1900-MM-DD sentinel that Birthdays::ageOn
+     * detects and returns null for.
+     */
+    public bool $birthday_year_known = true;
+
     // note
     public bool $pinned = false;
 
@@ -417,6 +463,58 @@ new class extends Component
     public string $property_size_unit = 'sqft';
 
     public string $property_disposed_on = '';
+
+    // pet
+    public string $pet_species = 'dog';
+
+    public string $pet_name = '';
+
+    public string $pet_breed = '';
+
+    public string $pet_color = '';
+
+    public string $pet_date_of_birth = '';
+
+    public string $pet_sex = '';
+
+    public string $pet_microchip_id = '';
+
+    public ?int $pet_vet_provider_id = null;
+
+    public bool $pet_is_active = true;
+
+    public string $pet_notes = '';
+
+    // pet_vaccination / pet_checkup
+    public ?int $pv_pet_id = null;
+
+    public string $pv_vaccine_name = '';
+
+    public string $pv_administered_on = '';
+
+    public string $pv_valid_until = '';
+
+    public string $pv_booster_due_on = '';
+
+    public ?int $pv_provider_id = null;
+
+    public string $pv_notes = '';
+
+    public ?int $pc_pet_id = null;
+
+    public string $pc_kind = 'annual_checkup';
+
+    public string $pc_checkup_on = '';
+
+    public string $pc_next_due_on = '';
+
+    public ?int $pc_provider_id = null;
+
+    public string $pc_cost = '';
+
+    public string $pc_currency = '';
+
+    public string $pc_findings = '';
 
     // vehicle
     public string $vehicle_kind = 'car';
@@ -587,7 +685,35 @@ new class extends Component
     #[On('inspector-open')]
     public function openInspector(string $type = '', ?int $id = null, ?int $mediaId = null): void
     {
-        $this->resetExcept(['open']);
+        // Only the primary instance responds to the main open event —
+        // the modal instance sits quiet on this channel and only wakes
+        // up on `subentity-edit-open`.
+        if ($this->asModal) {
+            return;
+        }
+        $this->doOpen($type, $id, $mediaId);
+    }
+
+    /**
+     * Sub-entity edit: opens this inspector instance (expected to be the
+     * modal one rendered in the layout with asModal=true) for the given
+     * record WITHOUT touching the primary drawer. Wired from the
+     * searchable-select pencil so a user editing e.g. a transaction can
+     * fix up the selected contact/category without losing their unsaved
+     * transaction state.
+     */
+    #[On('subentity-edit-open')]
+    public function openSubentity(string $type = '', ?int $id = null, ?int $parentId = null): void
+    {
+        if (! $this->asModal) {
+            return;
+        }
+        $this->doOpen($type, $id, null, $parentId);
+    }
+
+    private function doOpen(string $type, ?int $id, ?int $mediaId = null, ?int $parentId = null): void
+    {
+        $this->resetExcept(['open', 'asModal']);
         $this->type = $type;
         $this->id = $id;
         $this->open = true;
@@ -602,6 +728,16 @@ new class extends Component
             if ($mediaId) {
                 $this->source_media_id = $mediaId;
                 $this->prefillFromMedia($mediaId);
+            }
+            if ($parentId !== null) {
+                // Pre-seed the parent FK for sub-entity forms opened from
+                // inside a parent drawer (e.g. "+ Add vaccine" on the pet
+                // inspector dispatches subentity-edit-open with parent_id=pet.id).
+                match ($type) {
+                    'pet_vaccination' => $this->pv_pet_id = $parentId,
+                    'pet_checkup' => $this->pc_pet_id = $parentId,
+                    default => null,
+                };
             }
         }
 
@@ -1319,7 +1455,11 @@ new class extends Component
     public function close(): void
     {
         $this->open = false;
-        $this->reset();
+        // Keep the modal-mode flag so the instance stays on its
+        // subentity-edit-open channel across opens; resetting it would
+        // make the modal instance silently become the primary one on
+        // the next event.
+        $this->resetExcept(['asModal']);
     }
 
     private function seedDefaults(): void
@@ -1501,6 +1641,9 @@ new class extends Component
             'online_account' => $this->loadOnlineAccount(),
             'property' => $this->loadProperty(),
             'vehicle' => $this->loadVehicle(),
+            'pet' => $this->loadPet(),
+            'pet_vaccination' => $this->loadPetVaccination(),
+            'pet_checkup' => $this->loadPetCheckup(),
             'inventory' => $this->loadInventory(),
             'appointment' => $this->loadAppointment(),
             'reminder' => $this->loadReminder(),
@@ -1562,6 +1705,11 @@ new class extends Component
         $this->phone = is_array($phones) ? implode(', ', $phones) : (string) $phones;
         $this->notes = $c->notes ?? '';
         $this->contact_match_patterns = (string) ($c->match_patterns ?? '');
+        $this->contact_category_id = $c->category_id;
+        $this->contactBackfillMessage = null;
+        $this->contact_roles = is_array($c->contact_roles) ? array_values($c->contact_roles) : [];
+        $this->birthday = $c->birthday ? $c->birthday->toDateString() : '';
+        $this->birthday_year_known = $c->birthday ? (int) $c->birthday->year !== \App\Support\Birthdays::YEAR_UNKNOWN : true;
 
         // Addresses is a JSON array of address objects on Contact; surface the
         // first one into the five structured fields the form edits. Saving
@@ -1858,6 +2006,9 @@ new class extends Component
                 'online_account' => $this->saveOnlineAccount(),
                 'property' => $this->saveProperty(),
                 'vehicle' => $this->saveVehicle(),
+                'pet' => $this->savePet(),
+                'pet_vaccination' => $this->savePetVaccination(),
+                'pet_checkup' => $this->savePetCheckup(),
                 'inventory' => $this->saveInventory(),
                 'appointment' => $this->saveAppointment(),
                 'reminder' => $this->saveReminder(),
@@ -1890,6 +2041,12 @@ new class extends Component
         }
 
         $this->dispatch('inspector-saved', type: $this->type);
+        if ($this->asModal) {
+            // Picker components (searchable-select) listen for this so they
+            // can refresh their option list and re-label the selected row
+            // without needing a full parent re-render.
+            $this->dispatch('subentity-edit-saved', type: $this->type, id: $this->id);
+        }
         $this->close();
     }
 
@@ -1986,6 +2143,10 @@ new class extends Component
         if ($this->id) {
             $transaction = tap(Transaction::findOrFail($this->id))->update($data);
         } else {
+            // Manual inspector insert: the user is looking at the row as they
+            // save it, so it enters the ledger already reconciled. Only
+            // machine-fed imports leave reconciled_at null.
+            $data['reconciled_at'] = now();
             $transaction = Transaction::create($data);
             $this->id = $transaction->id;
             // resolve() (vs attempt()) surfaces the ambiguous-match case so we
@@ -2112,6 +2273,11 @@ new class extends Component
             'contact_address_country' => 'nullable|string|max:100',
             'notes' => 'nullable|string|max:5000',
             'contact_match_patterns' => 'nullable|string|max:5000',
+            'contact_category_id' => 'nullable|integer|exists:categories,id',
+            'contact_roles' => 'array',
+            'contact_roles.*' => ['string', Rule::in(array_keys(Enums::contactRoles()))],
+            'birthday' => 'nullable|date',
+            'birthday_year_known' => 'boolean',
         ]);
 
         $addressParts = array_filter([
@@ -2145,12 +2311,71 @@ new class extends Component
         $payload['is_vendor'] = $data['is_vendor'];
         $payload['is_customer'] = $data['is_customer'];
 
+        // category_id is nullable and needs to be written even when null
+        // (to explicitly clear), so it sits outside the filter_null block.
+        $payload['category_id'] = $data['contact_category_id'] ?: null;
+
+        // Roles — always persist so clearing all boxes writes an empty
+        // array back rather than leaving the previous set in place.
+        $roles = array_values(array_unique((array) ($data['contact_roles'] ?? [])));
+        $payload['contact_roles'] = $roles === [] ? null : $roles;
+
+        // Birthday: when the user has the day but not the year, we
+        // store 1900-MM-DD as a sentinel; Birthdays helpers detect it
+        // and suppress age display while keeping the anniversary logic.
+        $birthdayRaw = trim((string) ($data['birthday'] ?? ''));
+        if ($birthdayRaw === '') {
+            $payload['birthday'] = null;
+        } else {
+            $parsed = \Carbon\CarbonImmutable::parse($birthdayRaw);
+            $payload['birthday'] = ($data['birthday_year_known'] ?? true)
+                ? $parsed->toDateString()
+                : $parsed->setDate(\App\Support\Birthdays::YEAR_UNKNOWN, (int) $parsed->month, (int) $parsed->day)->toDateString();
+        }
+
         if ($this->id) {
             Contact::findOrFail($this->id)->update($payload);
         } else {
             $payload['owner_user_id'] = auth()->id();
             $this->id = Contact::create($payload)->id;
         }
+    }
+
+    /**
+     * Apply the contact's default category to every Transaction linked
+     * to this contact that currently has no category_id. Explicit
+     * backfill — the observer only auto-applies at Transaction create
+     * time, so rows created before the contact got a category stay
+     * uncategorised until the user explicitly asks.
+     *
+     * Self-contained: persists the picked category on the contact (in
+     * case the user clicks Apply without having saved the form first)
+     * and updates the transactions in one pass. Does NOT close the
+     * drawer so the user sees the status line confirming how many rows
+     * flipped; they still have to click Save (or the drawer's X) to
+     * dismiss the inspector.
+     */
+    public function backfillCategoryToTransactions(): void
+    {
+        if (! $this->id || $this->type !== 'contact' || ! $this->contact_category_id) {
+            return;
+        }
+        $contactId = (int) $this->id;
+        $categoryId = (int) $this->contact_category_id;
+
+        // Persist the picked category first so the contact and its
+        // historical transactions end up consistent.
+        Contact::whereKey($contactId)->update(['category_id' => $categoryId]);
+
+        $n = Transaction::query()
+            ->where('counterparty_contact_id', $contactId)
+            ->whereNull('category_id')
+            ->update(['category_id' => $categoryId]);
+
+        $this->contactBackfillMessage = $n > 0
+            ? __(':n transaction(s) categorised.', ['n' => $n])
+            : __('No uncategorised transactions matched.');
+        $this->dispatch('inspector-saved');
     }
 
     private function saveBill(): void
@@ -2748,6 +2973,160 @@ new class extends Component
         } else {
             $payload['primary_user_id'] = auth()->id();
             $this->id = Vehicle::create($payload)->id;
+        }
+    }
+
+    private function loadPet(): void
+    {
+        $p = \App\Models\Pet::findOrFail($this->id);
+        $this->pet_species = (string) ($p->species ?? 'dog');
+        $this->pet_name = (string) ($p->name ?? '');
+        $this->pet_breed = (string) ($p->breed ?? '');
+        $this->pet_color = (string) ($p->color ?? '');
+        $this->pet_date_of_birth = $p->date_of_birth ? $p->date_of_birth->toDateString() : '';
+        $this->pet_sex = (string) ($p->sex ?? '');
+        $this->pet_microchip_id = (string) ($p->microchip_id ?? '');
+        $this->pet_vet_provider_id = $p->vet_provider_id;
+        $this->pet_is_active = (bool) $p->is_active;
+        $this->pet_notes = (string) ($p->notes ?? '');
+        $this->notes = $this->pet_notes;
+    }
+
+    /**
+     * Persist a Pet. On first-time save, also seed the required vaccine
+     * placeholders for the species so the user lands in the detail view
+     * with the expected Rabies / DHPP / etc. rows ready to fill.
+     */
+    private function savePet(): void
+    {
+        $data = $this->validate([
+            'pet_species' => ['required', Rule::in(['dog', 'cat', 'rabbit', 'ferret', 'other'])],
+            'pet_name' => 'required|string|max:120',
+            'pet_breed' => 'nullable|string|max:120',
+            'pet_color' => 'nullable|string|max:64',
+            'pet_date_of_birth' => 'nullable|date',
+            'pet_sex' => ['nullable', Rule::in(['male', 'female', 'unknown', ''])],
+            'pet_microchip_id' => 'nullable|string|max:64',
+            'pet_vet_provider_id' => 'nullable|integer|exists:health_providers,id',
+            'pet_is_active' => 'boolean',
+            'pet_notes' => 'nullable|string|max:5000',
+        ]);
+
+        $payload = [
+            'species' => $data['pet_species'],
+            'name' => $data['pet_name'],
+            'breed' => $data['pet_breed'] ?: null,
+            'color' => $data['pet_color'] ?: null,
+            'date_of_birth' => $data['pet_date_of_birth'] ?: null,
+            'sex' => $data['pet_sex'] ?: null,
+            'microchip_id' => $data['pet_microchip_id'] ?: null,
+            'vet_provider_id' => $data['pet_vet_provider_id'] ?: null,
+            'is_active' => (bool) $data['pet_is_active'],
+            'notes' => $data['pet_notes'] ?: null,
+        ];
+
+        if ($this->id) {
+            \App\Models\Pet::findOrFail($this->id)->update($payload);
+        } else {
+            $payload['primary_owner_user_id'] = auth()->id();
+            $pet = \App\Models\Pet::create($payload);
+            $this->id = $pet->id;
+            \App\Support\PetVaccineTemplates::seedRequiredFor($pet);
+        }
+    }
+
+    // ── Pet vaccinations ──────────────────────────────────────────────
+
+    private function loadPetVaccination(): void
+    {
+        $v = \App\Models\PetVaccination::findOrFail($this->id);
+        $this->pv_pet_id = (int) $v->pet_id;
+        $this->pv_vaccine_name = (string) ($v->vaccine_name ?? '');
+        $this->pv_administered_on = $v->administered_on ? $v->administered_on->toDateString() : '';
+        $this->pv_valid_until = $v->valid_until ? $v->valid_until->toDateString() : '';
+        $this->pv_booster_due_on = $v->booster_due_on ? $v->booster_due_on->toDateString() : '';
+        $this->pv_provider_id = $v->provider_id;
+        $this->pv_notes = (string) ($v->notes ?? '');
+    }
+
+    /**
+     * Persist a PetVaccination. The parent Pet id comes either from the
+     * loaded row (edit) or from pv_pet_id pre-seeded by the opener event
+     * (new). Without pv_pet_id on a new row we can't link to a pet, so
+     * we refuse rather than orphan.
+     */
+    private function savePetVaccination(): void
+    {
+        $data = $this->validate([
+            'pv_pet_id' => 'required|integer|exists:pets,id',
+            'pv_vaccine_name' => 'required|string|max:120',
+            'pv_administered_on' => 'nullable|date',
+            'pv_valid_until' => 'nullable|date|after_or_equal:pv_administered_on',
+            'pv_booster_due_on' => 'nullable|date',
+            'pv_provider_id' => 'nullable|integer|exists:health_providers,id',
+            'pv_notes' => 'nullable|string|max:5000',
+        ]);
+
+        $payload = [
+            'pet_id' => (int) $data['pv_pet_id'],
+            'vaccine_name' => $data['pv_vaccine_name'],
+            'administered_on' => $data['pv_administered_on'] ?: null,
+            'valid_until' => $data['pv_valid_until'] ?: null,
+            'booster_due_on' => $data['pv_booster_due_on'] ?: null,
+            'provider_id' => $data['pv_provider_id'] ?: null,
+            'notes' => $data['pv_notes'] ?: null,
+        ];
+
+        if ($this->id) {
+            \App\Models\PetVaccination::findOrFail($this->id)->update($payload);
+        } else {
+            $this->id = \App\Models\PetVaccination::create($payload)->id;
+        }
+    }
+
+    // ── Pet checkups ──────────────────────────────────────────────────
+
+    private function loadPetCheckup(): void
+    {
+        $c = \App\Models\PetCheckup::findOrFail($this->id);
+        $this->pc_pet_id = (int) $c->pet_id;
+        $this->pc_kind = (string) ($c->kind ?? 'annual_checkup');
+        $this->pc_checkup_on = $c->checkup_on ? $c->checkup_on->toDateString() : '';
+        $this->pc_next_due_on = $c->next_due_on ? $c->next_due_on->toDateString() : '';
+        $this->pc_provider_id = $c->provider_id;
+        $this->pc_cost = $c->cost !== null ? (string) $c->cost : '';
+        $this->pc_currency = (string) ($c->currency ?? '');
+        $this->pc_findings = (string) ($c->findings ?? '');
+    }
+
+    private function savePetCheckup(): void
+    {
+        $data = $this->validate([
+            'pc_pet_id' => 'required|integer|exists:pets,id',
+            'pc_kind' => 'required|string|max:64',
+            'pc_checkup_on' => 'nullable|date',
+            'pc_next_due_on' => 'nullable|date|after_or_equal:pc_checkup_on',
+            'pc_provider_id' => 'nullable|integer|exists:health_providers,id',
+            'pc_cost' => 'nullable|numeric|min:0',
+            'pc_currency' => 'nullable|string|size:3',
+            'pc_findings' => 'nullable|string|max:5000',
+        ]);
+
+        $payload = [
+            'pet_id' => (int) $data['pc_pet_id'],
+            'kind' => $data['pc_kind'],
+            'checkup_on' => $data['pc_checkup_on'] ?: null,
+            'next_due_on' => $data['pc_next_due_on'] ?: null,
+            'provider_id' => $data['pc_provider_id'] ?: null,
+            'cost' => $data['pc_cost'] !== '' ? (float) $data['pc_cost'] : null,
+            'currency' => $data['pc_currency'] ?: null,
+            'findings' => $data['pc_findings'] ?: null,
+        ];
+
+        if ($this->id) {
+            \App\Models\PetCheckup::findOrFail($this->id)->update($payload);
+        } else {
+            $this->id = \App\Models\PetCheckup::create($payload)->id;
         }
     }
 
@@ -3492,6 +3871,7 @@ new class extends Component
                     'description' => $description,
                     'status' => 'cleared',
                     'import_source' => 'manual:transfer',
+                    'reconciled_at' => now(),
                 ]);
             }
 
@@ -3505,6 +3885,7 @@ new class extends Component
                     'description' => $description,
                     'status' => 'cleared',
                     'import_source' => 'manual:transfer',
+                    'reconciled_at' => now(),
                 ]);
             }
 
@@ -3665,7 +4046,10 @@ new class extends Component
     #[On('inspector-mark-paid')]
     public function markPaid(int $projectionId): void
     {
-        $this->resetExcept(['open']);
+        if ($this->asModal) {
+            return;
+        }
+        $this->resetExcept(['open', 'asModal']);
 
         $projection = RecurringProjection::with('rule')->findOrFail($projectionId);
         $rule = $projection->rule;
@@ -3849,6 +4233,9 @@ new class extends Component
             'online_account' => __('online account'),
             'property' => __('property'),
             'vehicle' => __('vehicle'),
+            'pet' => __('pet'),
+            'pet_vaccination' => __('pet vaccination'),
+            'pet_checkup' => __('pet checkup'),
             'inventory' => __('inventory item'),
             'time_entry' => __('time entry'),
             'transfer' => __('transfer'),
@@ -3897,24 +4284,41 @@ new class extends Component
     @keydown.escape.window="if (open) { $wire.close() }"
     class="relative"
 >
+    {{-- Shell — drawer for the primary instance, centered modal for the
+         sub-entity-edit variant. The two live on different z-layers so
+         the modal stacks on top of an open drawer (common flow: edit a
+         transaction's counterparty from inside the transaction drawer). --}}
     <div x-show="open" x-cloak x-transition.opacity
          @click="$wire.close()"
-         class="fixed inset-0 z-40 bg-black/60"
+         class="fixed inset-0 {{ $asModal ? 'z-[60] bg-black/70' : 'z-40 bg-black/60' }}"
          aria-hidden="true"></div>
 
     <aside
         x-show="open"
         x-cloak
-        x-transition:enter="transition ease-out duration-150"
-        x-transition:enter-start="translate-x-full"
-        x-transition:enter-end="translate-x-0"
-        x-transition:leave="transition ease-in duration-100"
-        x-transition:leave-start="translate-x-0"
-        x-transition:leave-end="translate-x-full"
+        @if ($asModal)
+            x-transition:enter="transition ease-out duration-150"
+            x-transition:enter-start="opacity-0 scale-95"
+            x-transition:enter-end="opacity-100 scale-100"
+            x-transition:leave="transition ease-in duration-100"
+            x-transition:leave-start="opacity-100 scale-100"
+            x-transition:leave-end="opacity-0 scale-95"
+        @else
+            x-transition:enter="transition ease-out duration-150"
+            x-transition:enter-start="translate-x-full"
+            x-transition:enter-end="translate-x-0"
+            x-transition:leave="transition ease-in duration-100"
+            x-transition:leave-start="translate-x-0"
+            x-transition:leave-end="translate-x-full"
+        @endif
         role="dialog"
         aria-modal="true"
-        aria-label="{{ __('Record inspector') }}"
-        class="fixed right-0 top-0 z-50 flex h-screen w-full {{ $this->drawerWidthClass }} flex-col overflow-hidden border-l border-neutral-800 bg-neutral-950 shadow-2xl transition-[max-width] duration-150"
+        aria-label="{{ $asModal ? __('Sub-record editor') : __('Record inspector') }}"
+        @if ($asModal)
+            class="fixed left-1/2 top-1/2 z-[70] flex max-h-[90vh] w-[calc(100%-2rem)] max-w-2xl -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-neutral-700 bg-neutral-950 shadow-2xl"
+        @else
+            class="fixed right-0 top-0 z-50 flex h-screen w-full {{ $this->drawerWidthClass }} flex-col overflow-hidden border-l border-neutral-800 bg-neutral-950 shadow-2xl transition-[max-width] duration-150"
+        @endif
     >
         <header class="flex items-center justify-between border-b border-neutral-800 px-5 py-3">
             <h2 class="text-sm font-semibold text-neutral-100">{{ $this->heading }}</h2>
@@ -3982,6 +4386,9 @@ new class extends Component
                 @case('online_account') @include('partials.inspector.forms.online_account') @break
                 @case('property') @include('partials.inspector.forms.property')      @break
                 @case('vehicle') @include('partials.inspector.forms.vehicle')        @break
+                @case('pet') @include('partials.inspector.forms.pet')                @break
+                @case('pet_vaccination') @include('partials.inspector.forms.pet_vaccination') @break
+                @case('pet_checkup') @include('partials.inspector.forms.pet_checkup') @break
                 @case('inventory') @include('partials.inspector.forms.inventory')    @break
                 @case('appointment') @include('partials.inspector.forms.appointment') @break
                 @case('reminder') @include('partials.inspector.forms.reminder') @break

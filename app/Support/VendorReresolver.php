@@ -218,7 +218,7 @@ final class VendorReresolver
         return $summary;
     }
 
-    private static function fingerprint(string $raw): string
+    public static function fingerprint(string $raw): string
     {
         // Mirrors the statements-import fingerprinter exactly — apply
         // household-configured ignore patterns first, then the same
@@ -309,13 +309,54 @@ final class VendorReresolver
      */
     public static function firstPatternMatch(string $descLower, array $pairs): ?int
     {
+        $hit = self::firstPatternHit($descLower, $pairs);
+
+        return $hit === null ? null : $hit[0];
+    }
+
+    /**
+     * Like firstPatternMatch(), but returns the (contact_id, pattern)
+     * pair so callers can show *which* pattern produced the match —
+     * useful in the statement-import preview, where the user wants to
+     * see why a row auto-linked to a vendor.
+     *
+     * Matches against both the raw lowercased description AND a
+     * punctuation-collapsed variant so plain-text patterns stored in
+     * fingerprint form ("paypal repohosting") hit descriptions with
+     * separators between words ("PayPal*RepoHosting", "PayPal - Repo
+     * Hosting"). Regex patterns with special chars still match the raw
+     * form, so `\bPAYPAL\s*\*` etc. keep working.
+     *
+     * @param  array<int, array{0: int, 1: string}>  $pairs
+     * @return array{0: int, 1: string}|null
+     */
+    public static function firstPatternHit(string $descLower, array $pairs): ?array
+    {
+        $normalized = self::collapsePunctuation($descLower);
+
         foreach ($pairs as [$id, $pattern]) {
-            $result = @preg_match('#'.str_replace('#', '\#', $pattern).'#iu', $descLower);
-            if ($result === 1) {
-                return $id;
+            $regex = '#'.str_replace('#', '\#', $pattern).'#iu';
+            if (@preg_match($regex, $descLower) === 1) {
+                return [$id, $pattern];
+            }
+            if ($normalized !== $descLower && @preg_match($regex, $normalized) === 1) {
+                return [$id, $pattern];
             }
         }
 
         return null;
+    }
+
+    /**
+     * Replace every non-letter/whitespace run with a single space and
+     * collapse repeats. "paypal*repohosting 08/15" → "paypal repohosting".
+     * Keeps the same shape as descriptionFingerprint's pre-split pass so
+     * plain-text patterns derived from fingerprints match reliably.
+     */
+    private static function collapsePunctuation(string $descLower): string
+    {
+        $stripped = (string) preg_replace('/[^a-z\s]+/u', ' ', $descLower);
+
+        return trim((string) preg_replace('/\s+/u', ' ', $stripped));
     }
 }

@@ -58,6 +58,33 @@ it('parses an uploaded Citi checking CSV and renders a review card', function ()
         ->and(count($first['rows']))->toBe(3);
 });
 
+it('surfaces the vendor pattern that matched a preview row', function () {
+    authedInHousehold();
+    Account::create(['type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
+
+    // Existing vendor with an explicit pattern — row description should
+    // match via pattern, not via fingerprint.
+    Contact::create([
+        'kind' => 'org',
+        'display_name' => 'Landlord LLC',
+        'is_vendor' => true,
+        'match_patterns' => 'rent',
+    ]);
+
+    $file = UploadedFile::fake()->createWithContent('citi.csv', citiCheckingCsv());
+    $c = Livewire::test('statements-import')->set('files', [$file]);
+    $fileId = array_keys($c->get('parsed'))[0];
+
+    $preview = $c->call('vendorPreviewForFile', $fileId)->get('__return__')
+        ?? $c->instance()->vendorPreviewForFile($fileId);
+
+    // "Rent" row picks up the pattern-matched contact and reports the
+    // matched pattern string so the preview can display it.
+    $rentRow = collect($preview)->firstWhere('label', 'Landlord LLC');
+    expect($rentRow)->not->toBeNull()
+        ->and($rentRow['matched_pattern'] ?? null)->toBe('rent');
+});
+
 it('flags already-imported rows after the user picks an account', function () {
     $user = authedInHousehold();
     $account = Account::create(['type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
@@ -183,6 +210,171 @@ it('saveRow propagates vendor + pattern to every other row matching the pattern'
     $rows = $c->get("parsed.{$fileId}.rows");
     expect($rows[0]['counterparty_id_override'])->toBe($chosen->id)
         ->and($rows[2]['counterparty_id_override'])->toBe($chosen->id);
+});
+
+it('appends the edited match_pattern onto the picked existing vendor on import', function () {
+    authedInHousehold();
+    $account = Account::create(['type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
+
+    $vendor = Contact::create([
+        'kind' => 'org', 'display_name' => 'Acme Corp', 'is_vendor' => true,
+        'match_patterns' => 'acme corp',
+    ]);
+
+    $csv = <<<'CSV'
+Date,Description,Debit,Credit,Balance
+03/05/2026,ACME*CORP SERVICES 05,12.00,,100.00
+CSV;
+    $file = UploadedFile::fake()->createWithContent('acme.csv', $csv);
+    $c = Livewire::test('statements-import')->set('files', [$file]);
+    $fileId = array_keys($c->get('parsed'))[0];
+    $c->call('setAccount', $fileId, $account->id);
+
+    // User picks the existing vendor AND types a broader pattern that
+    // isn't yet on the contact.
+    $c->set("parsed.{$fileId}.rows.0.counterparty_id_override", $vendor->id)
+        ->set("parsed.{$fileId}.rows.0.match_pattern", 'acme.*services')
+        ->call('importAll');
+
+    expect($vendor->fresh()->match_patterns)->toContain('acme corp')
+        ->and($vendor->fresh()->match_patterns)->toContain('acme.*services');
+});
+
+it('does not duplicate or append noise when the pattern already matches the vendor', function () {
+    authedInHousehold();
+    $account = Account::create(['type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
+
+    $vendor = Contact::create([
+        'kind' => 'org', 'display_name' => 'Acme', 'is_vendor' => true,
+        'match_patterns' => 'acme corp',
+    ]);
+
+    $csv = <<<'CSV'
+Date,Description,Debit,Credit,Balance
+03/05/2026,ACME CORP 1,12.00,,100.00
+03/06/2026,ACME CORP 2,13.00,,87.00
+CSV;
+    $file = UploadedFile::fake()->createWithContent('acme.csv', $csv);
+    $c = Livewire::test('statements-import')->set('files', [$file]);
+    $fileId = array_keys($c->get('parsed'))[0];
+    $c->call('setAccount', $fileId, $account->id);
+
+    // Both rows point at the vendor; user leaves "acme corp" pattern
+    // (already on contact) on one row and the display-name-fingerprint
+    // "acme" (noise) on the other.
+    $c->set("parsed.{$fileId}.rows.0.counterparty_id_override", $vendor->id)
+        ->set("parsed.{$fileId}.rows.0.match_pattern", 'acme corp')
+        ->set("parsed.{$fileId}.rows.1.counterparty_id_override", $vendor->id)
+        ->set("parsed.{$fileId}.rows.1.match_pattern", 'acme')
+        ->call('importAll');
+
+    // No changes — "acme corp" already present (case-insensitive), "acme"
+    // matches display-name fingerprint and is skipped as noise.
+    expect($vendor->fresh()->match_patterns)->toBe('acme corp');
+});
+
+it('a late-row match_pattern edit is honored on import, not clobbered by the first row', function () {
+    authedInHousehold();
+    $account = Account::create(['type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
+
+    // Three rows that share the same description fingerprint. Without the
+    // fix, every row pre-seeded match_pattern with the auto fingerprint,
+    // so the first row's auto value won the patternOverrides race and the
+    // user's explicit edit on a later row was silently ignored.
+    $csv = <<<'CSV'
+Date,Description,Debit,Credit,Balance
+03/05/2026,PayPal*RepoHosting 01,10.00,,100.00
+03/06/2026,PayPal*RepoHosting 02,10.00,,90.00
+03/07/2026,PayPal*RepoHosting 03,10.00,,80.00
+CSV;
+
+    $file = UploadedFile::fake()->createWithContent('paypal.csv', $csv);
+    $c = Livewire::test('statements-import')->set('files', [$file]);
+    $fileId = array_keys($c->get('parsed'))[0];
+    $c->call('setAccount', $fileId, $account->id);
+
+    // User edits ONLY the last row's match_pattern to a tightened value.
+    // Rows 0 and 1 stay untouched (now blank since we dropped the pre-seed).
+    $c->set("parsed.{$fileId}.rows.2.match_pattern", 'repohosting')
+        ->call('saveRow', $fileId, 2)
+        ->call('importAll');
+
+    // Exactly one Contact was auto-created (≥2 repeats in the fingerprint
+    // group). Its match_patterns is the user's edit, not the fingerprint.
+    $created = Contact::where('is_vendor', true)->get();
+    expect($created)->toHaveCount(1)
+        ->and($created->first()->match_patterns)->toBe('repohosting');
+});
+
+it('editRow pre-fills counterparty + pattern from the resolved vendor, cancelEdit restores', function () {
+    authedInHousehold();
+    Account::create(['type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
+
+    // Existing vendor whose saved pattern is what the user wants the
+    // edit input to show — not a blank "auto" that would mislead them
+    // into thinking nothing is wired up.
+    $vendor = Contact::create([
+        'kind' => 'org',
+        'display_name' => 'RepoHosting',
+        'is_vendor' => true,
+        'match_patterns' => 'paypal repohosting',
+    ]);
+
+    $csv = <<<'CSV'
+Date,Description,Debit,Credit,Balance
+03/05/2026,PayPal*RepoHosting Svc,12.00,,100.00
+CSV;
+    $file = UploadedFile::fake()->createWithContent('paypal.csv', $csv);
+    $c = Livewire::test('statements-import')->set('files', [$file]);
+    $fileId = array_keys($c->get('parsed'))[0];
+
+    // Pristine row: no override, no explicit pattern.
+    $row = $c->get("parsed.{$fileId}.rows.0");
+    expect($row['counterparty_id_override'])->toBeNull()
+        ->and($row['match_pattern'])->toBe('');
+
+    $c->call('editRow', $fileId, 0);
+
+    // Entering edit mode pre-fills with the resolved vendor + pattern.
+    $row = $c->get("parsed.{$fileId}.rows.0");
+    expect($row['counterparty_id_override'])->toBe($vendor->id)
+        ->and($row['match_pattern'])->toBe('paypal repohosting');
+
+    // Cancelling rolls back to pristine auto-detect so nothing gets
+    // silently locked in just by opening the editor.
+    $c->call('cancelEdit');
+    $row = $c->get("parsed.{$fileId}.rows.0");
+    expect($row['counterparty_id_override'])->toBeNull()
+        ->and($row['match_pattern'])->toBe('');
+});
+
+it('editRow leaves an already-edited row untouched (no clobber of user edits)', function () {
+    authedInHousehold();
+
+    Contact::create([
+        'kind' => 'org', 'display_name' => 'RepoHosting', 'is_vendor' => true,
+        'match_patterns' => 'paypal repohosting',
+    ]);
+    $manualPick = Contact::create(['kind' => 'org', 'display_name' => 'Manual pick']);
+
+    $csv = <<<'CSV'
+Date,Description,Debit,Credit,Balance
+03/05/2026,PayPal*RepoHosting Svc,12.00,,100.00
+CSV;
+    $file = UploadedFile::fake()->createWithContent('paypal.csv', $csv);
+    $c = Livewire::test('statements-import')->set('files', [$file]);
+    $fileId = array_keys($c->get('parsed'))[0];
+
+    // User has already set an explicit override on this row.
+    $c->set("parsed.{$fileId}.rows.0.counterparty_id_override", $manualPick->id)
+        ->set("parsed.{$fileId}.rows.0.match_pattern", 'my-custom')
+        ->call('editRow', $fileId, 0);
+
+    // editRow must NOT overwrite the user's explicit choice with the
+    // auto-resolved vendor.
+    $row = $c->get("parsed.{$fileId}.rows.0");
+    expect($row['counterparty_id_override'])->toBe($manualPick->id)
+        ->and($row['match_pattern'])->toBe('my-custom');
 });
 
 it('editRow + cancelEdit flips the editing state without touching row data', function () {

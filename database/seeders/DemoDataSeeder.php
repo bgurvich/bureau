@@ -238,6 +238,7 @@ class DemoDataSeeder extends Seeder
                 'currency' => 'USD',
                 'description' => $desc,
                 'status' => 'cleared',
+                'reconciled_at' => now(),
             ]);
         }
 
@@ -247,6 +248,7 @@ class DemoDataSeeder extends Seeder
             'occurred_on' => now()->subDays(1)->toDateString(),
             'amount' => -128.40, 'currency' => 'USD',
             'description' => 'Flowers (pending)', 'status' => 'pending',
+            'reconciled_at' => now(),
         ]);
 
         // ── Transfers ────────────────────────────────────────────────────

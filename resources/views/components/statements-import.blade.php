@@ -361,14 +361,17 @@ class extends Component
                 'amount' => $t->amount,
                 'closing_balance' => $t->runningBalance,
                 'check_number' => $t->checkNumber,
-                // Per-row edits the user can apply in the preview
-                // before hitting Import. `counterparty_id_override`
-                // wins over the auto-detect path; `match_pattern`
-                // seeds match_patterns on any contact auto-created
-                // for this row's fingerprint and is editable so the
-                // user can tighten or broaden the match.
+                // Per-row edits the user can apply in the preview before
+                // hitting Import. `counterparty_id_override` wins over the
+                // auto-detect path; `match_pattern` is the *user's* edit
+                // and stays empty until they type — importAll falls back
+                // to the row's fingerprint when creating a new vendor, so
+                // a blank here still produces a reasonable default. Do
+                // NOT pre-seed with the fingerprint: doing so pollutes
+                // patternOverrides in buildContactMap, letting the first
+                // row's auto-value clobber a later row's explicit edit.
                 'counterparty_id_override' => null,
-                'match_pattern' => $this->descriptionFingerprint((string) $t->description),
+                'match_pattern' => '',
             ];
         }
 
@@ -619,16 +622,123 @@ class extends Component
      */
     public string $editingRow = '';
 
+    /**
+     * Per-edit snapshot of the row's pre-edit counterparty_id_override +
+     * match_pattern. When we enter edit mode we pre-fill those fields
+     * with the auto-detected vendor + its saved pattern so the user sees
+     * the actual resolved state (instead of a misleading "Auto" label).
+     * If the user cancels without changes, we restore from this snapshot
+     * so the row reverts to pure auto-detect — otherwise "peek + cancel"
+     * would silently lock in an explicit override.
+     *
+     * Keyed by "{fileId}:{rowIndex}". Discarded by saveRow on commit.
+     *
+     * @var array<string, array{counterparty_id_override: int|null, match_pattern: string}>
+     */
+    public array $preEditSnapshot = [];
+
     public function editRow(string $fileId, int $i): void
     {
-        if (isset($this->parsed[$fileId]['rows'][$i])) {
-            $this->editingRow = $fileId.':'.$i;
+        if (! isset($this->parsed[$fileId]['rows'][$i])) {
+            return;
         }
+
+        $row = $this->parsed[$fileId]['rows'][$i];
+        $hasExistingEdit = ! empty($row['counterparty_id_override'])
+            || trim((string) ($row['match_pattern'] ?? '')) !== '';
+
+        // Only pre-fill when the row is pristine auto-detect. If the user
+        // already edited this row (or its state was propagated from a
+        // sibling row via saveRow), leave their values alone.
+        if (! $hasExistingEdit) {
+            $key = $fileId.':'.$i;
+            $this->preEditSnapshot[$key] = [
+                'counterparty_id_override' => $row['counterparty_id_override'] ?? null,
+                'match_pattern' => (string) ($row['match_pattern'] ?? ''),
+            ];
+
+            [$resolvedId, $resolvedPattern] = $this->resolveRowForEdit($fileId, $i);
+            if ($resolvedId !== null) {
+                $this->parsed[$fileId]['rows'][$i]['counterparty_id_override'] = $resolvedId;
+            }
+            if ($resolvedPattern !== '') {
+                $this->parsed[$fileId]['rows'][$i]['match_pattern'] = $resolvedPattern;
+            }
+        }
+
+        $this->editingRow = $fileId.':'.$i;
     }
 
     public function cancelEdit(): void
     {
+        // Undo any pre-edit pre-fill so cancelling returns the row to
+        // pure auto-detect (no accidental override lock-in).
+        if ($this->editingRow !== '' && isset($this->preEditSnapshot[$this->editingRow])) {
+            [$fileId, $idx] = explode(':', $this->editingRow, 2);
+            $i = (int) $idx;
+            if (isset($this->parsed[$fileId]['rows'][$i])) {
+                foreach ($this->preEditSnapshot[$this->editingRow] as $k => $v) {
+                    $this->parsed[$fileId]['rows'][$i][$k] = $v;
+                }
+            }
+            unset($this->preEditSnapshot[$this->editingRow]);
+        }
         $this->editingRow = '';
+    }
+
+    /**
+     * Resolve a row's auto-detected (contact_id, match_pattern) so edit
+     * mode starts populated. Mirrors the import-time logic: pattern
+     * match first (which carries the exact matched pattern string),
+     * then fingerprint lookup against existing contacts. For the
+     * fingerprint path we pull the contact's saved match_patterns (what
+     * the import would reuse); for no match we fall back to the row's
+     * own fingerprint as a suggestion for a new vendor.
+     *
+     * @return array{0: int|null, 1: string}
+     */
+    private function resolveRowForEdit(string $fileId, int $i): array
+    {
+        $row = $this->parsed[$fileId]['rows'][$i] ?? null;
+        if (! is_array($row)) {
+            return [null, ''];
+        }
+
+        $descLower = mb_strtolower((string) ($row['description'] ?? ''));
+
+        // Pattern match wins — same as buildContactMap / vendorPreviewForFile.
+        $hit = VendorReresolver::firstPatternHit($descLower, VendorReresolver::patternList());
+        if ($hit !== null) {
+            return [$hit[0], $hit[1]];
+        }
+
+        // Fingerprint lookup against existing contacts.
+        $fp = $this->descriptionFingerprint((string) ($row['description'] ?? ''));
+        if ($fp === '') {
+            return [null, ''];
+        }
+
+        $contact = null;
+        foreach (Contact::query()->get(['id', 'display_name', 'organization', 'match_patterns']) as $c) {
+            foreach ([$c->display_name, $c->organization] as $candidate) {
+                if (is_string($candidate) && $candidate !== ''
+                    && $this->descriptionFingerprint($candidate) === $fp
+                ) {
+                    $contact = $c;
+                    break 2;
+                }
+            }
+        }
+
+        if ($contact !== null) {
+            $savedPattern = trim((string) ($contact->match_patterns ?? ''));
+
+            return [(int) $contact->id, $savedPattern !== '' ? $savedPattern : $fp];
+        }
+
+        // No existing match — surface the fingerprint as the suggested
+        // pattern for a new vendor the user may choose to create.
+        return [null, $fp];
     }
 
     /**
@@ -661,6 +771,9 @@ class extends Component
                 }
             }
         }
+        // Commit: the pre-fill is now the user's explicit choice, so
+        // drop the snapshot (no revert-on-cancel after this point).
+        unset($this->preEditSnapshot[$fileId.':'.$i]);
         $this->editingRow = '';
     }
 
@@ -690,6 +803,13 @@ class extends Component
         }
 
         $pattern = trim((string) ($this->parsed[$fileId]['rows'][$rowIndex]['match_pattern'] ?? ''));
+        if ($pattern === '') {
+            // Empty match_pattern means the user didn't type one — seed the
+            // new contact from the row's fingerprint so future imports link
+            // back to this vendor instead of creating a duplicate.
+            $desc = (string) ($this->parsed[$fileId]['rows'][$rowIndex]['description'] ?? '');
+            $pattern = $this->descriptionFingerprint($desc);
+        }
         $contact = Contact::create([
             'kind' => 'org',
             'display_name' => $name,
@@ -813,7 +933,15 @@ class extends Component
         // descriptions.
         $patternList = VendorReresolver::patternList();
 
-        DB::transaction(function () use ($fileId, $state, $accountId, $media, $contactMap, $patternList, &$created, &$skipReasons) {
+        // Pending pattern appends for existing vendors the user picked
+        // explicitly (counterparty_id_override). Collected inside the row
+        // loop, persisted in one pass afterwards so each contact gets a
+        // single UPDATE regardless of how many rows reference it.
+        //
+        // @var array<int, array<int, string>>
+        $pendingPatternAppends = [];
+
+        DB::transaction(function () use ($fileId, $state, $accountId, $media, $contactMap, $patternList, &$created, &$skipReasons, &$pendingPatternAppends) {
             foreach ($state['rows'] as $i => $row) {
                 if (! ($this->selected[$fileId][$i] ?? false)) {
                     continue;
@@ -835,6 +963,15 @@ class extends Component
                 $counterpartyId = null;
                 if (! empty($row['counterparty_id_override'])) {
                     $counterpartyId = (int) $row['counterparty_id_override'];
+
+                    // Queue the row's match_pattern for append onto the
+                    // picked vendor. Deduplication + display-name-fp skip
+                    // happen after the loop where we have the contact's
+                    // full state loaded.
+                    $explicitPattern = trim((string) ($row['match_pattern'] ?? ''));
+                    if ($explicitPattern !== '') {
+                        $pendingPatternAppends[$counterpartyId][] = $explicitPattern;
+                    }
                 } else {
                     $descLower = mb_strtolower((string) $row['description']);
                     $counterpartyId = VendorReresolver::firstPatternMatch($descLower, $patternList);
@@ -870,6 +1007,39 @@ class extends Component
                 }
                 ProjectionMatcher::attempt($txn);
                 $created++;
+            }
+
+            // Persist the pattern edits the user made on rows with an
+            // explicit vendor override. Runs once per touched contact
+            // (not per row) and dedupes case-insensitively against the
+            // existing match_patterns list. The display-name fingerprint
+            // is skipped because patternList() already self-heals it in.
+            foreach ($pendingPatternAppends as $contactId => $patterns) {
+                $contact = Contact::find($contactId);
+                if ($contact === null) {
+                    continue;
+                }
+                $existing = VendorReresolver::parsePatterns((string) ($contact->match_patterns ?? ''));
+                $existingLower = array_map(fn ($p) => mb_strtolower($p), $existing);
+                $displayFp = $this->descriptionFingerprint((string) $contact->display_name);
+
+                $additions = [];
+                foreach (array_values(array_unique($patterns)) as $pattern) {
+                    $pl = mb_strtolower($pattern);
+                    if (in_array($pl, $existingLower, true)) {
+                        continue;
+                    }
+                    if ($pl === $displayFp) {
+                        continue;
+                    }
+                    $additions[] = $pattern;
+                    $existingLower[] = $pl;
+                }
+
+                if ($additions !== []) {
+                    $combined = implode("\n", array_merge($existing, $additions));
+                    $contact->forceFill(['match_patterns' => $combined])->save();
+                }
             }
         });
 
@@ -917,7 +1087,7 @@ class extends Component
      * Matches buildContactMap()'s logic exactly so the preview can't
      * drift from the import.
      *
-     * @return array<int, array{status: string, label: string}>
+     * @return array<int, array{status: string, label: string, matched_pattern?: string}>
      */
     public function vendorPreviewForFile(string $fileId): array
     {
@@ -944,13 +1114,16 @@ class extends Component
 
         $out = [];
         foreach ($rows as $idx => $row) {
-            // Pattern match wins — shows the contact name it'll link to.
+            // Pattern match wins — shows the contact name it'll link to
+            // and surfaces *which* pattern fired so the user can spot-check.
             $descLower = mb_strtolower((string) ($row['description'] ?? ''));
-            $patternHitId = VendorReresolver::firstPatternMatch($descLower, $patternList);
-            if ($patternHitId !== null) {
+            $patternHit = VendorReresolver::firstPatternHit($descLower, $patternList);
+            if ($patternHit !== null) {
+                [$hitId, $hitPattern] = $patternHit;
                 $out[$idx] = [
                     'status' => 'existing',
-                    'label' => (string) ($patternNamesById[$patternHitId] ?? ''),
+                    'label' => (string) ($patternNamesById[$hitId] ?? ''),
+                    'matched_pattern' => $hitPattern,
                 ];
 
                 continue;
@@ -1500,8 +1673,14 @@ class extends Component
                                                 </td>
                                                 <td class="px-2 py-1 tabular-nums text-neutral-300">{{ $row['occurred_on'] }}</td>
                                                 @if ($isEditing)
+                                                    {{-- Enter on any plain input saves + propagates; Esc
+                                                         cancels. The searchable-select eats its own Enter
+                                                         (for picking a suggestion) — we only bind the
+                                                         shortcut on the text/number inputs. --}}
                                                     <td class="px-2 py-1">
                                                         <input wire:model="parsed.{{ $fileId }}.rows.{{ $i }}.description"
+                                                               wire:keydown.enter.prevent="saveRow('{{ $fileId }}', {{ $i }})"
+                                                               wire:keydown.escape.prevent="cancelEdit"
                                                                type="text" autofocus
                                                                aria-label="{{ __('Description') }}"
                                                                class="w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-xs text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
@@ -1516,14 +1695,19 @@ class extends Component
                                                             create-method="createCounterpartyForRow" />
                                                     </td>
                                                     <td class="px-2 py-1">
+                                                        @php($autoFp = $this->descriptionFingerprint((string) ($row['description'] ?? '')))
                                                         <input wire:model="parsed.{{ $fileId }}.rows.{{ $i }}.match_pattern"
+                                                               wire:keydown.enter.prevent="saveRow('{{ $fileId }}', {{ $i }})"
+                                                               wire:keydown.escape.prevent="cancelEdit"
                                                                type="text"
                                                                aria-label="{{ __('Match pattern') }}"
-                                                               placeholder="{{ __('auto') }}"
+                                                               placeholder="{{ $autoFp !== '' ? $autoFp : __('auto') }}"
                                                                class="w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1 font-mono text-[11px] text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
                                                     </td>
                                                     <td class="px-2 py-1 text-right tabular-nums">
                                                         <input wire:model="parsed.{{ $fileId }}.rows.{{ $i }}.amount"
+                                                               wire:keydown.enter.prevent="saveRow('{{ $fileId }}', {{ $i }})"
+                                                               wire:keydown.escape.prevent="cancelEdit"
                                                                type="number" step="0.01"
                                                                aria-label="{{ __('Amount') }}"
                                                                class="w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-right text-xs tabular-nums text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
@@ -1554,7 +1738,24 @@ class extends Component
                                                         @endif
                                                     </td>
                                                     <td class="px-2 py-1 font-mono text-[11px] text-neutral-500">
-                                                        {{ ($row['match_pattern'] ?? '') ?: '—' }}
+                                                        @php($explicitPattern = trim((string) ($row['match_pattern'] ?? '')))
+                                                        @php($autoPattern = $vp['matched_pattern'] ?? '')
+                                                        @php($autoFp = $this->descriptionFingerprint((string) ($row['description'] ?? '')))
+                                                        @if ($explicitPattern !== '')
+                                                            <span title="{{ __('Row override') }}">{{ $explicitPattern }}</span>
+                                                        @elseif ($autoPattern !== '' && ! $overrideId)
+                                                            {{-- Vendor was auto-linked via this pattern on the
+                                                                 existing contact — surface it so the user can
+                                                                 see why without opening the contact. --}}
+                                                            <span class="text-neutral-400" title="{{ __('Matched via vendor pattern') }}">{{ $autoPattern }}</span>
+                                                        @elseif ($autoFp !== '' && ! $overrideId && ($vp['status'] ?? '') === 'new')
+                                                            {{-- Preview of the fingerprint that will seed a
+                                                                 newly auto-created vendor. Dimmed to signal
+                                                                 "auto" versus an explicit edit. --}}
+                                                            <span class="text-neutral-600 italic" title="{{ __('Auto fingerprint (used if a new vendor is created)') }}">{{ $autoFp }}</span>
+                                                        @else
+                                                            —
+                                                        @endif
                                                     </td>
                                                     <td class="px-2 py-1 text-right tabular-nums {{ $row['amount'] >= 0 ? 'text-emerald-400' : 'text-neutral-100' }}">
                                                         {{ Formatting::money((float) $row['amount'], $rowCurrency) }}

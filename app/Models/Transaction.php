@@ -20,6 +20,7 @@ class Transaction extends Model
         'occurred_on' => 'date',
         'amount' => 'decimal:4',
         'closing_balance' => 'decimal:4',
+        'reconciled_at' => 'datetime',
     ];
 
     /** @return BelongsTo<Account, $this> */

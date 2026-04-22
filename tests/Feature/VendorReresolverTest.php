@@ -157,6 +157,32 @@ it('patternList() self-heals legacy contacts (null match_patterns) using their d
     ))->toBe($legacy->id);
 });
 
+it('matches a plain-text pattern across punctuation between the words', function () {
+    authedInHousehold();
+
+    // Contact stored with a fingerprint-form pattern ("paypal repohosting").
+    // The incoming description has a `*` separator — without collapsing
+    // punctuation to spaces the pattern would silently miss, which is the
+    // exact bug that let RepoHosting slip through on PayPal rows.
+    $contact = Contact::create([
+        'kind' => 'org',
+        'display_name' => 'RepoHosting',
+        'is_vendor' => true,
+        'match_patterns' => 'paypal repohosting',
+    ]);
+
+    $pairs = VendorReresolver::patternList();
+
+    $hit = VendorReresolver::firstPatternHit(
+        mb_strtolower('PayPal*RepoHosting 08/15 REF:1234'),
+        $pairs
+    );
+
+    expect($hit)->not->toBeNull()
+        ->and($hit[0])->toBe($contact->id)
+        ->and($hit[1])->toBe('paypal repohosting');
+});
+
 it('survives a rename of the auto-created vendor via match_patterns', function () {
     authedInHousehold();
     $account = reresolverAccount();

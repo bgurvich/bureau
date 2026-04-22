@@ -124,11 +124,23 @@ new class extends Component
                 ->orWhere('last_name', 'like', $like)
                 ->orWhere('organization', 'like', $like))
             ->orderByDesc('favorite')->orderBy('display_name')
-            ->limit(5)->get(['id', 'display_name', 'kind', 'organization']) as $c) {
+            ->limit(5)->get(['id', 'display_name', 'kind', 'organization', 'contact_roles']) as $c) {
+            $roleLabels = [];
+            $roleCatalog = App\Support\Enums::contactRoles();
+            foreach ((array) ($c->contact_roles ?? []) as $slug) {
+                if (isset($roleCatalog[$slug])) {
+                    $roleLabels[] = $roleCatalog[$slug];
+                }
+            }
+            $subtitleBits = array_filter([
+                $c->kind,
+                $c->organization,
+                $roleLabels !== [] ? implode(', ', $roleLabels) : null,
+            ]);
             $out[] = [
                 'type' => 'contact', 'id' => (int) $c->id,
                 'title' => (string) $c->display_name,
-                'subtitle' => trim(($c->kind ?? '').($c->organization ? ' · '.$c->organization : '')),
+                'subtitle' => implode(' · ', $subtitleBits),
                 'group' => __('Contacts'),
                 'inspector' => true,
             ];
