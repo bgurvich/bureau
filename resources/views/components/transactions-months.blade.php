@@ -27,9 +27,35 @@ class extends Component
     #[Url(as: 'status')]
     public string $status = '';
 
+    #[Url(as: 'sort')]
+    public string $sortBy = 'ym';
+
+    #[Url(as: 'dir')]
+    public string $sortDir = 'desc';
+
+    private const SORTABLE = ['ym', 'count', 'credits', 'debits', 'net'];
+
     #[On('inspector-saved')]
     public function refresh(): void
     {
+        unset($this->months);
+    }
+
+    public function sort(string $column): void
+    {
+        if (! in_array($column, self::SORTABLE, true)) {
+            return;
+        }
+        if ($this->sortBy === $column) {
+            $this->sortDir = $this->sortDir === 'asc' ? 'desc' : 'asc';
+        } else {
+            // Month newest-first and net-largest-first match how people skim
+            // these columns; the magnitude cols also default to desc since
+            // "biggest month" is the common question. Count is the only one
+            // where asc ("quietest month") reads as more natural.
+            $this->sortBy = $column;
+            $this->sortDir = $column === 'count' ? 'asc' : 'desc';
+        }
         unset($this->months);
     }
 
@@ -58,6 +84,13 @@ class extends Component
     #[Computed]
     public function months(): \Illuminate\Support\Collection
     {
+        // sort() whitelists the column; dir is asc|desc from the toggle.
+        // orderByRaw is safe here because the column name never comes
+        // from user input directly — it's always one of SORTABLE.
+        $col = in_array($this->sortBy, self::SORTABLE, true) ? $this->sortBy : 'ym';
+        $dir = $this->sortDir === 'asc' ? 'asc' : 'desc';
+        $sqlColumn = $col === 'count' ? 'n' : $col;
+
         return Transaction::query()
             ->when($this->accountId !== '', fn ($q) => $q->where('account_id', $this->accountId))
             ->when($this->status !== '', fn ($q) => $q->where('status', $this->status))
@@ -69,7 +102,7 @@ class extends Component
                 SUM(amount) as net
             ")
             ->groupBy('ym')
-            ->orderByDesc('ym')
+            ->orderByRaw("{$sqlColumn} {$dir}")
             ->get()
             ->map(fn ($row) => [
                 'ym' => (string) $row->ym,
@@ -124,11 +157,11 @@ class extends Component
             <table class="w-full min-w-[40rem] text-sm">
                 <thead class="border-b border-neutral-800 text-left">
                     <tr>
-                        <th scope="col" class="px-3 py-2 text-[10px] font-medium uppercase tracking-wider text-neutral-500">{{ __('Month') }}</th>
-                        <th scope="col" class="px-3 py-2 text-right text-[10px] font-medium uppercase tracking-wider text-neutral-500">{{ __('Count') }}</th>
-                        <th scope="col" class="px-3 py-2 text-right text-[10px] font-medium uppercase tracking-wider text-neutral-500">{{ __('In') }}</th>
-                        <th scope="col" class="px-3 py-2 text-right text-[10px] font-medium uppercase tracking-wider text-neutral-500">{{ __('Out') }}</th>
-                        <th scope="col" class="px-3 py-2 text-right text-[10px] font-medium uppercase tracking-wider text-neutral-500">{{ __('Net') }}</th>
+                        <x-ui.sortable-header column="ym" :label="__('Month')" :sort-by="$sortBy" :sort-dir="$sortDir" />
+                        <x-ui.sortable-header column="count" :label="__('Count')" :sort-by="$sortBy" :sort-dir="$sortDir" align="right" />
+                        <x-ui.sortable-header column="credits" :label="__('In')" :sort-by="$sortBy" :sort-dir="$sortDir" align="right" />
+                        <x-ui.sortable-header column="debits" :label="__('Out')" :sort-by="$sortBy" :sort-dir="$sortDir" align="right" />
+                        <x-ui.sortable-header column="net" :label="__('Net')" :sort-by="$sortBy" :sort-dir="$sortDir" align="right" />
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-neutral-800/60">

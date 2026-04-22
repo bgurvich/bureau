@@ -51,6 +51,49 @@ it('narrows months to the selected account', function () {
     expect($months->pluck('ym')->all())->toBe(['2026-03']);
 });
 
+it('sorts rows by the selected column and toggles direction on re-click', function () {
+    authedInHousehold();
+
+    $account = Account::create(['type' => 'checking', 'name' => 'Everyday', 'currency' => 'USD', 'opening_balance' => 0]);
+    // Biggest month = Feb (+1500 net), quietest = Mar (1 txn), middle = Apr.
+    Transaction::create(['account_id' => $account->id, 'occurred_on' => '2026-02-10', 'amount' => 1500, 'currency' => 'USD', 'status' => 'cleared']);
+    Transaction::create(['account_id' => $account->id, 'occurred_on' => '2026-02-20', 'amount' => 500, 'currency' => 'USD', 'status' => 'cleared']);
+    Transaction::create(['account_id' => $account->id, 'occurred_on' => '2026-03-05', 'amount' => -50, 'currency' => 'USD', 'status' => 'cleared']);
+    Transaction::create(['account_id' => $account->id, 'occurred_on' => '2026-04-05', 'amount' => 300, 'currency' => 'USD', 'status' => 'cleared']);
+    Transaction::create(['account_id' => $account->id, 'occurred_on' => '2026-04-15', 'amount' => -100, 'currency' => 'USD', 'status' => 'cleared']);
+
+    $component = Livewire::test('transactions-months');
+
+    // Default: month desc → Apr, Mar, Feb.
+    expect($component->instance()->months->pluck('ym')->all())->toBe(['2026-04', '2026-03', '2026-02']);
+
+    // Click Net header → desc net (biggest first = Feb).
+    $component->call('sort', 'net');
+    expect($component->get('sortBy'))->toBe('net')
+        ->and($component->get('sortDir'))->toBe('desc')
+        ->and($component->instance()->months->pluck('ym')->first())->toBe('2026-02');
+
+    // Re-click Net → asc (smallest first).
+    $component->call('sort', 'net');
+    expect($component->get('sortDir'))->toBe('asc')
+        ->and($component->instance()->months->pluck('ym')->first())->toBe('2026-03');
+
+    // Click Count → asc (quietest month first).
+    $component->call('sort', 'count');
+    expect($component->get('sortBy'))->toBe('count')
+        ->and($component->get('sortDir'))->toBe('asc')
+        ->and($component->instance()->months->pluck('ym')->first())->toBe('2026-03');
+});
+
+it('rejects unknown sort columns silently', function () {
+    authedInHousehold();
+
+    Livewire::test('transactions-months')
+        ->call('sort', 'attempted_injection')
+        ->assertSet('sortBy', 'ym')
+        ->assertSet('sortDir', 'desc');
+});
+
 it('renders the Months tab inside the Ledger hub', function () {
     authedInHousehold();
 
