@@ -322,18 +322,8 @@ new class extends Component
 
     public bool $in_case_of_pack = false;
 
-    // meeting
-    public string $meeting_title = '';
-
-    public string $starts_at = '';
-
-    public string $ends_at = '';
-
-    public string $location = '';
-
-    public bool $all_day = false;
-
-    public string $meeting_url = '';
+    // meeting extracted to App\Livewire\Inspector\MeetingForm;
+    // the shell hosts the child via @livewire in the render switch.
 
     // project
     public string $project_name = '';
@@ -1087,7 +1077,6 @@ new class extends Component
     {
         return match ($this->type) {
             'task' => [Task::class, 'assigned_user_id'],
-            'meeting' => [Meeting::class, 'organizer_user_id'],
             'contact' => [Contact::class, 'owner_user_id'],
             'account' => [Account::class, 'user_id'],
             'contract' => [Contract::class, 'primary_user_id'],
@@ -1383,8 +1372,6 @@ new class extends Component
         $this->issued_on = now()->toDateString();
         $this->due_on = now()->addDays(14)->toDateString();
         $this->doc_issued_on = now()->toDateString();
-        $this->starts_at = now()->addDay()->startOfHour()->format('Y-m-d\TH:i');
-        $this->ends_at = now()->addDay()->startOfHour()->addMinutes(30)->format('Y-m-d\TH:i');
 
         // Physical mail defaults — received today, classified as "other"
         // until the user picks a kind, no processed-at (belongs to the
@@ -1527,7 +1514,6 @@ new class extends Component
             'physical_mail' => $this->loadPhysicalMail(),
             'bill' => $this->loadBill(),
             'document' => $this->loadDocument(),
-            'meeting' => $this->loadMeeting(),
             'project' => $this->loadProject(),
             'contract' => $this->loadContract(),
             'insurance' => $this->loadInsurance(),
@@ -1679,18 +1665,6 @@ new class extends Component
         $this->doc_expires_on = $d->expires_on?->toDateString() ?? '';
         $this->in_case_of_pack = (bool) $d->in_case_of_pack;
         $this->notes = $d->notes ?? '';
-    }
-
-    private function loadMeeting(): void
-    {
-        $m = Meeting::findOrFail($this->id);
-        $this->meeting_title = $m->title;
-        $this->starts_at = $m->starts_at?->format('Y-m-d\TH:i') ?? '';
-        $this->ends_at = $m->ends_at?->format('Y-m-d\TH:i') ?? '';
-        $this->location = $m->location ?? '';
-        $this->all_day = (bool) $m->all_day;
-        $this->notes = $m->notes ?? '';
-        $this->meeting_url = $m->url ?? '';
     }
 
     private function loadProject(): void
@@ -1864,7 +1838,7 @@ new class extends Component
         // persists on its own. The child fires `inspector-form-saved`
         // back and the shell's onFormSaved() listener closes the drawer.
         // Add a type to this array after extracting its child form.
-        $extractedTypes = ['pet', 'pet_vaccination', 'pet_checkup', 'time_entry', 'transfer', 'savings_goal', 'budget_cap', 'category_rule', 'tag_rule', 'reminder', 'subscription', 'online_account'];
+        $extractedTypes = ['pet', 'pet_vaccination', 'pet_checkup', 'time_entry', 'transfer', 'savings_goal', 'budget_cap', 'category_rule', 'tag_rule', 'reminder', 'subscription', 'online_account', 'meeting'];
         if (in_array($this->type, $extractedTypes, true)) {
             $this->dispatch('inspector-save');
 
@@ -1880,7 +1854,6 @@ new class extends Component
                 'physical_mail' => $this->savePhysicalMail(),
                 'bill' => $this->saveBill(),
                 'document' => $this->saveDocument(),
-                'meeting' => $this->saveMeeting(),
                 'project' => $this->saveProject(),
                 'contract' => $this->saveContract(),
                 'insurance' => $this->saveInsurance(),
@@ -2422,35 +2395,6 @@ new class extends Component
         }
     }
 
-    private function saveMeeting(): void
-    {
-        $data = $this->validate([
-            'meeting_title' => 'required|string|max:255',
-            'starts_at' => 'required|date',
-            'ends_at' => 'required|date|after_or_equal:starts_at',
-            'location' => 'nullable|string|max:255',
-            'all_day' => 'boolean',
-            'notes' => 'nullable|string|max:5000',
-            'meeting_url' => 'nullable|string|max:500',
-        ]);
-
-        $payload = [
-            'title' => $data['meeting_title'],
-            'starts_at' => $data['starts_at'],
-            'ends_at' => $data['ends_at'],
-            'location' => $data['location'] ?: null,
-            'all_day' => (bool) $data['all_day'],
-            'notes' => $data['notes'] ?: null,
-            'url' => $data['meeting_url'] ?: null,
-        ];
-
-        if ($this->id) {
-            Meeting::findOrFail($this->id)->update($payload);
-        } else {
-            $payload['organizer_user_id'] = auth()->id();
-            $this->id = Meeting::create($payload)->id;
-        }
-    }
 
     private function saveProject(): void
     {
@@ -3548,7 +3492,9 @@ new class extends Component
                 @case('note')    @include('partials.inspector.forms.note')           @break
                 @case('physical_mail') @include('partials.inspector.forms.physical_mail') @break
                 @case('document') @include('partials.inspector.forms.document')      @break
-                @case('meeting') @include('partials.inspector.forms.meeting')        @break
+                @case('meeting')
+                    @livewire('inspector.meeting-form', ['id' => $id], key('meeting-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
+                    @break
                 @case('project') @include('partials.inspector.forms.project')        @break
                 @case('contract') @include('partials.inspector.forms.contract')      @break
                 @case('insurance') @include('partials.inspector.forms.insurance')    @break
