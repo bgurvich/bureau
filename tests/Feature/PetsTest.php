@@ -10,43 +10,56 @@ use App\Support\PetVaccineTemplates;
 use Carbon\CarbonImmutable;
 use Livewire\Livewire;
 
-it('creates a pet through the inspector and seeds required vaccines', function () {
+it('creates a pet through the extracted PetForm and seeds required vaccines', function () {
     authedInHousehold();
 
-    Livewire::test('inspector')
-        ->dispatch('inspector-open', type: 'pet')
-        ->set('pet_species', 'dog')
-        ->set('pet_name', 'Rex')
-        ->set('pet_date_of_birth', '2020-06-15')
-        ->call('save');
+    // Pet form extracted to App\Livewire\Inspector\PetForm — state
+    // lives on the child (no pet_ prefix) and `inspector-save` event
+    // replaces the old parent-dispatched `save()`.
+    Livewire::test('inspector.pet-form')
+        ->set('species', 'dog')
+        ->set('name', 'Rex')
+        ->set('date_of_birth', '2020-06-15')
+        ->call('save')
+        ->assertDispatched('inspector-saved', type: 'pet')
+        ->assertDispatched('inspector-form-saved');
 
     $pet = Pet::where('name', 'Rex')->firstOrFail();
     expect($pet->species)->toBe('dog')
         ->and($pet->date_of_birth?->toDateString())->toBe('2020-06-15')
         ->and($pet->primary_owner_user_id)->not->toBeNull();
 
-    // Required dog vaccines seeded as placeholder rows with null
-    // administered_on; the user fills in records as they come in.
     $seeded = $pet->vaccinations->pluck('vaccine_name')->sort()->values()->all();
     expect($seeded)->toBe(['DHPP', 'Leptospirosis', 'Rabies']);
     expect($pet->vaccinations->every(fn ($v) => $v->administered_on === null))->toBeTrue();
 });
 
-it('edits an existing pet through the inspector without re-seeding vaccines', function () {
+it('edits an existing pet through the extracted PetForm without re-seeding vaccines', function () {
     authedInHousehold();
 
     $pet = Pet::create(['species' => 'cat', 'name' => 'Whiskers']);
-    PetVaccineTemplates::seedRequiredFor($pet); // already seeded on first save
+    PetVaccineTemplates::seedRequiredFor($pet);
 
     $before = $pet->vaccinations()->count();
 
-    Livewire::test('inspector')
-        ->dispatch('inspector-open', type: 'pet', id: $pet->id)
-        ->set('pet_color', 'Tabby')
+    Livewire::test('inspector.pet-form', ['id' => $pet->id])
+        ->assertSet('name', 'Whiskers') // mount loaded the record
+        ->set('color', 'Tabby')
         ->call('save');
 
     expect($pet->fresh()->color)->toBe('Tabby')
-        ->and($pet->vaccinations()->count())->toBe($before); // not re-seeded
+        ->and($pet->vaccinations()->count())->toBe($before);
+});
+
+it('inspector shell save() forwards to PetForm via inspector-save event for type=pet', function () {
+    authedInHousehold();
+
+    // Shell's save() should early-return with the dispatch — no direct
+    // persistence happens on the shell for extracted types.
+    Livewire::test('inspector')
+        ->dispatch('inspector-open', type: 'pet')
+        ->call('save')
+        ->assertDispatched('inspector-save');
 });
 
 it('PetVaccineTemplates::seedRequiredFor is idempotent', function () {

@@ -14,6 +14,7 @@ use App\Models\Meeting;
 use App\Models\OnlineAccount;
 use App\Models\PhysicalMail;
 use App\Models\Note;
+use App\Models\Pet;
 use App\Models\Project;
 use App\Models\Property;
 use App\Models\RecurringProjection;
@@ -464,26 +465,12 @@ new class extends Component
 
     public string $property_disposed_on = '';
 
-    // pet
-    public string $pet_species = 'dog';
-
-    public string $pet_name = '';
-
-    public string $pet_breed = '';
-
-    public string $pet_color = '';
-
-    public string $pet_date_of_birth = '';
-
-    public string $pet_sex = '';
-
-    public string $pet_microchip_id = '';
-
-    public ?int $pet_vet_provider_id = null;
-
-    public bool $pet_is_active = true;
-
-    public string $pet_notes = '';
+    // pet — extracted into App\Livewire\Inspector\PetForm. The shell
+    // hosts the child based on $type and talks to it through events:
+    // parent's Save button dispatches `inspector-save` (via the
+    // type=='pet' branch in save()); child fires `inspector-form-saved`
+    // back when the write lands, which closes the drawer. Delete
+    // still runs from the shell's footer against $this->id.
 
     // pet_vaccination / pet_checkup
     public ?int $pv_pet_id = null;
@@ -709,6 +696,21 @@ new class extends Component
             return;
         }
         $this->doOpen($type, $id, null, $parentId);
+    }
+
+    /**
+     * Extracted child forms (currently just PetForm) fire this event
+     * after they persist. The shell closes the drawer on receipt —
+     * separate event name from the general `inspector-saved` (which
+     * also fires from subentity modal saves and would otherwise close
+     * the primary drawer mid-subentity-edit).
+     */
+    #[On('inspector-form-saved')]
+    public function onFormSaved(): void
+    {
+        if ($this->open) {
+            $this->close();
+        }
     }
 
     private function doOpen(string $type, ?int $id, ?int $mediaId = null, ?int $parentId = null): void
@@ -1641,7 +1643,7 @@ new class extends Component
             'online_account' => $this->loadOnlineAccount(),
             'property' => $this->loadProperty(),
             'vehicle' => $this->loadVehicle(),
-            'pet' => $this->loadPet(),
+            // 'pet' no longer loads here — PetForm handles its own mount(id)
             'pet_vaccination' => $this->loadPetVaccination(),
             'pet_checkup' => $this->loadPetCheckup(),
             'inventory' => $this->loadInventory(),
@@ -1989,6 +1991,19 @@ new class extends Component
 
     public function save(): void
     {
+        // Extracted form types: the shell's Save button lands here, we
+        // fan out an `inspector-save` event, and the matching child
+        // component (App\Livewire\Inspector\{Type}Form) validates +
+        // persists on its own. The child fires `inspector-form-saved`
+        // back and the shell's onFormSaved() listener closes the drawer.
+        // Add a type to this array after extracting its child form.
+        $extractedTypes = ['pet'];
+        if (in_array($this->type, $extractedTypes, true)) {
+            $this->dispatch('inspector-save');
+
+            return;
+        }
+
         try {
             match ($this->type) {
                 'task' => $this->saveTask(),
@@ -2006,7 +2021,9 @@ new class extends Component
                 'online_account' => $this->saveOnlineAccount(),
                 'property' => $this->saveProperty(),
                 'vehicle' => $this->saveVehicle(),
-                'pet' => $this->savePet(),
+                // 'pet' is handled by the PetForm child — the type=='pet'
+                // branch above dispatches 'inspector-save' and returns
+                // before reaching this match, so it never lands here.
                 'pet_vaccination' => $this->savePetVaccination(),
                 'pet_checkup' => $this->savePetCheckup(),
                 'inventory' => $this->saveInventory(),
@@ -2976,64 +2993,11 @@ new class extends Component
         }
     }
 
-    private function loadPet(): void
-    {
-        $p = \App\Models\Pet::findOrFail($this->id);
-        $this->pet_species = (string) ($p->species ?? 'dog');
-        $this->pet_name = (string) ($p->name ?? '');
-        $this->pet_breed = (string) ($p->breed ?? '');
-        $this->pet_color = (string) ($p->color ?? '');
-        $this->pet_date_of_birth = $p->date_of_birth ? $p->date_of_birth->toDateString() : '';
-        $this->pet_sex = (string) ($p->sex ?? '');
-        $this->pet_microchip_id = (string) ($p->microchip_id ?? '');
-        $this->pet_vet_provider_id = $p->vet_provider_id;
-        $this->pet_is_active = (bool) $p->is_active;
-        $this->pet_notes = (string) ($p->notes ?? '');
-        $this->notes = $this->pet_notes;
-    }
-
-    /**
-     * Persist a Pet. On first-time save, also seed the required vaccine
-     * placeholders for the species so the user lands in the detail view
-     * with the expected Rabies / DHPP / etc. rows ready to fill.
-     */
-    private function savePet(): void
-    {
-        $data = $this->validate([
-            'pet_species' => ['required', Rule::in(['dog', 'cat', 'rabbit', 'ferret', 'other'])],
-            'pet_name' => 'required|string|max:120',
-            'pet_breed' => 'nullable|string|max:120',
-            'pet_color' => 'nullable|string|max:64',
-            'pet_date_of_birth' => 'nullable|date',
-            'pet_sex' => ['nullable', Rule::in(['male', 'female', 'unknown', ''])],
-            'pet_microchip_id' => 'nullable|string|max:64',
-            'pet_vet_provider_id' => 'nullable|integer|exists:health_providers,id',
-            'pet_is_active' => 'boolean',
-            'pet_notes' => 'nullable|string|max:5000',
-        ]);
-
-        $payload = [
-            'species' => $data['pet_species'],
-            'name' => $data['pet_name'],
-            'breed' => $data['pet_breed'] ?: null,
-            'color' => $data['pet_color'] ?: null,
-            'date_of_birth' => $data['pet_date_of_birth'] ?: null,
-            'sex' => $data['pet_sex'] ?: null,
-            'microchip_id' => $data['pet_microchip_id'] ?: null,
-            'vet_provider_id' => $data['pet_vet_provider_id'] ?: null,
-            'is_active' => (bool) $data['pet_is_active'],
-            'notes' => $data['pet_notes'] ?: null,
-        ];
-
-        if ($this->id) {
-            \App\Models\Pet::findOrFail($this->id)->update($payload);
-        } else {
-            $payload['primary_owner_user_id'] = auth()->id();
-            $pet = \App\Models\Pet::create($payload);
-            $this->id = $pet->id;
-            \App\Support\PetVaccineTemplates::seedRequiredFor($pet);
-        }
-    }
+    // loadPet + savePet moved to App\Livewire\Inspector\PetForm as
+    // part of the inspector refactor pilot. The shell's save() forks
+    // on type=='pet' and dispatches 'inspector-save' so the child
+    // handles validation and persistence; an `inspector-form-saved`
+    // bounce from the child closes the drawer.
 
     // ── Pet vaccinations ──────────────────────────────────────────────
 
@@ -4129,6 +4093,7 @@ new class extends Component
                 'online_account' => OnlineAccount::findOrFail($this->id)->delete(),
                 'property' => Property::findOrFail($this->id)->delete(),
                 'vehicle' => Vehicle::findOrFail($this->id)->delete(),
+                'pet' => Pet::findOrFail($this->id)->delete(),
                 'inventory' => InventoryItem::findOrFail($this->id)->delete(),
                 'reminder' => \App\Models\Reminder::findOrFail($this->id)->delete(),
                 'savings_goal' => \App\Models\SavingsGoal::findOrFail($this->id)->delete(),
@@ -4390,7 +4355,12 @@ new class extends Component
                 @case('online_account') @include('partials.inspector.forms.online_account') @break
                 @case('property') @include('partials.inspector.forms.property')      @break
                 @case('vehicle') @include('partials.inspector.forms.vehicle')        @break
-                @case('pet') @include('partials.inspector.forms.pet')                @break
+                @case('pet')
+                    {{-- Extracted to App\Livewire\Inspector\PetForm. Key
+                         resets on new id so the child re-mounts cleanly
+                         between "new pet" and "edit pet X" transitions. --}}
+                    @livewire('inspector.pet-form', ['id' => $id], key('pet-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
+                    @break
                 @case('pet_vaccination') @include('partials.inspector.forms.pet_vaccination') @break
                 @case('pet_checkup') @include('partials.inspector.forms.pet_checkup') @break
                 @case('inventory') @include('partials.inspector.forms.inventory')    @break

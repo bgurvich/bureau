@@ -1,10 +1,17 @@
+{{-- PetForm — extracted from inspector.blade.php as the pilot for the
+     per-type component split. Binds to the PetForm component's own
+     state (species/name/... — no `pet_` prefix) rather than the
+     parent shell's giant property bag. Parent's Save button
+     dispatches `inspector-save`; this component handles it via #[On]
+     and fires `inspector-form-saved` when done so the parent drawer
+     closes. --}}
 <form wire:submit="save" class="space-y-4" novalidate>
     <button type="submit" class="sr-only" tabindex="-1" aria-hidden="true">{{ __('Submit') }}</button>
 
     <div class="grid grid-cols-2 gap-3">
         <div>
             <label for="i-pet-species" class="mb-1 block text-xs text-neutral-400">{{ __('Species') }}</label>
-            <select wire:model="pet_species" id="i-pet-species"
+            <select wire:model="species" id="i-pet-species"
                     class="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
                 <option value="dog">{{ __('Dog') }}</option>
                 <option value="cat">{{ __('Cat') }}</option>
@@ -20,21 +27,21 @@
         </div>
         <div>
             <label for="i-pet-name" class="mb-1 block text-xs text-neutral-400">{{ __('Name') }}</label>
-            <input wire:model="pet_name" id="i-pet-name" type="text" required autofocus
+            <input wire:model="name" id="i-pet-name" type="text" required autofocus
                    class="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
-            @error('pet_name')<div role="alert" class="mt-1 text-xs text-rose-400">{{ $message }}</div>@enderror
+            @error('name')<div role="alert" class="mt-1 text-xs text-rose-400">{{ $message }}</div>@enderror
         </div>
     </div>
 
     <div class="grid grid-cols-2 gap-3">
         <div>
             <label for="i-pet-breed" class="mb-1 block text-xs text-neutral-400">{{ __('Breed') }}</label>
-            <input wire:model="pet_breed" id="i-pet-breed" type="text"
+            <input wire:model="breed" id="i-pet-breed" type="text"
                    class="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
         </div>
         <div>
             <label for="i-pet-color" class="mb-1 block text-xs text-neutral-400">{{ __('Color') }}</label>
-            <input wire:model="pet_color" id="i-pet-color" type="text"
+            <input wire:model="color" id="i-pet-color" type="text"
                    class="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
         </div>
     </div>
@@ -42,12 +49,12 @@
     <div class="grid grid-cols-2 gap-3">
         <div>
             <label for="i-pet-dob" class="mb-1 block text-xs text-neutral-400">{{ __('Date of birth') }}</label>
-            <input wire:model="pet_date_of_birth" id="i-pet-dob" type="date"
+            <input wire:model="date_of_birth" id="i-pet-dob" type="date"
                    class="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
         </div>
         <div>
             <label for="i-pet-sex" class="mb-1 block text-xs text-neutral-400">{{ __('Sex') }}</label>
-            <select wire:model="pet_sex" id="i-pet-sex"
+            <select wire:model="sex" id="i-pet-sex"
                     class="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
                 <option value="">—</option>
                 <option value="male">{{ __('Male') }}</option>
@@ -59,19 +66,19 @@
 
     <div>
         <label for="i-pet-microchip" class="mb-1 block text-xs text-neutral-400">{{ __('Microchip ID') }}</label>
-        <input wire:model="pet_microchip_id" id="i-pet-microchip" type="text"
+        <input wire:model="microchip_id" id="i-pet-microchip" type="text"
                class="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
     </div>
 
     <label class="flex items-center gap-2 text-xs text-neutral-300">
-        <input wire:model="pet_is_active" type="checkbox" class="rounded border-neutral-700 bg-neutral-950">
+        <input wire:model="is_active" type="checkbox" class="rounded border-neutral-700 bg-neutral-950">
         {{ __('Active') }}
         <span class="text-neutral-500">{{ __('(uncheck after the pet passes to keep records without clutter)') }}</span>
     </label>
 
     <div>
         <label for="i-pet-notes" class="mb-1 block text-xs text-neutral-400">{{ __('Notes') }}</label>
-        <textarea wire:model="pet_notes" id="i-pet-notes" rows="3"
+        <textarea wire:model="notes" id="i-pet-notes" rows="3"
                   class="w-full resize-y rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300"></textarea>
     </div>
 
