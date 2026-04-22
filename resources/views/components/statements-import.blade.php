@@ -1478,11 +1478,23 @@ class extends Component
                                             @php($isEditing = $editingRow === ($fileId.':'.$i))
                                             @php($overrideId = $row['counterparty_id_override'] ?? null)
                                             @php($vendorLabel = $overrideId ? ($this->contactOptions->firstWhere('id', (int) $overrideId)?->display_name ?? $vp['label']) : $vp['label'])
-                                            <tr wire:key="row-{{ $fileId }}-{{ $i }}" class="{{ $isDup ? 'opacity-60' : '' }}">
+                                            {{-- Row click enters edit mode when idle. In edit mode,
+                                                 the click handler is dropped so typing/interacting
+                                                 with the nested inputs doesn't re-trigger. The
+                                                 checkbox cell + Update/Cancel buttons use their own
+                                                 click handlers with wire:click.stop so they don't
+                                                 bubble and toggle edit state. --}}
+                                            <tr wire:key="row-{{ $fileId }}-{{ $i }}"
+                                                @class([
+                                                    $isDup ? 'opacity-60' : '',
+                                                    'cursor-pointer transition hover:bg-neutral-800/40' => ! $isEditing,
+                                                    'bg-neutral-900/60' => $isEditing,
+                                                ])
+                                                @if (! $isEditing) wire:click="editRow('{{ $fileId }}', {{ $i }})" @endif>
                                                 <td class="px-2 py-1 align-middle">
                                                     <input type="checkbox"
                                                            @checked($selForFile[$i] ?? false)
-                                                           wire:click="toggleRow('{{ $fileId }}', {{ $i }})"
+                                                           wire:click.stop="toggleRow('{{ $fileId }}', {{ $i }})"
                                                            class="rounded border-neutral-700 bg-neutral-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300"
                                                            aria-label="{{ __('Select row') }}">
                                                 </td>
@@ -1518,11 +1530,11 @@ class extends Component
                                                     </td>
                                                     <td class="px-2 py-1 text-right">
                                                         <div class="inline-flex items-center gap-1">
-                                                            <button type="button" wire:click="saveRow('{{ $fileId }}', {{ $i }})"
+                                                            <button type="button" wire:click.stop="saveRow('{{ $fileId }}', {{ $i }})"
                                                                     class="rounded bg-emerald-600 px-2 py-0.5 text-[10px] font-medium text-emerald-50 hover:bg-emerald-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
                                                                 {{ __('Update') }}
                                                             </button>
-                                                            <button type="button" wire:click="cancelEdit"
+                                                            <button type="button" wire:click.stop="cancelEdit"
                                                                     class="rounded border border-neutral-700 px-2 py-0.5 text-[10px] text-neutral-400 hover:text-neutral-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
                                                                 {{ __('Cancel') }}
                                                             </button>
@@ -1548,15 +1560,9 @@ class extends Component
                                                         {{ Formatting::money((float) $row['amount'], $rowCurrency) }}
                                                     </td>
                                                     <td class="px-2 py-1 text-right">
-                                                        <div class="inline-flex items-center gap-1">
-                                                            @if ($isDup)
-                                                                <span class="rounded bg-amber-900/40 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-amber-300">{{ __('dup') }}</span>
-                                                            @endif
-                                                            <button type="button" wire:click="editRow('{{ $fileId }}', {{ $i }})"
-                                                                    class="rounded px-2 py-0.5 text-[10px] text-neutral-500 hover:bg-neutral-800 hover:text-neutral-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
-                                                                {{ __('Edit') }}
-                                                            </button>
-                                                        </div>
+                                                        @if ($isDup)
+                                                            <span class="rounded bg-amber-900/40 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-amber-300">{{ __('dup') }}</span>
+                                                        @endif
                                                     </td>
                                                 @endif
                                             </tr>
