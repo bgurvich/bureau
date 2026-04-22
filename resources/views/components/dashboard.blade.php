@@ -82,6 +82,8 @@ class extends Component
         <livewire:commitments-radar />
         <livewire:documents-radar />
         <livewire:attention-radar />
+        <livewire:pet-care-radar />
+        <livewire:relationships-radar />
 
         @if ($this->todaysRituals->isNotEmpty())
             <div class="rounded-xl border border-neutral-800 bg-neutral-900/50 p-5">
