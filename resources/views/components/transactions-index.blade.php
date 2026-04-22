@@ -356,20 +356,27 @@ class extends Component
     #[Computed]
     public function totals(): array
     {
-        $q = Transaction::query()
+        // One aggregate query instead of three (separate credits/debits
+        // sums + count) — the dashboard + filters render pulls totals on
+        // every state change, so the saved round-trips add up.
+        $row = Transaction::query()
             ->when($this->accountId !== '', fn ($q) => $q->where('account_id', $this->accountId))
             ->when($this->status !== '', fn ($q) => $q->where('status', $this->status))
             ->whereDate('occurred_on', '>=', $this->from)
-            ->whereDate('occurred_on', '<=', $this->to);
+            ->whereDate('occurred_on', '<=', $this->to)
+            ->selectRaw('COALESCE(SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END), 0) as credits')
+            ->selectRaw('COALESCE(SUM(CASE WHEN amount < 0 THEN amount ELSE 0 END), 0) as debits')
+            ->selectRaw('COUNT(*) as cnt')
+            ->first();
 
-        $credits = (clone $q)->where('amount', '>', 0)->sum('amount');
-        $debits = (clone $q)->where('amount', '<', 0)->sum('amount');
+        $credits = (float) ($row->credits ?? 0);
+        $debits = (float) ($row->debits ?? 0);
 
         return [
-            'credits' => (float) $credits,
-            'debits' => (float) $debits,
-            'net' => (float) $credits + (float) $debits,
-            'count' => (clone $q)->count(),
+            'credits' => $credits,
+            'debits' => $debits,
+            'net' => $credits + $debits,
+            'count' => (int) ($row->cnt ?? 0),
         ];
     }
 };
