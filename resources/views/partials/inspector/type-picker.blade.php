@@ -44,6 +44,11 @@
             ['project', __('Project'), null],
             ['time_entry', __('Time entry'), 'L'],
         ],
+        __('Taxes') => [
+            ['tax_year', __('Tax year'), null],
+            ['tax_document', __('Tax document'), null],
+            ['tax_estimated_payment', __('Estimated payment'), null],
+        ],
     ];
 @endphp
 <p class="mb-3 text-xs text-neutral-500">{{ __('What would you like to add?') }}</p>

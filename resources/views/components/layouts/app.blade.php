@@ -56,6 +56,7 @@
                                 [__('Ledger'), 'fiscal.ledger', 'wallet'],
                                 [__('Recurring'), 'fiscal.recurring', 'receipt'],
                                 [__('Planning'), 'fiscal.planning', 'pie'],
+                                [__('Taxes'), 'fiscal.tax', 'file-text'],
                                 [__('Rules'), 'fiscal.rules', 'note'],
                             ],
                             __('Life') => [

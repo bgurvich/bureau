@@ -12,6 +12,7 @@ use App\Models\RecurringProjection;
 use App\Models\Reminder;
 use App\Models\SavingsGoal;
 use App\Models\Task;
+use App\Models\TaxEstimatedPayment;
 use App\Models\Transaction;
 use App\Support\BudgetMonitor;
 use App\Support\ChecklistScheduling;
@@ -108,6 +109,19 @@ new class extends Component
         return Domain::where('auto_renew', false)
             ->whereNotNull('expires_on')
             ->whereBetween('expires_on', [now()->toDateString(), now()->addDays(30)->toDateString()])
+            ->count();
+    }
+
+    /**
+     * Unpaid quarterly estimated-tax rows due within 30 days OR already
+     * past due. Drops off once paid_on is set. The 30-day window hits
+     * right as the user should be cutting the cheque.
+     */
+    #[Computed]
+    public function taxPaymentsDueSoon(): int
+    {
+        return TaxEstimatedPayment::whereNull('paid_on')
+            ->where('due_on', '<=', now()->addDays(30)->toDateString())
             ->count();
     }
 
@@ -244,6 +258,7 @@ new class extends Component
             + $this->autorenewingContractsEndingSoon
             + $this->giftCardsExpiringSoon
             + $this->domainsExpiringSoon
+            + $this->taxPaymentsDueSoon
             + $this->billsInbox
             + $this->unprocessedInventory
             + $this->budgetEnvelopesAtRisk
@@ -315,6 +330,12 @@ new class extends Component
                 <li class="flex items-baseline justify-between">
                     <a href="{{ route('assets.domains', ['status' => 'expiring']) }}" class="text-neutral-300 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">{{ __('Domains expiring ≤ 30d') }}</a>
                     <span class="tabular-nums text-amber-400">{{ $this->domainsExpiringSoon }}</span>
+                </li>
+            @endif
+            @if ($this->taxPaymentsDueSoon)
+                <li class="flex items-baseline justify-between">
+                    <a href="{{ route('fiscal.tax') }}" class="text-neutral-300 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">{{ __('Estimated tax due ≤ 30d') }}</a>
+                    <span class="tabular-nums text-rose-400">{{ $this->taxPaymentsDueSoon }}</span>
                 </li>
             @endif
             @if ($this->billsInbox)

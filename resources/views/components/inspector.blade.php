@@ -1673,6 +1673,15 @@ new class extends Component
                 @case('domain')
                     @livewire('inspector.domain-form', ['id' => $id], key('domain-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
                     @break
+                @case('tax_year')
+                    @livewire('inspector.tax-year-form', ['id' => $id], key('tax-year-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
+                    @break
+                @case('tax_document')
+                    @livewire('inspector.tax-document-form', ['id' => $id, 'parentId' => $subentityParentId, 'mediaId' => $source_media_id], key('tax-document-form-'.($id ?? 'new').'-'.($subentityParentId ?? '0').'-'.($asModal ? 'm' : 'p')))
+                    @break
+                @case('tax_estimated_payment')
+                    @livewire('inspector.tax-estimated-payment-form', ['id' => $id, 'parentId' => $subentityParentId], key('tax-estimated-payment-form-'.($id ?? 'new').'-'.($subentityParentId ?? '0').'-'.($asModal ? 'm' : 'p')))
+                    @break
                 @case('property')
                     @livewire('inspector.property-form', ['id' => $id], key('property-form-'.($id ?? 'new').'-'.($asModal ? 'm' : 'p')))
                     @break

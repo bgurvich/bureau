@@ -496,4 +496,62 @@ class Enums
             default => null,
         };
     }
+
+    /** Tax-year lifecycle state. Free-form at the schema level; this is the UI menu. */
+    /** @return array<string, string> */
+    public static function taxYearStates(): array
+    {
+        return [
+            'prep' => __('In progress'),
+            'filed' => __('Filed'),
+            'amended' => __('Amended'),
+            'extended' => __('Extended'),
+        ];
+    }
+
+    /** US filing status options. Translation labels follow the IRS wording. */
+    /** @return array<string, string> */
+    public static function taxFilingStatuses(): array
+    {
+        return [
+            'single' => __('Single'),
+            'married_joint' => __('Married filing jointly'),
+            'married_separate' => __('Married filing separately'),
+            'head_of_household' => __('Head of household'),
+            'qualifying_surviving_spouse' => __('Qualifying surviving spouse'),
+        ];
+    }
+
+    /** Tax document kinds. Presentation order mirrors what arrives in the mail each Jan/Feb. */
+    /** @return array<string, string> */
+    public static function taxDocumentKinds(): array
+    {
+        return [
+            'W-2' => __('W-2 (wages)'),
+            '1099-NEC' => __('1099-NEC (nonemployee comp.)'),
+            '1099-MISC' => __('1099-MISC'),
+            '1099-INT' => __('1099-INT (interest)'),
+            '1099-DIV' => __('1099-DIV (dividends)'),
+            '1099-B' => __('1099-B (brokerage)'),
+            '1099-R' => __('1099-R (retirement)'),
+            '1099-G' => __('1099-G (gov. payments)'),
+            '1098' => __('1098 (mortgage interest)'),
+            'K-1' => __('K-1 (partnership)'),
+            'receipt' => __('Receipt'),
+            'schedule' => __('Schedule'),
+            'other' => __('Other'),
+        ];
+    }
+
+    /** Quarterly estimated-tax identifiers. */
+    /** @return array<string, string> */
+    public static function taxQuarters(): array
+    {
+        return [
+            'Q1' => __('Q1'),
+            'Q2' => __('Q2'),
+            'Q3' => __('Q3'),
+            'Q4' => __('Q4'),
+        ];
+    }
 }
