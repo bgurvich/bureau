@@ -111,6 +111,29 @@ final class ContactMerge
         return array_values($ids);
     }
 
+    /**
+     * Public accessors so CLI tools (contacts:wipe) reuse the exact
+     * same schema graph the merge uses — one source of truth.
+     *
+     * @return array<int, array{0: string, 1: string}>
+     */
+    public static function singleFkRefs(): array
+    {
+        return self::$singleFk;
+    }
+
+    /** @return array<int, array{0: string, 1: string, 2: string}> */
+    public static function pivotRefs(): array
+    {
+        return self::$pivots;
+    }
+
+    /** @return array<int, array{0: string, 1: string, 2: string}> */
+    public static function morphRefs(): array
+    {
+        return self::$morphs;
+    }
+
     /** @var array<int, array{0: string, 1: string}> [table, contact_fk_column] */
     private static array $singleFk = [
         ['accounts', 'counterparty_contact_id'],
