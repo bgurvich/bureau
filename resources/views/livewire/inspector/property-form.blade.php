@@ -28,13 +28,11 @@
              $wire.set('property_address_postcode', s.postal_code || '');
          ">
         <h4 class="text-[10px] font-medium uppercase tracking-wider text-neutral-500">{{ __('Address') }}</h4>
-        <x-dynamic-component
-            component="partials.inspector.fields.address-autocomplete"
+        <x-inspector.address-autocomplete
             id="i-pr-addr-line"
-            label="{{ __('Street address') }}"
+            :label="__('Street address')"
             model="property_address_line1"
-            event="property-address-picked"
-        />
+            event="property-address-picked" />
         <div class="grid grid-cols-3 gap-2">
             <input wire:model="property_address_city" type="text" placeholder="{{ __('City') }}"
                    aria-label="{{ __('City') }}"
