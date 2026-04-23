@@ -11,6 +11,7 @@ use App\Models\Concerns\HasTags;
 use App\Models\Concerns\HasValuations;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Vehicle extends Model
 {
@@ -37,5 +38,11 @@ class Vehicle extends Model
     public function buyer(): BelongsTo
     {
         return $this->belongsTo(Contact::class, 'buyer_contact_id');
+    }
+
+    /** @return HasMany<VehicleServiceLog, $this> */
+    public function serviceLogs(): HasMany
+    {
+        return $this->hasMany(VehicleServiceLog::class);
     }
 }

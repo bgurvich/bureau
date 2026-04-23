@@ -2,7 +2,6 @@
 
 use App\Models\Vehicle;
 use App\Support\CurrentHousehold;
-use App\Support\Formatting;
 use Illuminate\Database\Eloquent\Collection;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
@@ -28,6 +27,7 @@ class extends Component
     {
         return Vehicle::query()
             ->with(['latestValuation', 'primaryUser:id,name'])
+            ->withCount('serviceLogs')
             ->when($this->kindFilter !== '', fn ($q) => $q->where('kind', $this->kindFilter))
             ->orderBy('kind')
             ->orderBy('make')
@@ -63,7 +63,7 @@ class extends Component
     <dl class="flex gap-5 text-xs">
             <div>
                 <dt class="text-[10px] uppercase tracking-wider text-neutral-500">{{ __('Estimated value') }}</dt>
-                <dd class="mt-0.5 tabular-nums text-neutral-200">{{ Formatting::money($this->totalValue, $this->currency) }}</dd>
+                <dd class="mt-0.5 tabular-nums text-neutral-200">{{ \App\Support\Formatting::money($this->totalValue, $this->currency) }}</dd>
             </div>
             <div>
                 <dt class="text-[10px] uppercase tracking-wider text-neutral-500">{{ __('On file') }}</dt>
@@ -115,11 +115,19 @@ class extends Component
                                 @if ($v->odometer)
                                     <span class="tabular-nums">{{ number_format($v->odometer) }} {{ $v->odometer_unit }}</span>
                                 @endif
+                                @if (($v->service_logs_count ?? 0) > 0)
+                                    <a href="{{ route('assets.vehicle_services', ['vehicle' => $v->id]) }}"
+                                       wire:navigate
+                                       @click.stop
+                                       class="tabular-nums text-neutral-400 underline-offset-2 hover:text-neutral-200 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                                        {{ __(':n service :label', ['n' => $v->service_logs_count, 'label' => $v->service_logs_count === 1 ? __('log') : __('logs')]) }}
+                                    </a>
+                                @endif
                                 @if ($v->primaryUser)
                                     <span>{{ $v->primaryUser->name }}</span>
                                 @endif
                                 @if ($v->acquired_on)
-                                    <span>{{ __('Since') }} {{ Formatting::date($v->acquired_on) }}</span>
+                                    <span>{{ __('Since') }} {{ \App\Support\Formatting::date($v->acquired_on) }}</span>
                                 @endif
                                 @if ($v->registration_expires_on)
                                     @php
@@ -131,18 +139,18 @@ class extends Component
                                             default => 'text-neutral-500',
                                         };
                                     @endphp
-                                    <span class="{{ $regClass }}">{{ __('Reg.') }} {{ Formatting::date($v->registration_expires_on) }}@if ($regDays < 0) · {{ __('expired') }}@else · {{ $regDays }}d @endif</span>
+                                    <span class="{{ $regClass }}">{{ __('Reg.') }} {{ \App\Support\Formatting::date($v->registration_expires_on) }}@if ($regDays < 0) · {{ __('expired') }}@else · {{ $regDays }}d @endif</span>
                                 @endif
                             </div>
                         </div>
                         <div class="shrink-0 text-right">
                             @if ($currentValue !== null)
                                 <div class="text-sm tabular-nums text-neutral-100">
-                                    {{ Formatting::money((float) $currentValue, $latest?->currency ?? $v->purchase_currency ?? $this->currency) }}
+                                    {{ \App\Support\Formatting::money((float) $currentValue, $latest?->currency ?? $v->purchase_currency ?? $this->currency) }}
                                 </div>
                                 @if ($delta !== null)
                                     <div class="text-[10px] tabular-nums {{ $delta >= 0 ? 'text-emerald-400' : 'text-rose-400' }}">
-                                        {{ $delta >= 0 ? '+' : '' }}{{ Formatting::money($delta, $latest?->currency ?? $v->purchase_currency ?? $this->currency) }}
+                                        {{ $delta >= 0 ? '+' : '' }}{{ \App\Support\Formatting::money($delta, $latest?->currency ?? $v->purchase_currency ?? $this->currency) }}
                                     </div>
                                 @endif
                             @endif
