@@ -32,6 +32,7 @@ use App\Models\TaxYear;
 use App\Models\TimeEntry;
 use App\Models\Transaction;
 use App\Models\Vehicle;
+use App\Models\VehicleServiceLog;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\On;
 use Livewire\Component;
@@ -317,6 +318,7 @@ new class extends Component
                 'tax_document' => TaxDocument::findOrFail($this->id)->delete(),
                 'tax_estimated_payment' => TaxEstimatedPayment::findOrFail($this->id)->delete(),
                 'meter_reading' => MeterReading::findOrFail($this->id)->delete(),
+                'vehicle_service_log' => VehicleServiceLog::findOrFail($this->id)->delete(),
                 default => null,
             };
         } catch (PeriodLockedException $e) {
@@ -356,6 +358,7 @@ new class extends Component
         'tax_document' => ['parentId' => 'subentityParentId', 'mediaId' => 'source_media_id'],
         'tax_estimated_payment' => ['parentId' => 'subentityParentId'],
         'meter_reading' => ['parentId' => 'subentityParentId'],
+        'vehicle_service_log' => ['parentId' => 'subentityParentId'],
     ];
 
     /**
@@ -433,6 +436,7 @@ new class extends Component
             'tax_document' => __('tax document'),
             'tax_estimated_payment' => __('estimated payment'),
             'meter_reading' => __('meter reading'),
+            'vehicle_service_log' => __('vehicle service'),
             default => '',
         };
 

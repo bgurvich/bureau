@@ -555,6 +555,30 @@ class Enums
         ];
     }
 
+    /** Vehicle-service kinds — surfaced in the VehicleServiceLogForm
+     *  picker. Free string at the schema level so one-off services
+     *  ("winter storage prep", "detailing") fit without a migration. */
+    /** @return array<string, string> */
+    public static function vehicleServiceKinds(): array
+    {
+        return [
+            'oil_change' => __('Oil change'),
+            'tire_rotation' => __('Tire rotation'),
+            'tire_replacement' => __('Tire replacement'),
+            'brakes' => __('Brake service'),
+            'battery' => __('Battery'),
+            'inspection' => __('Inspection / smog'),
+            'alignment' => __('Alignment'),
+            'transmission' => __('Transmission'),
+            'coolant' => __('Coolant flush'),
+            'tune_up' => __('Tune-up'),
+            'repair' => __('Repair'),
+            'recall' => __('Recall service'),
+            'detail' => __('Detail / clean'),
+            'other' => __('Other'),
+        ];
+    }
+
     /** Utility-meter kinds surfaced in the MeterReadingForm picker.
      *  Schema column is free string so one-off kinds (regional sewage,
      *  cell-data caps, propane) fit without a migration. */

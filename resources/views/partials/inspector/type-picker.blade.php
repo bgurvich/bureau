@@ -30,6 +30,7 @@
             ['inventory', __('Inventory item'), 'I'],
             ['domain', __('Domain'), null],
             ['meter_reading', __('Meter reading'), null],
+            ['vehicle_service_log', __('Vehicle service'), null],
         ],
         __('Records') => [
             ['document', __('Document'), 'D'],

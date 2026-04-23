@@ -127,6 +127,7 @@ Route::middleware(['auth', 'preferences', 'household'])->group(function () {
     Route::livewire('/inventory', 'inventory-index')->name('assets.inventory');
     Route::livewire('/domains', 'domains-index')->name('assets.domains');
     Route::livewire('/meters', 'meter-readings-index')->name('assets.meters');
+    Route::livewire('/vehicles/services', 'vehicle-services-index')->name('assets.vehicle_services');
     Route::livewire('/tax', 'tax-hub')->name('fiscal.tax');
     Route::livewire('/assets', 'assets-hub')->name('assets.index');
     Route::livewire('/pets', 'pets-hub')->name('pets.index');
