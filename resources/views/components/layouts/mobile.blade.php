@@ -27,5 +27,13 @@
 
     @include('partials.mobile-tabs')
 
+    @auth
+        {{-- Inspector drawer + modal-stack drawer available on mobile too
+             so Capture-screen tiles can dispatch `inspector-open` to log
+             a journal/decision/reading/food entry inline without routing
+             to a dedicated screen per type. --}}
+        <livewire:inspector />
+        <livewire:inspector :as-modal="true" key="inspector-modal" />
+    @endauth
 </body>
 </html>
