@@ -12,6 +12,7 @@ use App\Models\Task;
 use App\Support\Enums;
 use Illuminate\Contracts\View\View;
 use Illuminate\Validation\Rule;
+use Livewire\Attributes\Computed;
 use Livewire\Attributes\On;
 use Livewire\Component;
 
@@ -19,6 +20,10 @@ use Livewire\Component;
  * Extracted Task form. Due date + priority + state + subject refs;
  * completion timestamp flips on state=='done' transitions. New tasks
  * auto-assign to the current user.
+ *
+ * Subtasks: parent_task_id is an optional FK to another task. The
+ * picker excludes the task itself + its own descendants so the user
+ * can't create a cycle; the DB-level guard is in save().
  */
 class TaskForm extends Component
 {
@@ -39,7 +44,9 @@ class TaskForm extends Component
 
     public string $state = 'open';
 
-    public function mount(?int $id = null): void
+    public ?int $parent_task_id = null;
+
+    public function mount(?int $id = null, ?int $parentId = null): void
     {
         $this->id = $id;
         if ($id !== null) {
@@ -49,9 +56,14 @@ class TaskForm extends Component
             $this->due_at = $t->due_at ? $t->due_at->format('Y-m-d\TH:i') : '';
             $this->priority = (int) $t->priority;
             $this->state = (string) $t->state;
+            $this->parent_task_id = $t->parent_task_id;
             $this->subject_refs = $this->subjectRefsFrom($t);
             $this->loadAdminMeta();
             $this->loadTagList();
+        } elseif ($parentId !== null) {
+            // "Add subtask" flow pre-fills the parent so the user can
+            // type title + save without picking.
+            $this->parent_task_id = $parentId;
         }
     }
 
@@ -64,10 +76,27 @@ class TaskForm extends Component
             'due_at' => 'nullable|date',
             'priority' => 'required|integer|between:1,5',
             'state' => ['required', Rule::in(array_keys(Enums::taskStates()))],
+            'parent_task_id' => [
+                'nullable',
+                'integer',
+                'exists:tasks,id',
+                // Self-parent is a trivial cycle; catch it here so the
+                // listing's tree walk can't recurse forever.
+                fn ($attr, $value, $fail) => $value === $this->id
+                    ? $fail(__('A task cannot be its own parent.'))
+                    : null,
+                // Descendant-as-parent would create a longer cycle. Check
+                // against the current task's descendant set.
+                fn ($attr, $value, $fail) => $value !== null && $this->id !== null
+                    && in_array($value, $this->descendantIds($this->id), true)
+                    ? $fail(__('Cannot pick a subtask of this task as its parent.'))
+                    : null,
+            ],
         ]);
 
         $data['description'] = $data['description'] ?: null;
         $data['due_at'] = $data['due_at'] ?: null;
+        $data['parent_task_id'] = $data['parent_task_id'] ?: null;
         if ($data['state'] === 'done' && $this->id) {
             $data['completed_at'] = now();
         } elseif ($data['state'] !== 'done') {
@@ -89,6 +118,58 @@ class TaskForm extends Component
         $this->persistTagList();
 
         $this->finalizeSave();
+    }
+
+    /**
+     * Candidate parents for the picker. Excludes the current task and
+     * its descendants so the user can't create a cycle through the UI.
+     * Keeps "open" tasks only — completed/dropped tasks aren't useful
+     * parents for incoming new subtasks.
+     *
+     * @return array<int, string>
+     */
+    #[Computed]
+    public function parentTaskPickerOptions(): array
+    {
+        $excluded = $this->id !== null
+            ? array_merge([$this->id], $this->descendantIds($this->id))
+            : [];
+
+        return Task::query()
+            ->whereNotIn('id', $excluded)
+            ->whereIn('state', ['open', 'waiting'])
+            ->orderBy('title')
+            ->limit(200)
+            ->pluck('title', 'id')
+            ->all();
+    }
+
+    /**
+     * Walks children recursively, collecting every descendant id so the
+     * picker + validation rule can exclude them. Guards against bad
+     * data causing infinite loops via a visited-set.
+     *
+     * @return array<int, int>
+     */
+    private function descendantIds(int $rootId): array
+    {
+        $visited = [];
+        $queue = [$rootId];
+        $out = [];
+        while ($queue !== []) {
+            $batch = Task::whereIn('parent_task_id', $queue)->pluck('id')->all();
+            $queue = [];
+            foreach ($batch as $id) {
+                if (isset($visited[$id])) {
+                    continue;
+                }
+                $visited[$id] = true;
+                $out[] = $id;
+                $queue[] = $id;
+            }
+        }
+
+        return $out;
     }
 
     protected function adminOwnerClass(): ?string

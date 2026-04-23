@@ -70,6 +70,60 @@ class extends Component
             ->get();
     }
 
+    /**
+     * Reorganize the flat filter-matched task list into a depth-ordered
+     * array so subtasks render indented under their parent when the
+     * parent is also in the result set. Orphan children (parent absent
+     * from filters) fall back to depth 0 — they still render, just
+     * without nesting.
+     *
+     * Return shape: [['task' => Task, 'depth' => int], ...].
+     *
+     * @return array<int, array{task: \App\Models\Task, depth: int}>
+     */
+    #[Computed]
+    public function taskTree(): array
+    {
+        $tasks = $this->tasks;
+        $byId = $tasks->keyBy('id');
+
+        $childrenOf = [];
+        foreach ($tasks as $t) {
+            $parentId = $t->parent_task_id;
+            if ($parentId !== null && $byId->has($parentId)) {
+                $childrenOf[$parentId][] = $t->id;
+            }
+        }
+
+        $visited = [];
+        $out = [];
+
+        $walk = function (int $id, int $depth) use (&$walk, &$out, &$visited, $childrenOf, $byId): void {
+            if (isset($visited[$id])) {
+                return;
+            }
+            $visited[$id] = true;
+            $task = $byId->get($id);
+            if (! $task) {
+                return;
+            }
+            $out[] = ['task' => $task, 'depth' => $depth];
+            foreach ($childrenOf[$id] ?? [] as $childId) {
+                $walk($childId, $depth + 1);
+            }
+        };
+
+        foreach ($tasks as $t) {
+            // Start roots: top-level tasks, and orphan children whose
+            // parent didn't make it through the filter.
+            if ($t->parent_task_id === null || ! $byId->has($t->parent_task_id)) {
+                $walk($t->id, 0);
+            }
+        }
+
+        return $out;
+    }
+
     #[Computed]
     public function counts(): array
     {
@@ -165,14 +219,26 @@ class extends Component
         </div>
     @else
         <ul class="divide-y divide-neutral-800 rounded-xl border border-neutral-800 bg-neutral-900/40">
-            @foreach ($this->tasks as $task)
+            @foreach ($this->taskTree as $node)
                 @php
+                    $task = $node['task'];
+                    $depth = $node['depth'];
                     $isDone = $task->state === 'done';
                     $dueAt = $task->due_at ? CarbonImmutable::parse($task->due_at) : null;
                     $isOverdue = ! $isDone && $dueAt && $dueAt->isPast();
                     $isDueToday = ! $isDone && $dueAt && $dueAt->isToday();
+                    // Each depth step indents by 1.5rem and draws a subtle
+                    // left rail so the tree shape is visible without a
+                    // separate gutter column.
+                    $indentStyle = $depth > 0 ? 'padding-left: '.(1 + $depth * 1.5).'rem' : '';
                 @endphp
-                <li class="flex items-start gap-3 px-4 py-3 text-sm transition hover:bg-neutral-800/30">
+                <li class="group relative flex items-start gap-3 px-4 py-3 text-sm transition hover:bg-neutral-800/30"
+                    style="{{ $indentStyle }}">
+                    @if ($depth > 0)
+                        <span aria-hidden="true"
+                              class="absolute top-0 bottom-0 w-px bg-neutral-800"
+                              style="left: {{ 1 + ($depth - 1) * 1.5 + 0.6 }}rem"></span>
+                    @endif
                     <button
                         type="button"
                         wire:click="toggle({{ $task->id }})"
@@ -217,6 +283,21 @@ class extends Component
                         </div>
                         <x-ui.tag-chips :tags="$task->tags" :active="$tagFilter" class="mt-1" />
                     </button>
+                    {{-- "Add subtask" on hover — only on rows that could
+                         plausibly hold one (open/waiting; done/dropped parents
+                         are dead-ends). Dispatches subentity-edit-open so the
+                         modal-mode inspector stacks above the drawer if one's
+                         already open. --}}
+                    @if (! $isDone && $task->state !== 'dropped')
+                        <button type="button"
+                                x-data
+                                x-on:click.stop="$dispatch('subentity-edit-open', { type: 'task', id: null, parentId: {{ $task->id }} })"
+                                aria-label="{{ __('Add subtask') }}"
+                                title="{{ __('Add subtask') }}"
+                                class="absolute right-3 top-3 rounded-md border border-neutral-800 bg-neutral-900/80 px-1.5 py-0.5 text-[10px] text-neutral-400 opacity-0 transition group-hover:opacity-100 hover:text-neutral-100 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                            + {{ __('sub') }}
+                        </button>
+                    @endif
                 </li>
             @endforeach
         </ul>

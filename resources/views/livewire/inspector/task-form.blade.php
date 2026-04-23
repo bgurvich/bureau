@@ -39,6 +39,17 @@
             @endforeach
         </select>
     </div>
+    <div>
+        <label for="i-task-parent" class="mb-1 block text-xs text-neutral-400">{{ __('Parent task') }}</label>
+        <x-ui.searchable-select
+            id="i-task-parent"
+            model="parent_task_id"
+            :options="['' => '— '.__('none').' —'] + $this->parentTaskPickerOptions"
+            placeholder="{{ __('— none —') }}"
+            edit-inspector-type="task" />
+        <p class="mt-1 text-[11px] text-neutral-500">{{ __('Nest this under another task. Only open and waiting tasks are offered as parents.') }}</p>
+        @error('parent_task_id')<div role="alert" class="mt-1 text-xs text-rose-400">{{ $message }}</div>@enderror
+    </div>
     @include('partials.inspector.fields.subjects')
     @include('partials.inspector.fields.tags')
     @include('partials.inspector.fields.admin')

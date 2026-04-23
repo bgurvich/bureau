@@ -372,6 +372,7 @@ new class extends Component
         'tax_estimated_payment' => ['parentId' => 'subentityParentId'],
         'meter_reading' => ['parentId' => 'subentityParentId'],
         'vehicle_service_log' => ['parentId' => 'subentityParentId'],
+        'task' => ['parentId' => 'subentityParentId'],
     ];
 
     /**
