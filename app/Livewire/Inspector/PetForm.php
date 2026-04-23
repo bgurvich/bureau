@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Livewire\Inspector;
 
+use App\Livewire\Inspector\Concerns\FinalizesSave;
 use App\Models\Pet;
 use App\Support\PetVaccineTemplates;
 use Illuminate\Contracts\View\View;
@@ -27,6 +28,8 @@ use Livewire\Component;
  */
 class PetForm extends Component
 {
+    use FinalizesSave;
+
     public ?int $id = null;
 
     public string $species = 'dog';
@@ -121,8 +124,7 @@ class PetForm extends Component
         // so subentity modal saves don't accidentally close the primary.
         // The payload on inspector-form-saved lets the modal instance
         // forward to subentity-edit-saved for picker refresh.
-        $this->dispatch('inspector-saved', type: 'pet', id: $this->id);
-        $this->dispatch('inspector-form-saved', type: 'pet', id: $this->id);
+        $this->finalizeSave();
     }
 
     public function render(): View

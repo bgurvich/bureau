@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Livewire\Inspector;
 
+use App\Livewire\Inspector\Concerns\FinalizesSave;
 use App\Livewire\Inspector\Concerns\HasAdminPanel;
 use App\Livewire\Inspector\Concerns\HasTagList;
 use App\Livewire\Inspector\Concerns\WithCategoryPicker;
@@ -37,6 +38,7 @@ use Livewire\Component;
  */
 class BillForm extends Component
 {
+    use FinalizesSave;
     use HasAdminPanel;
     use HasTagList;
     use WithCategoryPicker;
@@ -178,8 +180,7 @@ class BillForm extends Component
         $this->persistAdminOwner();
         $this->persistTagList();
 
-        $this->dispatch('inspector-saved', type: 'bill', id: $this->id);
-        $this->dispatch('inspector-form-saved', type: 'bill', id: $this->id);
+        $this->finalizeSave();
     }
 
     /** @return Collection<int, Account> */

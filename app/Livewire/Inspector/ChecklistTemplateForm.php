@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Livewire\Inspector;
 
+use App\Livewire\Inspector\Concerns\FinalizesSave;
 use App\Livewire\Inspector\Concerns\HasAdminPanel;
 use App\Livewire\Inspector\Concerns\HasTagList;
 use App\Models\ChecklistTemplate;
@@ -23,6 +24,7 @@ use Livewire\Component;
  */
 class ChecklistTemplateForm extends Component
 {
+    use FinalizesSave;
     use HasAdminPanel;
     use HasTagList;
 
@@ -143,8 +145,7 @@ class ChecklistTemplateForm extends Component
         $this->persistAdminOwner();
         $this->persistTagList();
 
-        $this->dispatch('inspector-saved', type: 'checklist_template', id: $this->id);
-        $this->dispatch('inspector-form-saved', type: 'checklist_template', id: $this->id);
+        $this->finalizeSave();
     }
 
     public function addItem(): void

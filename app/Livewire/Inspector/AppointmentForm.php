@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Livewire\Inspector;
 
+use App\Livewire\Inspector\Concerns\FinalizesSave;
 use App\Livewire\Inspector\Concerns\HasAdminPanel;
 use App\Livewire\Inspector\Concerns\HasPhotos;
 use App\Livewire\Inspector\Concerns\HasTagList;
@@ -26,6 +27,7 @@ use Livewire\Component;
  */
 class AppointmentForm extends Component
 {
+    use FinalizesSave;
     use HasAdminPanel;
     use HasPhotos;
     use HasTagList;
@@ -116,8 +118,7 @@ class AppointmentForm extends Component
         $this->persistAdminOwner();
         $this->persistTagList();
 
-        $this->dispatch('inspector-saved', type: 'appointment', id: $this->id);
-        $this->dispatch('inspector-form-saved', type: 'appointment', id: $this->id);
+        $this->finalizeSave();
     }
 
     /** @return Collection<int, HealthProvider> */

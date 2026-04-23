@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Livewire\Inspector;
 
+use App\Livewire\Inspector\Concerns\FinalizesSave;
 use App\Livewire\Inspector\Concerns\HasAdminPanel;
 use App\Livewire\Inspector\Concerns\HasTagList;
 use App\Models\Contact;
@@ -25,6 +26,7 @@ use Livewire\Component;
  */
 class DomainForm extends Component
 {
+    use FinalizesSave;
     use HasAdminPanel;
     use HasTagList;
 
@@ -111,8 +113,7 @@ class DomainForm extends Component
         $this->persistAdminOwner();
         $this->persistTagList();
 
-        $this->dispatch('inspector-saved', type: 'domain', id: $this->id);
-        $this->dispatch('inspector-form-saved', type: 'domain', id: $this->id);
+        $this->finalizeSave();
     }
 
     /** @return Collection<int, Contact> */

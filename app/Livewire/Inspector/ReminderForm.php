@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Livewire\Inspector;
 
+use App\Livewire\Inspector\Concerns\FinalizesSave;
 use App\Models\Reminder;
 use Illuminate\Contracts\View\View;
 use Illuminate\Validation\Rule;
@@ -16,6 +17,8 @@ use Livewire\Component;
  */
 class ReminderForm extends Component
 {
+    use FinalizesSave;
+
     public ?int $id = null;
 
     public string $reminder_title = '';
@@ -67,8 +70,7 @@ class ReminderForm extends Component
             $this->id = (int) Reminder::create($payload)->id;
         }
 
-        $this->dispatch('inspector-saved', type: 'reminder', id: $this->id);
-        $this->dispatch('inspector-form-saved', type: 'reminder', id: $this->id);
+        $this->finalizeSave();
     }
 
     public function render(): View

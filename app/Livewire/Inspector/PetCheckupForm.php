@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Livewire\Inspector;
 
+use App\Livewire\Inspector\Concerns\FinalizesSave;
 use App\Models\PetCheckup;
 use Illuminate\Contracts\View\View;
 use Livewire\Attributes\On;
@@ -16,6 +17,8 @@ use Livewire\Component;
  */
 class PetCheckupForm extends Component
 {
+    use FinalizesSave;
+
     public ?int $id = null;
 
     public ?int $pet_id = null;
@@ -83,8 +86,7 @@ class PetCheckupForm extends Component
             $this->id = (int) PetCheckup::create($payload)->id;
         }
 
-        $this->dispatch('inspector-saved', type: 'pet_checkup', id: $this->id);
-        $this->dispatch('inspector-form-saved', type: 'pet_checkup', id: $this->id);
+        $this->finalizeSave();
     }
 
     public function render(): View

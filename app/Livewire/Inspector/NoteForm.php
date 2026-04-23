@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Livewire\Inspector;
 
+use App\Livewire\Inspector\Concerns\FinalizesSave;
 use App\Livewire\Inspector\Concerns\HasAdminPanel;
 use App\Livewire\Inspector\Concerns\HasSubjectRefs;
 use App\Livewire\Inspector\Concerns\HasTagList;
@@ -20,6 +21,7 @@ use Livewire\Component;
  */
 class NoteForm extends Component
 {
+    use FinalizesSave;
     use HasAdminPanel;
     use HasSubjectRefs;
     use HasTagList;
@@ -80,8 +82,7 @@ class NoteForm extends Component
         $this->persistAdminOwner();
         $this->persistTagList();
 
-        $this->dispatch('inspector-saved', type: 'note', id: $this->id);
-        $this->dispatch('inspector-form-saved', type: 'note', id: $this->id);
+        $this->finalizeSave();
     }
 
     protected function adminOwnerClass(): ?string

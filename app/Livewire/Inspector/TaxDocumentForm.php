@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Livewire\Inspector;
 
+use App\Livewire\Inspector\Concerns\FinalizesSave;
 use App\Livewire\Inspector\Concerns\WithCounterpartyPicker;
 use App\Models\TaxDocument;
 use App\Models\TaxYear;
@@ -24,6 +25,7 @@ use Livewire\Component;
  */
 class TaxDocumentForm extends Component
 {
+    use FinalizesSave;
     use WithCounterpartyPicker;
 
     public ?int $id = null;
@@ -104,8 +106,7 @@ class TaxDocumentForm extends Component
             $this->id = (int) TaxDocument::create($payload)->id;
         }
 
-        $this->dispatch('inspector-saved', type: 'tax_document', id: $this->id);
-        $this->dispatch('inspector-form-saved', type: 'tax_document', id: $this->id);
+        $this->finalizeSave();
     }
 
     /** @return Collection<int, TaxYear> */

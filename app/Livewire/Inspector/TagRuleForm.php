@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Livewire\Inspector;
 
+use App\Livewire\Inspector\Concerns\FinalizesSave;
 use App\Models\Tag;
 use App\Models\TagRule;
 use Illuminate\Contracts\View\View;
@@ -19,6 +20,8 @@ use Livewire\Component;
  */
 class TagRuleForm extends Component
 {
+    use FinalizesSave;
+
     public ?int $id = null;
 
     public ?int $tag_rule_tag_id = null;
@@ -69,8 +72,7 @@ class TagRuleForm extends Component
             $this->id = (int) TagRule::forceCreate($payload)->id;
         }
 
-        $this->dispatch('inspector-saved', type: 'tag_rule', id: $this->id);
-        $this->dispatch('inspector-form-saved', type: 'tag_rule', id: $this->id);
+        $this->finalizeSave();
     }
 
     /** @return array<int, string> */

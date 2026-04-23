@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Livewire\Inspector;
 
+use App\Livewire\Inspector\Concerns\FinalizesSave;
 use App\Models\Contact;
 use App\Models\Contract;
 use App\Models\RecurringRule;
@@ -25,6 +26,8 @@ use Livewire\Component;
  */
 class SubscriptionForm extends Component
 {
+    use FinalizesSave;
+
     public ?int $id = null;
 
     public string $subscription_name = '';
@@ -107,8 +110,7 @@ class SubscriptionForm extends Component
             $this->id = (int) Subscription::forceCreate($payload)->id;
         }
 
-        $this->dispatch('inspector-saved', type: 'subscription', id: $this->id);
-        $this->dispatch('inspector-form-saved', type: 'subscription', id: $this->id);
+        $this->finalizeSave();
     }
 
     /** @return array<int, string> */

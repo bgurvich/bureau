@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Livewire\Inspector;
 
+use App\Livewire\Inspector\Concerns\FinalizesSave;
 use App\Models\Account;
 use App\Models\TaxEstimatedPayment;
 use App\Models\TaxYear;
@@ -24,6 +25,8 @@ use Livewire\Component;
  */
 class TaxEstimatedPaymentForm extends Component
 {
+    use FinalizesSave;
+
     public ?int $id = null;
 
     public ?int $tax_year_id = null;
@@ -95,8 +98,7 @@ class TaxEstimatedPaymentForm extends Component
             $this->id = (int) TaxEstimatedPayment::create($payload)->id;
         }
 
-        $this->dispatch('inspector-saved', type: 'tax_estimated_payment', id: $this->id);
-        $this->dispatch('inspector-form-saved', type: 'tax_estimated_payment', id: $this->id);
+        $this->finalizeSave();
     }
 
     /** @return Collection<int, TaxYear> */

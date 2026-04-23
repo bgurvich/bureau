@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Livewire\Inspector;
 
+use App\Livewire\Inspector\Concerns\FinalizesSave;
 use App\Livewire\Inspector\Concerns\WithCategoryPicker;
 use App\Models\CategoryRule;
 use Illuminate\Contracts\View\View;
@@ -17,6 +18,7 @@ use Livewire\Component;
  */
 class CategoryRuleForm extends Component
 {
+    use FinalizesSave;
     use WithCategoryPicker;
 
     public ?int $id = null;
@@ -69,8 +71,7 @@ class CategoryRuleForm extends Component
             $this->id = (int) CategoryRule::forceCreate($payload)->id;
         }
 
-        $this->dispatch('inspector-saved', type: 'category_rule', id: $this->id);
-        $this->dispatch('inspector-form-saved', type: 'category_rule', id: $this->id);
+        $this->finalizeSave();
     }
 
     protected function defaultCategoryPickerModel(): string

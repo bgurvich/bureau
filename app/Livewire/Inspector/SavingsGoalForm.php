@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Livewire\Inspector;
 
+use App\Livewire\Inspector\Concerns\FinalizesSave;
 use App\Models\SavingsGoal;
 use App\Support\CurrentHousehold;
 use Illuminate\Contracts\View\View;
@@ -18,6 +19,8 @@ use Livewire\Component;
  */
 class SavingsGoalForm extends Component
 {
+    use FinalizesSave;
+
     public ?int $id = null;
 
     public string $savings_name = '';
@@ -86,8 +89,7 @@ class SavingsGoalForm extends Component
             $this->id = (int) SavingsGoal::forceCreate($payload)->id;
         }
 
-        $this->dispatch('inspector-saved', type: 'savings_goal', id: $this->id);
-        $this->dispatch('inspector-form-saved', type: 'savings_goal', id: $this->id);
+        $this->finalizeSave();
     }
 
     public function render(): View

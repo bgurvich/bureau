@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Livewire\Inspector;
 
+use App\Livewire\Inspector\Concerns\FinalizesSave;
 use App\Models\Account;
 use App\Models\Transaction;
 use App\Models\Transfer;
@@ -28,6 +29,8 @@ use Livewire\Component;
  */
 class TransferForm extends Component
 {
+    use FinalizesSave;
+
     public ?int $id = null;
 
     public string $transfer_occurred_on = '';
@@ -149,8 +152,7 @@ class TransferForm extends Component
             $this->id = $transfer->id;
         });
 
-        $this->dispatch('inspector-saved', type: 'transfer', id: $this->id);
-        $this->dispatch('inspector-form-saved', type: 'transfer', id: $this->id);
+        $this->finalizeSave();
     }
 
     private function validatePickedTransferTransactions(

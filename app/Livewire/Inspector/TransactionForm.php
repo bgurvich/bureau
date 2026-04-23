@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Livewire\Inspector;
 
 use App\Exceptions\PeriodLockedException;
+use App\Livewire\Inspector\Concerns\FinalizesSave;
 use App\Livewire\Inspector\Concerns\HasAdminPanel;
 use App\Livewire\Inspector\Concerns\HasSubjectRefs;
 use App\Livewire\Inspector\Concerns\HasTagList;
@@ -41,6 +42,7 @@ use Livewire\Component;
  */
 class TransactionForm extends Component
 {
+    use FinalizesSave;
     use HasAdminPanel;
     use HasSubjectRefs;
     use HasTagList;
@@ -188,12 +190,12 @@ class TransactionForm extends Component
         $this->persistAdminOwner();
         $this->persistTagList();
 
-        $this->dispatch('inspector-saved', type: 'transaction', id: $this->id);
-
         if ($candidates !== []) {
-            // Tell the shell to swap to the projection-link picker
-            // instead of closing the drawer. Shell owns linkProjection
-            // + skipProjectionLink + the picker UI.
+            // Index pages still want to refresh against the new row, so
+            // fire `inspector-saved` — but NOT `inspector-form-saved`,
+            // which the shell reads as "close the drawer". Keep the
+            // drawer open on the projection-link picker instead.
+            $this->dispatch('inspector-saved', type: 'transaction', id: $this->id);
             $this->dispatch(
                 'inspector-projection-candidates',
                 transactionId: $this->id,
@@ -203,7 +205,7 @@ class TransactionForm extends Component
             return;
         }
 
-        $this->dispatch('inspector-form-saved', type: 'transaction', id: $this->id);
+        $this->finalizeSave();
     }
 
     public function updatedCategoryId(): void

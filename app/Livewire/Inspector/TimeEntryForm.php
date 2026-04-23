@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Livewire\Inspector;
 
+use App\Livewire\Inspector\Concerns\FinalizesSave;
 use App\Models\TimeEntry;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\View\View;
@@ -24,6 +25,8 @@ use Livewire\Component;
  */
 class TimeEntryForm extends Component
 {
+    use FinalizesSave;
+
     public ?int $id = null;
 
     public string $activity_date = '';
@@ -91,8 +94,7 @@ class TimeEntryForm extends Component
             $this->id = (int) TimeEntry::create($payload)->id;
         }
 
-        $this->dispatch('inspector-saved', type: 'time_entry', id: $this->id);
-        $this->dispatch('inspector-form-saved', type: 'time_entry', id: $this->id);
+        $this->finalizeSave();
     }
 
     public function render(): View

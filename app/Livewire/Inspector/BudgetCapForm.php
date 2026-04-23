@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Livewire\Inspector;
 
+use App\Livewire\Inspector\Concerns\FinalizesSave;
 use App\Livewire\Inspector\Concerns\WithCategoryPicker;
 use App\Models\BudgetCap;
 use App\Support\CurrentHousehold;
@@ -18,6 +19,7 @@ use Livewire\Component;
  */
 class BudgetCapForm extends Component
 {
+    use FinalizesSave;
     use WithCategoryPicker;
 
     public ?int $id = null;
@@ -68,8 +70,7 @@ class BudgetCapForm extends Component
             $this->id = (int) BudgetCap::forceCreate($payload)->id;
         }
 
-        $this->dispatch('inspector-saved', type: 'budget_cap', id: $this->id);
-        $this->dispatch('inspector-form-saved', type: 'budget_cap', id: $this->id);
+        $this->finalizeSave();
     }
 
     protected function defaultCategoryPickerModel(): string
