@@ -110,10 +110,12 @@ class SendWeeklyDigest extends Command
         // Unknown-cadence entries skipped from the total (better dash than lie,
         // but the digest just surfaces a total — we omit unknowns silently
         // and reflect the shortfall in the count vs total).
+        // Storage is signed (outflows negative); the digest shows a
+        // subscription-spend magnitude, so take the absolute value here.
         $subscriptionsMonthly = 0.0;
         foreach ($subscriptions as $s) {
             if ($s->monthly_cost_cached !== null) {
-                $subscriptionsMonthly += (float) $s->monthly_cost_cached;
+                $subscriptionsMonthly += abs((float) $s->monthly_cost_cached);
             }
         }
 

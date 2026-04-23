@@ -1,22 +1,23 @@
 <?php
 
+use App\Models\RecurringRule;
 use App\Models\Subscription;
 use App\Support\CurrentHousehold;
-use App\Support\Formatting;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\On;
+use Livewire\Attributes\Url;
 use Livewire\Component;
 
 new class extends Component
 {
     /** Toggles whether cancelled rows are visible. URL-persisted so refresh doesn't lose it. */
-    #[\Livewire\Attributes\Url(as: 'cancelled')]
+    #[Url(as: 'cancelled')]
     public bool $showCancelled = false;
 
-    #[\Livewire\Attributes\Url(as: 'sort')]
+    #[Url(as: 'sort')]
     public string $sortBy = 'name';
 
-    #[\Livewire\Attributes\Url(as: 'dir')]
+    #[Url(as: 'dir')]
     public string $sortDir = 'asc';
 
     public function sort(string $column): void
@@ -43,10 +44,10 @@ new class extends Component
         $states = $this->showCancelled ? ['active', 'paused', 'cancelled'] : ['active', 'paused'];
 
         $query = Subscription::with([
-                'recurringRule:id,title,amount,currency,rrule',
-                'contract:id,title,cancellation_url,cancellation_email,ends_on,auto_renews',
-                'counterparty:id,display_name',
-            ])
+            'recurringRule:id,title,amount,currency,rrule',
+            'contract:id,title,cancellation_url,cancellation_email,ends_on,auto_renews',
+            'counterparty:id,display_name',
+        ])
             ->whereIn('state', $states)
             ->orderByRaw("FIELD(state, 'active', 'paused', 'cancelled')");
 
@@ -56,7 +57,7 @@ new class extends Component
         match ($this->sortBy) {
             'monthly' => $query->orderBy('monthly_cost_cached', $this->sortDir),
             'amount' => $query->orderBy(
-                \App\Models\RecurringRule::select('amount')->whereColumn('recurring_rules.id', 'subscriptions.recurring_rule_id'),
+                RecurringRule::select('amount')->whereColumn('recurring_rules.id', 'subscriptions.recurring_rule_id'),
                 $this->sortDir,
             ),
             default => $query->orderBy('name', $this->sortDir),
@@ -88,7 +89,7 @@ new class extends Component
         if (! in_array($state, ['active', 'paused', 'cancelled'], true)) {
             return;
         }
-        \App\Models\Subscription::where('id', $id)->update(['state' => $state]);
+        Subscription::where('id', $id)->update(['state' => $state]);
         unset($this->subscriptions);
     }
 
@@ -105,7 +106,9 @@ new class extends Component
                 // Any row with unknown cadence voids the total — better a dash than a lie.
                 return null;
             }
-            $sum += (float) $s->monthly_cost_cached;
+            // Stored signed (outflows negative); the header shows a
+            // "total monthly spend" magnitude, so accumulate absolute.
+            $sum += abs((float) $s->monthly_cost_cached);
         }
 
         return $sum;
@@ -129,17 +132,23 @@ new class extends Component
     <x-ui.page-header
         :title="__('Subscriptions')"
         :description="__('Auto-created from active recurring outflows. Link a contract to surface cancellation affordance.')">
+        {{-- Storage is signed (negative for outflows, matches the ledger
+             convention); this page is a subscriptions overview where every
+             row is an outflow by construction, so we render all amounts
+             as magnitudes. Users read "$12/mo" as "I pay $12/mo", not
+             "my balance moves by -$12/mo" — the minus sign is redundant
+             and distracting when every row shares the same direction. --}}
         <div class="text-right text-xs">
             <div class="font-mono tabular-nums text-neutral-100">
                 @if ($this->monthlyTotal !== null)
-                    {{ Formatting::money($this->monthlyTotal, $currency) }}/mo
+                    {{ \App\Support\Formatting::money(abs($this->monthlyTotal), $currency) }}/mo
                 @else
                     —
                 @endif
             </div>
             <div class="font-mono tabular-nums text-neutral-500">
                 @if ($this->annualTotal !== null)
-                    {{ Formatting::money($this->annualTotal, $currency) }}/yr
+                    {{ \App\Support\Formatting::money(abs($this->annualTotal), $currency) }}/yr
                 @endif
             </div>
         </div>
@@ -192,14 +201,14 @@ new class extends Component
                             </td>
                             <td class="px-3 py-2 text-right font-mono tabular-nums text-neutral-200">
                                 @if ($s->recurringRule)
-                                    {{ Formatting::money(abs((float) $s->recurringRule->amount), $s->recurringRule->currency ?? $s->currency ?? $currency) }}
+                                    {{ \App\Support\Formatting::money(abs((float) $s->recurringRule->amount), $s->recurringRule->currency ?? $s->currency ?? $currency) }}
                                 @else
                                     <span class="text-neutral-600">—</span>
                                 @endif
                             </td>
                             <td class="px-3 py-2 text-right font-mono tabular-nums text-neutral-200">
                                 @if ($s->monthly_cost_cached !== null)
-                                    {{ Formatting::money((float) $s->monthly_cost_cached, $s->currency ?? $currency) }}
+                                    {{ \App\Support\Formatting::money(abs((float) $s->monthly_cost_cached), $s->currency ?? $currency) }}
                                 @else
                                     <span class="text-amber-400" title="{{ __('Cadence not recognized') }}">—</span>
                                 @endif

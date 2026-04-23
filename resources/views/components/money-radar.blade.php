@@ -10,7 +10,7 @@ use App\Models\Subscription;
 use App\Models\Transaction;
 use App\Models\Transfer;
 use App\Models\Vehicle;
-use App\Support\Formatting;
+use App\Support\CurrentHousehold;
 use Livewire\Attributes\Computed;
 use Livewire\Component;
 
@@ -119,7 +119,10 @@ new class extends Component
             if ($s->monthly_cost_cached === null) {
                 return null;
             }
-            $sum += (float) $s->monthly_cost_cached;
+            // Storage is signed (outflows are negative); this tile is
+            // a "subscription spend" magnitude the user reads as the
+            // dollars they pay, so render the magnitude regardless.
+            $sum += abs((float) $s->monthly_cost_cached);
         }
 
         return $sum;
@@ -193,7 +196,7 @@ new class extends Component
     #[Computed]
     public function currency(): string
     {
-        return \App\Support\CurrentHousehold::get()?->default_currency ?? 'USD';
+        return CurrentHousehold::get()?->default_currency ?? 'USD';
     }
 };
 ?>
@@ -209,7 +212,7 @@ new class extends Component
             <div class="text-xs text-neutral-500">Net worth</div>
             <div class="mt-1 flex items-baseline justify-between gap-4">
                 <div class="text-2xl font-semibold tabular-nums text-neutral-100">
-                    {{ Formatting::money($this->netWorth, $this->currency) }}
+                    {{ \App\Support\Formatting::money($this->netWorth, $this->currency) }}
                 </div>
                 @if (count($this->trend) >= 2)
                     @php
@@ -241,13 +244,13 @@ new class extends Component
             <div>
                 <div class="text-xs text-neutral-500">This month</div>
                 <div class="mt-1 text-sm tabular-nums {{ $this->monthToDateCashflow >= 0 ? 'text-emerald-400' : 'text-rose-400' }}">
-                    {{ $this->monthToDateCashflow >= 0 ? '+' : '' }}{{ Formatting::money($this->monthToDateCashflow, $this->currency) }}
+                    {{ $this->monthToDateCashflow >= 0 ? '+' : '' }}{{ \App\Support\Formatting::money($this->monthToDateCashflow, $this->currency) }}
                 </div>
             </div>
             <div>
                 <div class="text-xs text-neutral-500">Next 30 days out</div>
                 <div class="mt-1 text-sm tabular-nums text-neutral-300">
-                    {{ Formatting::money($this->next30DaysObligations, $this->currency) }}
+                    {{ \App\Support\Formatting::money($this->next30DaysObligations, $this->currency) }}
                 </div>
             </div>
         </div>
@@ -259,7 +262,7 @@ new class extends Component
                     <span>{{ __(':n subscriptions', ['n' => $this->subscriptionsCount]) }}</span>
                     <span class="tabular-nums text-neutral-200">
                         @if ($this->subscriptionsMonthly !== null)
-                            {{ Formatting::money($this->subscriptionsMonthly, $this->currency) }}/mo
+                            {{ \App\Support\Formatting::money($this->subscriptionsMonthly, $this->currency) }}/mo
                         @else
                             —
                         @endif
@@ -274,13 +277,13 @@ new class extends Component
                 <div class="flex items-baseline justify-between gap-3 text-xs">
                     <span class="text-neutral-500">{{ __('30d projected net') }}</span>
                     <span class="tabular-nums {{ $f['net'] >= 0 ? 'text-emerald-400' : 'text-rose-400' }}">
-                        {{ $f['net'] >= 0 ? '+' : '' }}{{ Formatting::money($f['net'], $this->currency) }}
+                        {{ $f['net'] >= 0 ? '+' : '' }}{{ \App\Support\Formatting::money($f['net'], $this->currency) }}
                     </span>
                 </div>
                 <div class="mt-0.5 flex items-baseline justify-between gap-3 text-[11px] text-neutral-500">
                     <span>{{ __('Ends near') }}</span>
                     <span class="tabular-nums text-neutral-300">
-                        {{ Formatting::money($f['end_balance'], $this->currency) }}
+                        {{ \App\Support\Formatting::money($f['end_balance'], $this->currency) }}
                     </span>
                 </div>
             </div>

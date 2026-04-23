@@ -12,6 +12,7 @@ use App\Models\Subscription;
 use App\Models\Task;
 use App\Models\Transaction;
 use App\Models\Vehicle;
+use App\Support\Enums;
 use App\Support\Formatting;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Computed;
@@ -126,7 +127,7 @@ new class extends Component
             ->orderByDesc('favorite')->orderBy('display_name')
             ->limit(5)->get(['id', 'display_name', 'kind', 'organization', 'contact_roles']) as $c) {
             $roleLabels = [];
-            $roleCatalog = App\Support\Enums::contactRoles();
+            $roleCatalog = Enums::contactRoles();
             foreach ((array) ($c->contact_roles ?? []) as $slug) {
                 if (isset($roleCatalog[$slug])) {
                     $roleLabels[] = $roleCatalog[$slug];
@@ -170,7 +171,7 @@ new class extends Component
                 'type' => 'subscription', 'id' => (int) $s->id,
                 'title' => (string) $s->name,
                 'subtitle' => $s->monthly_cost_cached
-                    ? Formatting::money((float) $s->monthly_cost_cached, $s->currency ?? 'USD').'/mo'
+                    ? Formatting::money(abs((float) $s->monthly_cost_cached), $s->currency ?? 'USD').'/mo'
                     : '',
                 'group' => __('Subscriptions'),
                 'inspector' => true,
