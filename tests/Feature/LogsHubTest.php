@@ -11,7 +11,9 @@ it('logs hub renders with the Journal tab by default', function () {
         ->assertSee('Journal')
         ->assertSee('Decisions')
         ->assertSee('Reading / watching')
-        ->assertSee('Food');
+        ->assertSee('Food')
+        ->assertSee('Body')
+        ->assertSee('Time');
 });
 
 it('logs hub remembers the last-selected tab', function () {

@@ -3,6 +3,7 @@
 use App\Exceptions\PeriodLockedException;
 use App\Models\Account;
 use App\Models\Appointment;
+use App\Models\BodyMeasurement;
 use App\Models\BudgetCap;
 use App\Models\CategoryRule;
 use App\Models\ChecklistTemplate;
@@ -331,6 +332,7 @@ new class extends Component
                 'decision' => Decision::findOrFail($this->id)->delete(),
                 'goal' => Goal::findOrFail($this->id)->delete(),
                 'appointment' => Appointment::findOrFail($this->id)->delete(),
+                'body_measurement' => BodyMeasurement::findOrFail($this->id)->delete(),
                 default => null,
             };
         } catch (PeriodLockedException $e) {
@@ -456,6 +458,7 @@ new class extends Component
             'food_entry' => __('food entry'),
             'decision' => __('decision'),
             'goal' => __('goal'),
+            'body_measurement' => __('body measurement'),
             'reminder' => __('reminder'),
             'appointment' => __('appointment'),
             'subscription' => __('subscription'),

@@ -32,7 +32,7 @@ class extends Component
 
     public function setTab(string $tab): void
     {
-        if (in_array($tab, ['journal', 'decisions', 'media_log', 'food'], true)) {
+        if (in_array($tab, ['journal', 'decisions', 'media_log', 'food', 'body', 'time'], true)) {
             $this->tab = $tab;
             HubTabMemory::remember('logs', $tab);
         }
@@ -52,6 +52,8 @@ class extends Component
             'decisions' => __('Decisions'),
             'media_log' => __('Reading / watching'),
             'food' => __('Food'),
+            'body' => __('Body'),
+            'time' => __('Time'),
         ];
     @endphp
 
@@ -81,6 +83,12 @@ class extends Component
                 @break
             @case('food')
                 <livewire:food-log-index :key="'logs-food'" />
+                @break
+            @case('body')
+                <livewire:body-measurements-index :key="'logs-body'" />
+                @break
+            @case('time')
+                <livewire:time-entries-index :key="'logs-time'" />
                 @break
             @default
                 <livewire:journal-index :key="'logs-journal'" />

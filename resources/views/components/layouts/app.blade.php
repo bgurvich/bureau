@@ -57,23 +57,17 @@
                                 [__('Recurring'), 'fiscal.recurring', 'receipt'],
                                 [__('Planning'), 'fiscal.planning', 'pie'],
                                 [__('Taxes'), 'fiscal.tax', 'file-text'],
+                                [__('Commitments'), 'fiscal.commitments', 'file-signature'],
                                 [__('Rules'), 'fiscal.rules', 'note'],
                             ],
                             __('Life') => [
                                 [__('Schedule'), 'life.schedule', 'calendar'],
                                 [__('Logs'), 'life.logs', 'book'],
                                 [__('Goals'), 'life.goals', 'pie'],
+                                [__('Projects'), 'time.projects', 'folder'],
                                 [__('Contacts'), 'relationships.contacts', 'user'],
                                 [__('Assets'), 'assets.index', 'box'],
                                 [__('Records'), 'records.index', 'file-text'],
-                            ],
-                            __('Time') => [
-                                [__('Projects'), 'time.projects', 'folder'],
-                                [__('Time entries'), 'time.entries', 'clock'],
-                            ],
-                            __('Commitments') => [
-                                [__('Contracts'), 'relationships.contracts', 'file-signature'],
-                                [__('Insurance'), 'relationships.insurance', 'shield'],
                             ],
                             __('Health') => [
                                 [__('Health'), 'health.index', 'stethoscope'],
