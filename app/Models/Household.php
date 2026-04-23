@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Stancl\Tenancy\Contracts\Tenant;
@@ -12,7 +11,7 @@ use Stancl\Tenancy\Database\Concerns\HasDomains;
 
 class Household extends Model implements Tenant, TenantWithDatabase
 {
-    use HasDatabase, HasDomains, HasFactory;
+    use HasDatabase, HasDomains;
 
     protected $guarded = [];
 
@@ -25,29 +24,31 @@ class Household extends Model implements Tenant, TenantWithDatabase
         return 'id';
     }
 
-    public function getTenantKey()
+    /** Tenant key is the integer primary key. */
+    public function getTenantKey(): int|string
     {
         return $this->id;
     }
 
+    /** @return array<int, string> */
     public static function getCustomColumns(): array
     {
         return ['id', 'name', 'default_currency', 'created_at', 'updated_at'];
     }
 
-    public function getInternal(string $key)
+    public function getInternal(string $key): mixed
     {
         return $this->getAttribute($key);
     }
 
-    public function setInternal(string $key, $value): static
+    public function setInternal(string $key, mixed $value): static
     {
         $this->setAttribute($key, $value);
 
         return $this;
     }
 
-    public function run(callable $callback)
+    public function run(callable $callback): mixed
     {
         return $callback($this);
     }

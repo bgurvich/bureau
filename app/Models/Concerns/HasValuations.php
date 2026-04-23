@@ -4,6 +4,7 @@ namespace App\Models\Concerns;
 
 use App\Models\AssetValuation;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
+use Illuminate\Database\Eloquent\Relations\MorphOne;
 
 trait HasValuations
 {
@@ -13,7 +14,8 @@ trait HasValuations
         return $this->morphMany(AssetValuation::class, 'valuable');
     }
 
-    public function latestValuation()
+    /** @return MorphOne<AssetValuation, $this> */
+    public function latestValuation(): MorphOne
     {
         return $this->morphOne(AssetValuation::class, 'valuable')->latestOfMany('as_of');
     }
