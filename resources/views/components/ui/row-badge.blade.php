@@ -9,7 +9,7 @@
         'cancelled', 'abandoned' => 'bg-rose-900/30 text-rose-300',
         'achieved', 'done' => 'bg-emerald-900/30 text-emerald-300',
         'warning' => 'bg-amber-900/30 text-amber-300',
-        'over' => 'bg-rose-900/30 text-rose-300',
+        'over', 'overdue', 'error' => 'bg-rose-900/30 text-rose-300',
         default => 'bg-neutral-800 text-neutral-400',
     };
 @endphp

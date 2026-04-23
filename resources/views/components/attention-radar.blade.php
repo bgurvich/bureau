@@ -6,6 +6,7 @@ use App\Models\Contract;
 use App\Models\Decision;
 use App\Models\Domain;
 use App\Models\Goal;
+use App\Models\Integration;
 use App\Models\InventoryItem;
 use App\Models\Media;
 use App\Models\PetCheckup;
@@ -312,6 +313,20 @@ new class extends Component
             ->count();
     }
 
+    /**
+     * Integrations in status=error — the provider refused our credential
+     * and the owner has to re-authenticate (Gmail revoke, password
+     * change, TOS accept, etc.). Rows live on /profile > Personal
+     * integrations.
+     */
+    #[Computed]
+    public function integrationsNeedingReconnect(): int
+    {
+        return Integration::query()
+            ->where('status', 'error')
+            ->count();
+    }
+
     #[Computed]
     public function total(): int
     {
@@ -336,7 +351,8 @@ new class extends Component
             + $this->expiringPetLicenses
             + $this->decisionFollowUpsDue
             + $this->goalsBehindPace
-            + $this->goalsStale;
+            + $this->goalsStale
+            + $this->integrationsNeedingReconnect;
     }
 };
 ?>
@@ -513,6 +529,15 @@ new class extends Component
                         {{ __('Directions due for check-in') }}
                     </a>
                     <span class="tabular-nums text-amber-400">{{ $this->goalsStale }}</span>
+                </li>
+            @endif
+            @if ($this->integrationsNeedingReconnect)
+                <li class="flex items-baseline justify-between">
+                    <a href="{{ route('profile') }}#personal-integrations-heading"
+                       class="text-neutral-300 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                        {{ __('Integrations need reconnection') }}
+                    </a>
+                    <span class="tabular-nums text-rose-400">{{ $this->integrationsNeedingReconnect }}</span>
                 </li>
             @endif
         </ul>

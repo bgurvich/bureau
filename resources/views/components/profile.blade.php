@@ -372,22 +372,35 @@ new class extends Component
         @else
             <ul class="divide-y divide-neutral-800 rounded-md border border-neutral-800">
                 @foreach ($this->personalIntegrations as $int)
-                    <li class="flex items-center justify-between gap-3 px-3 py-2 text-xs" wire:key="personal-integration-{{ $int->id }}">
+                    <li class="flex items-start justify-between gap-3 px-3 py-2 text-xs" wire:key="personal-integration-{{ $int->id }}">
                         <div class="min-w-0">
                             <div class="text-neutral-100">{{ $int->label ?: $int->provider }}</div>
                             <div class="text-[11px] text-neutral-500">
                                 {{ $int->provider }} · {{ $int->kind }} ·
-                                <x-ui.row-badge :state="$int->status === 'active' ? 'active' : 'paused'">{{ $int->status }}</x-ui.row-badge>
+                                <x-ui.row-badge :state="$int->status === 'active' ? 'active' : ($int->status === 'error' ? 'overdue' : 'paused')">{{ $int->status }}</x-ui.row-badge>
                                 @if ($int->last_synced_at)
                                     · {{ __('synced :when', ['when' => $int->last_synced_at->diffForHumans()]) }}
                                 @endif
                             </div>
+                            @if ($int->status === 'error' && $int->last_error)
+                                <div class="mt-1 rounded bg-rose-900/20 px-2 py-1 text-[11px] text-rose-200">
+                                    {{ $int->last_error }}
+                                </div>
+                            @endif
                         </div>
-                        <button type="button" wire:click="disconnectIntegration({{ $int->id }})"
-                                wire:confirm="{{ __('Disconnect :n? This removes stored credentials; you\'ll need to reconnect to resume syncing.', ['n' => $int->label ?: $int->provider]) }}"
-                                class="rounded border border-rose-800/40 bg-rose-900/20 px-2 py-1 text-rose-200 hover:bg-rose-900/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
-                            {{ __('Disconnect') }}
-                        </button>
+                        <div class="flex shrink-0 items-center gap-2">
+                            @if ($int->provider === 'gmail' && $int->status === 'error')
+                                <a href="{{ route('integrations.gmail.connect') }}"
+                                   class="rounded border border-amber-800/50 bg-amber-900/30 px-2 py-1 text-amber-200 hover:bg-amber-900/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                                    {{ __('Reconnect') }}
+                                </a>
+                            @endif
+                            <button type="button" wire:click="disconnectIntegration({{ $int->id }})"
+                                    wire:confirm="{{ __('Disconnect :n? This removes stored credentials; you\'ll need to reconnect to resume syncing.', ['n' => $int->label ?: $int->provider]) }}"
+                                    class="rounded border border-rose-800/40 bg-rose-900/20 px-2 py-1 text-rose-200 hover:bg-rose-900/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                                {{ __('Disconnect') }}
+                            </button>
+                        </div>
                     </li>
                 @endforeach
             </ul>

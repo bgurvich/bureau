@@ -251,6 +251,7 @@ class GmailProvider implements MailProvider
         $refresh = (string) ($creds['refresh_token'] ?? '');
         if ($refresh === '') {
             Log::warning('Gmail integration missing refresh_token', ['integration_id' => $integration->id]);
+            $this->markNeedsReconnect($integration, 'Missing refresh token — reconnect Gmail.');
 
             return null;
         }
@@ -258,7 +259,7 @@ class GmailProvider implements MailProvider
         $expiresAt = isset($creds['access_token_expires_at']) ? (int) $creds['access_token_expires_at'] : 0;
         $access = (string) ($creds['access_token'] ?? '');
         if ($access === '' || $expiresAt <= time() + 30) {
-            $tokens = $this->refreshAccessToken($refresh);
+            $tokens = $this->refreshAccessToken($refresh, $integration);
             if ($tokens === null) {
                 return null;
             }
@@ -273,9 +274,23 @@ class GmailProvider implements MailProvider
     }
 
     /**
+     * Flag the integration as needing owner attention. Sets status=error
+     * + last_error so the attention-radar tile can surface it and the
+     * profile page can render a Reconnect prompt. Only call when the
+     * provider has refused us — silent-on-success elsewhere.
+     */
+    private function markNeedsReconnect(Integration $integration, string $reason): void
+    {
+        $integration->forceFill([
+            'status' => 'error',
+            'last_error' => $reason,
+        ])->save();
+    }
+
+    /**
      * @return array{access_token: string, expires_in: int}|null
      */
-    private function refreshAccessToken(string $refreshToken): ?array
+    private function refreshAccessToken(string $refreshToken, ?Integration $integration = null): ?array
     {
         $clientId = (string) config('services.google.client_id', '');
         $clientSecret = (string) config('services.google.client_secret', '');
@@ -294,11 +309,21 @@ class GmailProvider implements MailProvider
             ]);
         } catch (\Throwable $e) {
             Log::warning('Gmail token refresh failed', ['error' => $e->getMessage()]);
+            if ($integration) {
+                $this->markNeedsReconnect($integration, 'Token refresh network error: '.$e->getMessage());
+            }
 
             return null;
         }
         if (! $response->successful()) {
             Log::warning('Gmail token refresh non-2xx', ['status' => $response->status(), 'body' => $response->body()]);
+            // 400 invalid_grant is the canonical "refresh token revoked"
+            // response Google returns when the user revoked the app, the
+            // password changed, or TOS changed. 401 same bucket. Mark the
+            // integration so the radar surfaces it.
+            if ($integration && in_array($response->status(), [400, 401], true)) {
+                $this->markNeedsReconnect($integration, 'Gmail refresh token rejected — reconnect required.');
+            }
 
             return null;
         }
