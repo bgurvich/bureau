@@ -19,7 +19,8 @@
                 id="i-tr-from"
                 model="transfer_from_account_id"
                 :options="['' => '—'] + $this->accounts->mapWithKeys(fn ($a) => [$a->id => $a->name.' · '.$a->currency])->all()"
-                placeholder="—" />
+                placeholder="—"
+                edit-inspector-type="account" />
             @error('transfer_from_account_id')<div role="alert" class="mt-1 text-xs text-rose-400">{{ $message }}</div>@enderror
         </div>
         <div>
@@ -28,7 +29,8 @@
                 id="i-tr-to"
                 model="transfer_to_account_id"
                 :options="['' => '—'] + $this->accounts->mapWithKeys(fn ($a) => [$a->id => $a->name.' · '.$a->currency])->all()"
-                placeholder="—" />
+                placeholder="—"
+                edit-inspector-type="account" />
             @error('transfer_to_account_id')<div role="alert" class="mt-1 text-xs text-rose-400">{{ $message }}</div>@enderror
         </div>
     </div>
@@ -70,7 +72,8 @@
                 id="i-tr-from-txn"
                 model="transfer_from_transaction_id"
                 :options="['' => __('Create new').'…'] + $this->transferOutflowPickerOptions"
-                placeholder="—" />
+                placeholder="—"
+                edit-inspector-type="transaction" />
             @error('transfer_from_transaction_id')<div role="alert" class="mt-1 text-xs text-rose-400">{{ $message }}</div>@enderror
         </div>
 
@@ -80,7 +83,8 @@
                 id="i-tr-to-txn"
                 model="transfer_to_transaction_id"
                 :options="['' => __('Create new').'…'] + $this->transferInflowPickerOptions"
-                placeholder="—" />
+                placeholder="—"
+                edit-inspector-type="transaction" />
             @error('transfer_to_transaction_id')<div role="alert" class="mt-1 text-xs text-rose-400">{{ $message }}</div>@enderror
         </div>
     </div>

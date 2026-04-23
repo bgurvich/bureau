@@ -39,7 +39,8 @@
             :options="['' => '—'] + $this->contacts->mapWithKeys(fn ($c) => [$c->id => $c->display_name])->all()"
             placeholder="—"
             allow-create
-            create-method="createCounterparty" />
+            create-method="createCounterparty"
+            edit-inspector-type="contact" />
         <p class="mt-1 text-[11px] text-neutral-500">{{ __('Employer, bank, broker, or partnership.') }}</p>
     </div>
 

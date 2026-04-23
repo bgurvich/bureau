@@ -52,7 +52,8 @@
             :options="['' => '—'] + $this->contacts->mapWithKeys(fn ($c) => [$c->id => $c->display_name])->all()"
             placeholder="—"
             allow-create
-            create-method="createCounterparty" />
+            create-method="createCounterparty"
+            edit-inspector-type="contact" />
         <p class="mt-1 text-[11px] text-neutral-500">{{ __('Who issued this — used mainly for gift cards and prepaid.') }}</p>
     </div>
     <div class="grid grid-cols-2 gap-3">

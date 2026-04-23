@@ -12,7 +12,8 @@
             id="i-sub-counter"
             model="subscription_counterparty_id"
             :options="['' => '— '.__('none').' —'] + $this->counterpartyPickerOptions"
-            placeholder="{{ __('— none —') }}" />
+            placeholder="{{ __('— none —') }}"
+            edit-inspector-type="contact" />
     </div>
     <div>
         <label for="i-sub-rule" class="mb-1 block text-xs text-neutral-400">{{ __('Recurring rule (money side)') }}</label>
@@ -20,8 +21,9 @@
             id="i-sub-rule"
             model="subscription_recurring_rule_id"
             :options="['' => '— '.__('none').' —'] + $this->recurringOutflowRulePickerOptions"
-            placeholder="{{ __('— none —') }}" />
-        <p class="mt-1 text-[11px] text-neutral-500">{{ __('New subscriptions auto-create one when you save a matching recurring rule. You can also link an existing rule here.') }}</p>
+            placeholder="{{ __('— none —') }}"
+            edit-inspector-type="bill" />
+        <p class="mt-1 text-[11px] text-neutral-500">{{ __('New subscriptions auto-create one when you save a matching recurring rule. Click the pencil to edit the amount or schedule.') }}</p>
     </div>
     <div>
         <label for="i-sub-contract" class="mb-1 block text-xs text-neutral-400">{{ __('Contract (cancellation side)') }}</label>
@@ -29,7 +31,8 @@
             id="i-sub-contract"
             model="subscription_contract_id"
             :options="['' => '— '.__('none').' —'] + $this->openContractPickerOptions"
-            placeholder="{{ __('— none —') }}" />
+            placeholder="{{ __('— none —') }}"
+            edit-inspector-type="contract" />
     </div>
     <div class="grid grid-cols-2 gap-3">
         <div>

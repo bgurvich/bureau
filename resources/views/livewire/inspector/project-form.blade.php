@@ -21,7 +21,8 @@
             :options="['' => '—'] + $this->contacts->mapWithKeys(fn ($c) => [$c->id => $c->display_name])->all()"
             placeholder="—"
             allow-create
-            create-method="createCounterparty" />
+            create-method="createCounterparty"
+            edit-inspector-type="contact" />
     </div>
     <div class="flex items-center gap-4">
         <label class="flex items-center gap-2 text-sm text-neutral-200">

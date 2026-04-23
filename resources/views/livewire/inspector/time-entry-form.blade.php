@@ -23,7 +23,8 @@
             id="i-te-project"
             model="project_id"
             :options="['' => '—'] + \App\Models\Project::orderBy('name')->pluck('name', 'id')->all()"
-            placeholder="—" />
+            placeholder="—"
+            edit-inspector-type="project" />
         @error('project_id')<div role="alert" class="mt-1 text-xs text-rose-400">{{ $message }}</div>@enderror
     </div>
 
@@ -33,7 +34,8 @@
             id="i-te-task"
             model="task_id"
             :options="['' => '—'] + \App\Models\Task::orderByDesc('created_at')->limit(100)->pluck('title', 'id')->all()"
-            placeholder="—" />
+            placeholder="—"
+            edit-inspector-type="task" />
         @error('task_id')<div role="alert" class="mt-1 text-xs text-rose-400">{{ $message }}</div>@enderror
     </div>
 

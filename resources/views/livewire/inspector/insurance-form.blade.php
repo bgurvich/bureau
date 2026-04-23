@@ -30,7 +30,8 @@
             :options="['' => '—'] + $this->contacts->mapWithKeys(fn ($c) => [$c->id => $c->display_name])->all()"
             placeholder="—"
             allow-create
-            create-method="createCounterparty" />
+            create-method="createCounterparty"
+            edit-inspector-type="contact" />
     </div>
     <div>
         <label for="i-ins-subj" class="mb-1 block text-xs text-neutral-400">{{ __('Covered subject') }}</label>

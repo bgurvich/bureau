@@ -53,7 +53,8 @@
                 id="i-dom-registrant"
                 model="domain_registrant_contact_id"
                 :options="['' => '—'] + $this->contacts->mapWithKeys(fn ($c) => [$c->id => $c->display_name])->all()"
-                placeholder="—" />
+                placeholder="—"
+                edit-inspector-type="contact" />
         </div>
     </div>
 

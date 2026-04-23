@@ -70,7 +70,8 @@
             :options="['' => '—'] + $this->contacts->mapWithKeys(fn ($c) => [$c->id => $c->display_name])->all()"
             placeholder="—"
             allow-create
-            create-method="createCounterparty" />
+            create-method="createCounterparty"
+            edit-inspector-type="contact" />
     </div>
 
     <hr class="border-neutral-800">
@@ -81,7 +82,8 @@
             id="i-oa-contract"
             model="oa_linked_contract_id"
             :options="['' => '—'] + $this->contracts->mapWithKeys(fn ($c) => [$c->id => $c->title])->all()"
-            placeholder="—" />
+            placeholder="—"
+            edit-inspector-type="contract" />
         <p class="mt-1 text-[11px] text-neutral-500">{{ __('Link to the contract/subscription this account auto-charges.') }}</p>
     </div>
 

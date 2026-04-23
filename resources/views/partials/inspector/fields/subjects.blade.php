@@ -13,6 +13,18 @@
         <x-ui.sortable-list reorder-method="reorderSubjects" class="mb-2 space-y-1" data-testid="subject-chips">
             @foreach ($subject_refs as $ref)
                 @php($meta = $this->selectedSubjectsMeta[$ref] ?? ['label' => $ref, 'kind_label' => ''])
+                @php($parts = explode(':', $ref, 2))
+                @php($editKind = $parts[0] ?? '')
+                @php($editId = isset($parts[1]) && is_numeric($parts[1]) ? (int) $parts[1] : null)
+                {{-- SUBJECT_KIND_MAP kinds → inspector-shell type names.
+                     Most match 1:1; 'recurring_rule' shows in the shell as 'bill',
+                     and health_provider has no inspector form so we hide the
+                     pencil (map = null → rendered as !$editInspectorType). --}}
+                @php($editInspectorType = match ($editKind) {
+                    'recurring_rule' => 'bill',
+                    'health_provider' => null,
+                    default => $editKind,
+                })
                 <x-ui.sortable-row :item-key="$ref" :no-handle="true"
                                    class="flex cursor-grab items-center gap-2 rounded-md border border-neutral-800 bg-neutral-900/60 px-2 py-1 text-xs text-neutral-100 select-none">
                     <svg class="h-3 w-3 shrink-0 text-neutral-500" viewBox="0 0 12 16" aria-hidden="true" fill="currentColor">
@@ -23,10 +35,24 @@
                         {{ $meta['kind_label'] }}
                     </span>
                     <span class="truncate">{{ Str::after($meta['label'], ' · ') ?: $meta['label'] }}</span>
+                    @if ($editId !== null && $editInspectorType !== null)
+                        {{-- Pencil → modal inspector for the linked subject. Stops propagation
+                             so clicking it doesn't trigger drag-start on the cursor-grab row. --}}
+                        <button type="button"
+                                x-data
+                                x-on:click.stop="$dispatch('subentity-edit-open', { type: @js($editInspectorType), id: {{ $editId }} })"
+                                aria-label="{{ __('Edit linked item') }}"
+                                title="{{ __('Edit linked item') }}"
+                                class="ml-auto shrink-0 rounded px-1.5 py-0.5 text-neutral-400 hover:bg-neutral-800 hover:text-neutral-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                            <svg class="h-3 w-3" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                                <path d="M2 12.5V14h1.5l8.373-8.373-1.5-1.5L2 12.5zM13.707 3.793a1 1 0 0 0 0-1.414l-1.086-1.086a1 1 0 0 0-1.414 0l-1.293 1.293 2.5 2.5 1.293-1.293z" fill="currentColor"/>
+                            </svg>
+                        </button>
+                    @endif
                     <button type="button"
                             wire:click="removeSubject('{{ $ref }}')"
                             aria-label="{{ __('Remove') }}"
-                            class="ml-auto shrink-0 rounded px-1.5 py-0.5 text-[11px] text-rose-400 hover:bg-rose-900/30 hover:text-rose-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                            class="{{ $editInspectorType !== null && $editId !== null ? '' : 'ml-auto ' }}shrink-0 rounded px-1.5 py-0.5 text-[11px] text-rose-400 hover:bg-rose-900/30 hover:text-rose-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
                         ×
                     </button>
                 </x-ui.sortable-row>

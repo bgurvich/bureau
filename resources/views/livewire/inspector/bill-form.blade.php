@@ -64,7 +64,8 @@
                 :options="['' => '—'] + $this->contacts->mapWithKeys(fn ($c) => [$c->id => $c->display_name])->all()"
                 placeholder="—"
                 allow-create
-                create-method="createCounterparty" />
+                create-method="createCounterparty"
+                edit-inspector-type="contact" />
         </div>
     </div>
 
