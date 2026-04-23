@@ -39,6 +39,33 @@
 
     <div class="grid grid-cols-2 gap-3">
         <div>
+            <label for="i-ty-preparer" class="mb-1 block text-xs text-neutral-400">{{ __('Preparer') }}</label>
+            <x-ui.searchable-select
+                id="i-ty-preparer"
+                model="preparer_contact_id"
+                :options="['' => '— '.__('self').' —'] + $this->contacts->mapWithKeys(fn ($c) => [$c->id => $c->display_name])->all()"
+                placeholder="{{ __('— self —') }}"
+                allow-create
+                create-method="createCounterparty"
+                edit-inspector-type="contact" />
+            <p class="mt-1 text-[11px] text-neutral-500">{{ __('Whoever put the numbers on the return — CPA, spouse, self.') }}</p>
+        </div>
+        <div>
+            <label for="i-ty-bookkeeper" class="mb-1 block text-xs text-neutral-400">{{ __('Bookkeeper') }}</label>
+            <x-ui.searchable-select
+                id="i-ty-bookkeeper"
+                model="bookkeeper_contact_id"
+                :options="['' => '— '.__('none').' —'] + $this->contacts->mapWithKeys(fn ($c) => [$c->id => $c->display_name])->all()"
+                placeholder="{{ __('— none —') }}"
+                allow-create
+                create-method="createCounterparty"
+                edit-inspector-type="contact" />
+            <p class="mt-1 text-[11px] text-neutral-500">{{ __('Who categorized the underlying transactions through the year.') }}</p>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-2 gap-3">
+        <div>
             <label for="i-ty-filed" class="mb-1 block text-xs text-neutral-400">{{ __('Filed on') }}</label>
             <input wire:model="filed_on" id="i-ty-filed" type="date"
                    class="w-full rounded-md border border-neutral-700 bg-neutral-950 px-2 py-2 text-sm text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">

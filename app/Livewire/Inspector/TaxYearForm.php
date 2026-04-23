@@ -7,6 +7,7 @@ namespace App\Livewire\Inspector;
 use App\Livewire\Inspector\Concerns\FinalizesSave;
 use App\Livewire\Inspector\Concerns\HasAdminPanel;
 use App\Livewire\Inspector\Concerns\HasTagList;
+use App\Livewire\Inspector\Concerns\WithCounterpartyPicker;
 use App\Models\TaxYear;
 use App\Support\CurrentHousehold;
 use App\Support\Enums;
@@ -26,6 +27,7 @@ class TaxYearForm extends Component
     use FinalizesSave;
     use HasAdminPanel;
     use HasTagList;
+    use WithCounterpartyPicker;
 
     public ?int $id = null;
 
@@ -34,6 +36,12 @@ class TaxYearForm extends Component
     public string $jurisdiction = 'US-federal';
 
     public string $filing_status = '';
+
+    /** Who put the numbers on the return — CPA / accountant / spouse / self / friend. */
+    public ?int $preparer_contact_id = null;
+
+    /** Ongoing categorization partner. Often distinct from the preparer. */
+    public ?int $bookkeeper_contact_id = null;
 
     public string $state = 'prep';
 
@@ -56,6 +64,8 @@ class TaxYearForm extends Component
             $this->year = (string) $t->year;
             $this->jurisdiction = (string) $t->jurisdiction;
             $this->filing_status = (string) ($t->filing_status ?? '');
+            $this->preparer_contact_id = $t->preparer_contact_id;
+            $this->bookkeeper_contact_id = $t->bookkeeper_contact_id;
             $this->state = (string) $t->state;
             $this->filed_on = $t->filed_on ? $t->filed_on->toDateString() : '';
             $this->settlement_amount = $t->settlement_amount !== null ? (string) $t->settlement_amount : '';
@@ -89,6 +99,8 @@ class TaxYearForm extends Component
             ],
             'jurisdiction' => 'required|string|max:32',
             'filing_status' => 'nullable|string|max:32',
+            'preparer_contact_id' => 'nullable|integer|exists:contacts,id',
+            'bookkeeper_contact_id' => 'nullable|integer|exists:contacts,id',
             'state' => ['required', Rule::in(array_keys(Enums::taxYearStates()))],
             'filed_on' => 'nullable|date',
             'settlement_amount' => 'nullable|numeric',
@@ -100,6 +112,8 @@ class TaxYearForm extends Component
             'year' => (int) $data['year'],
             'jurisdiction' => $data['jurisdiction'],
             'filing_status' => $data['filing_status'] ?: null,
+            'preparer_contact_id' => $data['preparer_contact_id'] ?: null,
+            'bookkeeper_contact_id' => $data['bookkeeper_contact_id'] ?: null,
             'state' => $data['state'],
             'filed_on' => $data['filed_on'] ?: null,
             'settlement_amount' => $data['settlement_amount'] !== '' ? (float) $data['settlement_amount'] : null,
@@ -122,6 +136,15 @@ class TaxYearForm extends Component
     protected function adminOwnerClass(): ?string
     {
         return TaxYear::class;
+    }
+
+    protected function defaultCounterpartyModelKey(): string
+    {
+        // Two contact pickers on the form — which one receives an
+        // inline-created contact is passed in the modelKey param from
+        // searchable-select's createCounterparty call. This default
+        // matches the more common case.
+        return 'preparer_contact_id';
     }
 
     protected function adminOwnerField(): ?string
