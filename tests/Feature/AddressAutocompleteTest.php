@@ -46,7 +46,10 @@ it('autocomplete proxies the query to Nominatim and normalizes results', functio
     $response = $this->getJson(route('address.autocomplete', ['q' => '123 Main']))
         ->assertOk();
     $first = $response->json('results.0');
-    expect($first['formatted'])->toBe('123 Main St, Springfield, IL 62701, USA')
+    // Formatted is recomposed head-first with · separator — puts the
+    // house_number-bearing street in the lead instead of burying it in
+    // Nominatim's county/country-heavy display_name.
+    expect($first['formatted'])->toBe('123 Main St · Springfield, Illinois 62701')
         ->and($first['street'])->toBe('123 Main St')
         ->and($first['city'])->toBe('Springfield')
         ->and($first['state'])->toBe('Illinois')
@@ -58,6 +61,47 @@ it('autocomplete proxies the query to Nominatim and normalizes results', functio
         return str_contains($req->url(), 'nominatim.openstreetmap.org/search')
             && str_contains($req->header('User-Agent')[0] ?? '', 'Bureau');
     });
+});
+
+it('autocomplete abbreviates US directional prefixes (Southeast → SE, etc.)', function () {
+    authedInHousehold();
+    Http::fake([
+        'nominatim.openstreetmap.org/*' => Http::response([[
+            'display_name' => '456 Southeast 45th Avenue, Portland, Multnomah County, Oregon, 97202, United States',
+            'address' => [
+                'house_number' => '456',
+                'road' => 'Southeast 45th Avenue',
+                'city' => 'Portland',
+                'state' => 'Oregon',
+                'postcode' => '97202',
+                'country' => 'United States',
+            ],
+        ]]),
+    ]);
+
+    $response = $this->getJson(route('address.autocomplete', ['q' => '456 Southeast']));
+    $first = $response->json('results.0');
+
+    expect($first['street'])->toBe('456 SE 45th Avenue')
+        ->and($first['formatted'])->toBe('456 SE 45th Avenue · Portland, Oregon 97202');
+});
+
+it('autocomplete leaves non-directional road names alone', function () {
+    authedInHousehold();
+    Http::fake([
+        'nominatim.openstreetmap.org/*' => Http::response([[
+            'display_name' => '1 Northfield Street',
+            'address' => [
+                'house_number' => '1',
+                'road' => 'Northfield Street',
+                'city' => 'Anywhere',
+            ],
+        ]]),
+    ]);
+
+    $first = $this->getJson(route('address.autocomplete', ['q' => 'Northfield']))->json('results.0');
+    // "Northfield" must NOT be abbreviated to "Nfield" — word-boundary guards it.
+    expect($first['street'])->toBe('1 Northfield Street');
 });
 
 it('autocomplete caches Nominatim responses per-query', function () {

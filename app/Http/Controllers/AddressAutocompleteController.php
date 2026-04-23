@@ -71,13 +71,30 @@ final class AddressAutocompleteController extends Controller
                 continue;
             }
             $addr = is_array($row['address'] ?? null) ? $row['address'] : [];
-            $street = trim(((string) ($addr['house_number'] ?? '')).' '.((string) ($addr['road'] ?? '')));
+            $road = self::shortDirectional((string) ($addr['road'] ?? ''));
+            $street = trim(((string) ($addr['house_number'] ?? '')).' '.$road);
+
+            $city = $addr['city'] ?? $addr['town'] ?? $addr['village'] ?? $addr['hamlet'] ?? null;
+            $state = $addr['state'] ?? $addr['province'] ?? $addr['region'] ?? null;
+            $postal = $addr['postcode'] ?? null;
+
+            // Build our own "formatted" head-first: "123 SE Main St ·
+            // Portland, OR 97202". Nominatim's display_name is verbose
+            // (county, country) and frequently missing the house number
+            // at the head; recomposing gives predictable pick rows.
+            $cityLine = trim(implode(' ', array_filter([
+                $city ? rtrim((string) $city, ',').',' : null,
+                $state,
+                $postal,
+            ])));
+            $formatted = trim($street.($cityLine !== '' ? ' · '.$cityLine : ''));
+
             $out[] = [
-                'formatted' => (string) ($row['display_name'] ?? ''),
+                'formatted' => $formatted !== '' ? $formatted : (string) ($row['display_name'] ?? ''),
                 'street' => $street !== '' ? $street : null,
-                'city' => $addr['city'] ?? $addr['town'] ?? $addr['village'] ?? $addr['hamlet'] ?? null,
-                'state' => $addr['state'] ?? $addr['province'] ?? $addr['region'] ?? null,
-                'postal_code' => $addr['postcode'] ?? null,
+                'city' => $city,
+                'state' => $state,
+                'postal_code' => $postal,
                 'country' => $addr['country'] ?? null,
                 'lat' => isset($row['lat']) ? (string) $row['lat'] : null,
                 'lon' => isset($row['lon']) ? (string) $row['lon'] : null,
@@ -85,5 +102,33 @@ final class AddressAutocompleteController extends Controller
         }
 
         return $out;
+    }
+
+    /**
+     * Collapse US directional prefixes + generics to the USPS abbreviations
+     * people actually say out loud. Word-boundary anchored so "Northfield"
+     * stays whole. Runs over whichever words appear in the road string.
+     */
+    private static function shortDirectional(string $road): string
+    {
+        if ($road === '') {
+            return $road;
+        }
+
+        $map = [
+            'Northeast' => 'NE',
+            'Northwest' => 'NW',
+            'Southeast' => 'SE',
+            'Southwest' => 'SW',
+            'North' => 'N',
+            'South' => 'S',
+            'East' => 'E',
+            'West' => 'W',
+        ];
+        foreach ($map as $long => $short) {
+            $road = (string) preg_replace('/\b'.preg_quote($long, '/').'\b/i', $short, $road);
+        }
+
+        return $road;
     }
 }
