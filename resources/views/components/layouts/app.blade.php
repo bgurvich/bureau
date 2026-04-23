@@ -64,6 +64,7 @@
                                 [__('Schedule'), 'life.schedule', 'calendar'],
                                 [__('Logs'), 'life.logs', 'book'],
                                 [__('Goals'), 'life.goals', 'pie'],
+                                [__('Habits'), 'life.habits', 'check-square'],
                                 [__('Projects'), 'time.projects', 'folder'],
                                 [__('Contacts'), 'relationships.contacts', 'user'],
                                 [__('Assets'), 'assets.index', 'box'],

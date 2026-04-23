@@ -102,10 +102,15 @@
         @error('checklist_items')<div role="alert" class="mt-1 text-xs text-rose-400">{{ $message }}</div>@enderror
     </fieldset>
 
-    <div>
+    <div class="flex flex-wrap items-center gap-5">
         <label class="flex items-center gap-2 text-sm text-neutral-200">
             <input wire:model="checklist_active" type="checkbox" class="rounded border-neutral-700 bg-neutral-950">
             <span>{{ __('Active') }}</span>
+        </label>
+        <label class="flex items-center gap-2 text-sm text-neutral-200"
+               title="{{ __('Surface this on /habits with a streak counter.') }}">
+            <input wire:model="checklist_is_habit" type="checkbox" class="rounded border-neutral-700 bg-neutral-950">
+            <span>{{ __('Treat as habit') }}</span>
         </label>
     </div>
 

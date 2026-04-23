@@ -56,12 +56,23 @@ class ChecklistTemplateForm extends Component
 
     public bool $checklist_active = true;
 
+    /** Mark this template as a habit — surfaces it on /habits with
+     *  a streak counter instead of mixed in with the ritual lists. */
+    public bool $checklist_is_habit = false;
+
     /** @var array<string, array{key:string, id:?int, label:string, active:bool}> */
     public array $checklist_items = [];
 
-    public function mount(?int $id = null): void
+    public function mount(?int $id = null, bool $asHabit = false): void
     {
         $this->id = $id;
+
+        if ($id === null && $asHabit) {
+            // "New habit" flow from /habits pre-checks the flag so the
+            // user doesn't land on an unchecked form after clicking
+            // "New habit".
+            $this->checklist_is_habit = true;
+        }
 
         if ($id !== null) {
             $t = ChecklistTemplate::with(['items' => fn ($q) => $q->orderBy('position')])
@@ -74,6 +85,7 @@ class ChecklistTemplateForm extends Component
             $this->checklist_dtstart = $t->dtstart ? $t->dtstart->toDateString() : now()->toDateString();
             $this->checklist_paused_until = $t->paused_until ? $t->paused_until->toDateString() : '';
             $this->checklist_active = (bool) $t->active;
+            $this->checklist_is_habit = (bool) $t->is_habit;
             $this->checklist_recurrence_mode = $this->recurrenceModeForRrule($this->checklist_rrule);
 
             // Items are stored as a key-keyed associative array so every
@@ -111,6 +123,7 @@ class ChecklistTemplateForm extends Component
             'checklist_dtstart' => 'required|date',
             'checklist_paused_until' => 'nullable|date',
             'checklist_active' => 'boolean',
+            'checklist_is_habit' => 'boolean',
             'checklist_items' => 'array',
             'checklist_items.*.label' => 'nullable|string|max:255',
             'checklist_items.*.active' => 'boolean',
@@ -129,6 +142,7 @@ class ChecklistTemplateForm extends Component
             'dtstart' => $data['checklist_dtstart'],
             'paused_until' => $data['checklist_paused_until'] ?: null,
             'active' => (bool) ($data['checklist_active'] ?? true),
+            'is_habit' => (bool) ($data['checklist_is_habit'] ?? false),
         ];
 
         if ($this->id !== null) {

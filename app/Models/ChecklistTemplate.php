@@ -21,6 +21,7 @@ class ChecklistTemplate extends Model
         'dtstart' => 'date',
         'paused_until' => 'date',
         'active' => 'boolean',
+        'is_habit' => 'boolean',
         'sort_order' => 'integer',
     ];
 

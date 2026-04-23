@@ -97,6 +97,14 @@ new class extends Component
     public ?int $subentityParentId = null;
 
     /**
+     * When the /habits page launches a new-checklist-template form, this
+     * flag pre-checks the "Treat as habit" box so the user doesn't land
+     * on an un-checked form after clicking "New habit". Forwarded to
+     * ChecklistTemplateForm::mount via CHILD_FORM_EXTRAS.
+     */
+    public bool $asHabitMode = false;
+
+    /**
      * Set by markPaid() to hand a RecurringProjection's values to the
      * extracted TransactionForm at mount time. Cleared after the child
      * mounts so subsequent openInspector('transaction') calls don't
@@ -122,7 +130,7 @@ new class extends Component
     }
 
     #[On('inspector-open')]
-    public function openInspector(string $type = '', ?int $id = null, ?int $mediaId = null): void
+    public function openInspector(string $type = '', ?int $id = null, ?int $mediaId = null, bool $asHabit = false): void
     {
         // Only the primary instance responds to the main open event —
         // the modal instance sits quiet on this channel and only wakes
@@ -130,7 +138,7 @@ new class extends Component
         if ($this->asModal) {
             return;
         }
-        $this->doOpen($type, $id, $mediaId);
+        $this->doOpen($type, $id, $mediaId, null, $asHabit);
     }
 
     /**
@@ -244,7 +252,7 @@ new class extends Component
         $this->dispatch('inspector-body-shown');
     }
 
-    private function doOpen(string $type, ?int $id, ?int $mediaId = null, ?int $parentId = null): void
+    private function doOpen(string $type, ?int $id, ?int $mediaId = null, ?int $parentId = null, bool $asHabit = false): void
     {
         $this->resetExcept(['open', 'asModal']);
         $this->type = $type;
@@ -260,6 +268,7 @@ new class extends Component
             $this->source_media_id = $mediaId;
         }
         $this->subentityParentId = $parentId;
+        $this->asHabitMode = $asHabit;
 
         $this->dispatch('inspector-body-shown');
     }
@@ -375,6 +384,7 @@ new class extends Component
         'meter_reading' => ['parentId' => 'subentityParentId'],
         'vehicle_service_log' => ['parentId' => 'subentityParentId'],
         'task' => ['parentId' => 'subentityParentId'],
+        'checklist_template' => ['asHabit' => 'asHabitMode'],
     ];
 
     /**
