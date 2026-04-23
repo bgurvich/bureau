@@ -7,6 +7,7 @@ namespace App\Livewire\Inspector\Concerns;
 use App\Models\Account;
 use App\Models\Contact;
 use App\Models\Contract;
+use App\Models\Decision;
 use App\Models\Document;
 use App\Models\HealthProvider;
 use App\Models\InventoryItem;
@@ -56,6 +57,7 @@ trait HasSubjectRefs
         'online_account' => OnlineAccount::class,
         'recurring_rule' => RecurringRule::class,
         'journal_entry' => JournalEntry::class,
+        'decision' => Decision::class,
     ];
 
     /** @return array<int, array{ref: string, label: string, kind_label: string, name: string}> */
@@ -259,6 +261,7 @@ trait HasSubjectRefs
             'online_account' => __('Online account'),
             'recurring_rule' => __('Bill'),
             'journal_entry' => __('Journal entry'),
+            'decision' => __('Decision'),
             default => ucfirst($kind),
         };
     }
@@ -279,6 +282,7 @@ trait HasSubjectRefs
             OnlineAccount::class => 'service_name',
             RecurringRule::class => 'title',
             JournalEntry::class => 'title',
+            Decision::class => 'title',
             default => 'name',
         };
     }

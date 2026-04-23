@@ -7,6 +7,7 @@ use App\Models\CategoryRule;
 use App\Models\ChecklistTemplate;
 use App\Models\Contact;
 use App\Models\Contract;
+use App\Models\Decision;
 use App\Models\Document;
 use App\Models\Domain;
 use App\Models\FoodEntry;
@@ -325,6 +326,7 @@ new class extends Component
                 'media_log_entry' => MediaLogEntry::findOrFail($this->id)->delete(),
                 'pet_license' => PetLicense::findOrFail($this->id)->delete(),
                 'food_entry' => FoodEntry::findOrFail($this->id)->delete(),
+                'decision' => Decision::findOrFail($this->id)->delete(),
                 default => null,
             };
         } catch (PeriodLockedException $e) {
@@ -447,6 +449,7 @@ new class extends Component
             'vehicle_service_log' => __('vehicle service'),
             'media_log_entry' => __('media entry'),
             'food_entry' => __('food entry'),
+            'decision' => __('decision'),
             default => '',
         };
 

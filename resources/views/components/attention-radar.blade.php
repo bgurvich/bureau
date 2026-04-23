@@ -3,6 +3,7 @@
 use App\Models\Account;
 use App\Models\ChecklistRun;
 use App\Models\Contract;
+use App\Models\Decision;
 use App\Models\Domain;
 use App\Models\InventoryItem;
 use App\Models\Media;
@@ -258,6 +259,17 @@ new class extends Component
             ->count();
     }
 
+    /** Decisions whose follow_up_on has passed with no outcome recorded. */
+    #[Computed]
+    public function decisionFollowUpsDue(): int
+    {
+        return Decision::query()
+            ->whereNull('outcome')
+            ->whereNotNull('follow_up_on')
+            ->where('follow_up_on', '<=', now()->toDateString())
+            ->count();
+    }
+
     #[Computed]
     public function total(): int
     {
@@ -279,7 +291,8 @@ new class extends Component
             + $this->unfinishedEveningRituals
             + $this->expiringPetVaccinations
             + $this->overduePetCheckups
-            + $this->expiringPetLicenses;
+            + $this->expiringPetLicenses
+            + $this->decisionFollowUpsDue;
     }
 };
 ?>
@@ -429,6 +442,15 @@ new class extends Component
                         {{ __('Pet licenses expiring ≤ 30d') }}
                     </a>
                     <span class="tabular-nums text-amber-400">{{ $this->expiringPetLicenses }}</span>
+                </li>
+            @endif
+            @if ($this->decisionFollowUpsDue)
+                <li class="flex items-baseline justify-between">
+                    <a href="{{ route('life.decisions', ['status' => 'awaiting_followup']) }}"
+                       class="text-neutral-300 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                        {{ __('Decisions awaiting follow-up') }}
+                    </a>
+                    <span class="tabular-nums text-amber-400">{{ $this->decisionFollowUpsDue }}</span>
                 </li>
             @endif
         </ul>

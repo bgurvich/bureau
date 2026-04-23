@@ -122,6 +122,7 @@ Route::middleware(['auth', 'preferences', 'household'])->group(function () {
     Route::livewire('/journal', 'journal-index')->name('life.journal');
     Route::livewire('/media-log', 'media-log-index')->name('life.media_log');
     Route::livewire('/food', 'food-log-index')->name('life.food');
+    Route::livewire('/decisions', 'decisions-index')->name('life.decisions');
     Route::livewire('/time/projects', 'projects-index')->name('time.projects');
     Route::livewire('/time/entries', 'time-entries-index')->name('time.entries');
     Route::livewire('/properties', 'properties-index')->name('assets.properties');

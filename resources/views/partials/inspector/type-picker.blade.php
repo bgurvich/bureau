@@ -15,7 +15,8 @@
             ['task', __('Task'), 'T'],
             ['note', __('Note'), 'N'],
             ['journal_entry', __('Journal'), 'J'],
-            ['media_log_entry', __('Reading / watching'), null],
+            ['decision', __('Decision'), 'Z'],
+            ['media_log_entry', __('Reading / watching'), 'W'],
             ['food_entry', __('Food entry'), 'F'],
             ['contact', __('Contact'), 'C'],
             ['meeting', __('Meeting'), 'M'],
@@ -31,7 +32,7 @@
             ['vehicle', __('Vehicle'), 'V'],
             ['inventory', __('Inventory item'), 'I'],
             ['domain', __('Domain'), null],
-            ['meter_reading', __('Meter reading'), null],
+            ['meter_reading', __('Meter reading'), 'Y'],
             ['vehicle_service_log', __('Vehicle service'), null],
         ],
         __('Records') => [

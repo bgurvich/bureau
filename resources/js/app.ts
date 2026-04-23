@@ -122,6 +122,9 @@ const TYPE_SHORTCUTS: Record<string, string> = {
     k: 'checklist_template',
     f: 'food_entry',
     j: 'journal_entry',
+    z: 'decision',
+    w: 'media_log_entry',
+    y: 'meter_reading',
 };
 
 const GLOBAL_SHORTCUTS: Record<string, () => void> = {
