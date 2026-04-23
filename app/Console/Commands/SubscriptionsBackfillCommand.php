@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\Contract;
 use App\Models\RecurringRule;
+use App\Models\Subscription;
 use App\Support\SubscriptionSync;
 use Illuminate\Console\Command;
 
@@ -39,7 +40,21 @@ class SubscriptionsBackfillCommand extends Command
             $linked += SubscriptionSync::linkContract($c);
         });
 
-        $this->info("  Backfilled {$created} subscription(s); linked {$linked} contract(s).");
+        // Sign-repair historic rows: an older code path stored
+        // monthly_cost_cached as a positive magnitude; the current
+        // contract is "preserve the rule's sign". Flip any remaining
+        // positives whose linked rule is an outflow.
+        $fixed = Subscription::query()
+            ->where('monthly_cost_cached', '>', 0)
+            ->whereHas('recurringRule', fn ($q) => $q->where('amount', '<', 0))
+            ->get()
+            ->each(function (Subscription $s) {
+                $s->monthly_cost_cached = -1 * (float) $s->monthly_cost_cached;
+                $s->save();
+            })
+            ->count();
+
+        $this->info("  Backfilled {$created} subscription(s); linked {$linked} contract(s); sign-fixed {$fixed}.");
 
         return self::SUCCESS;
     }

@@ -18,7 +18,9 @@ it('auto-creates a Subscription when a new outflow RecurringRule is saved', func
     $sub = Subscription::where('recurring_rule_id', $rule->id)->first();
     expect($sub)->not->toBeNull()
         ->and($sub->name)->toBe('Netflix')
-        ->and((float) $sub->monthly_cost_cached)->toBe(15.99);
+        // Cached monthly cost preserves the rule's sign — outflows
+        // are negative, matching the ledger convention everywhere else.
+        ->and((float) $sub->monthly_cost_cached)->toBe(-15.99);
 });
 
 it('does not auto-create for income rules (amount > 0)', function () {
@@ -73,6 +75,23 @@ it('page renders auto-created subscriptions', function () {
         ->assertOk()
         ->assertSee('Disney+')
         ->assertSee(__('New subscription'));
+});
+
+it('subscriptions:backfill flips historic positive monthly_cost_cached to negative', function () {
+    authedInHousehold();
+    $rule = RecurringRule::create([
+        'title' => 'Legacy', 'kind' => 'expense', 'amount' => -20, 'currency' => 'USD',
+        'rrule' => 'FREQ=MONTHLY', 'dtstart' => now(), 'active' => true,
+    ]);
+    // Observer created a signed row. Simulate the historic (abs()'d)
+    // state by forcing the positive back in.
+    $sub = Subscription::where('recurring_rule_id', $rule->id)->firstOrFail();
+    $sub->forceFill(['monthly_cost_cached' => 20.00])->save();
+    expect((float) $sub->fresh()->monthly_cost_cached)->toBe(20.0);
+
+    $this->artisan('subscriptions:backfill')->assertSuccessful();
+
+    expect((float) $sub->fresh()->monthly_cost_cached)->toBe(-20.0);
 });
 
 it('inspector edits an auto-created subscription', function () {

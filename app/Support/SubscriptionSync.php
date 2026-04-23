@@ -53,7 +53,11 @@ class SubscriptionSync
             'state' => 'active',
             'first_seen_at' => now(),
             'last_seen_at' => now(),
-            'monthly_cost_cached' => $monthly !== null ? $monthly * abs((float) $rule->amount) : null,
+            // Preserve the rule's sign — outflow rules (the only ones
+            // that land here per the amount<0 guard above) stay
+            // negative in the cached value, matching the ledger's
+            // amount convention everywhere else in the app.
+            'monthly_cost_cached' => $monthly !== null ? $monthly * (float) $rule->amount : null,
             'currency' => $rule->currency ?? 'USD',
         ]);
 

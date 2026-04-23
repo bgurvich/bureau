@@ -84,7 +84,9 @@ class SubscriptionForm extends Component
             $rule = RecurringRule::find($data['subscription_recurring_rule_id']);
             if ($rule) {
                 $multiplier = SubscriptionSync::monthlyMultiplier((string) $rule->rrule);
-                $monthly = $multiplier !== null ? $multiplier * abs((float) $rule->amount) : null;
+                // Signed — outflows come through as negative, matching
+                // the rule's convention (and SubscriptionSync).
+                $monthly = $multiplier !== null ? $multiplier * (float) $rule->amount : null;
             }
         }
 
