@@ -361,10 +361,18 @@ new class extends Component
                     {{ __('Mail and calendar accounts linked to you. Credentials are encrypted at rest; disconnect any time.') }}
                 </p>
             </div>
-            <a href="{{ route('integrations.gmail.connect') }}"
-               class="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs text-neutral-200 hover:border-neutral-500 hover:bg-neutral-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
-                {{ __('Connect Gmail') }}
-            </a>
+            @php($googleConfigured = (string) config('services.google.client_id', '') !== '')
+            @if ($googleConfigured)
+                <a href="{{ route('integrations.gmail.connect') }}"
+                   class="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs text-neutral-200 hover:border-neutral-500 hover:bg-neutral-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                    {{ __('Connect Gmail') }}
+                </a>
+            @else
+                <span class="rounded-md border border-dashed border-neutral-800 bg-neutral-900/40 px-3 py-1.5 text-xs text-neutral-500"
+                      title="{{ __('Set GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET in .env, then php artisan config:clear.') }}">
+                    {{ __('Gmail — not configured') }}
+                </span>
+            @endif
         </header>
 
         @if ($this->personalIntegrations->isEmpty())
@@ -404,6 +412,12 @@ new class extends Component
                     </li>
                 @endforeach
             </ul>
+        @endif
+
+        @if (! $googleConfigured)
+            <div role="status" class="mt-4 rounded-md border border-amber-800/50 bg-amber-950/20 p-3 text-[11px] text-amber-200">
+                {{ __('Gmail connection is disabled because GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET are not set. See docs/integrations/connect-gmail-calendar.md for the OAuth client setup, then edit .env and run php artisan config:clear.') }}
+            </div>
         @endif
 
         <details class="mt-4 rounded-md border border-neutral-800 bg-neutral-950/40 p-3 text-xs text-neutral-400">
