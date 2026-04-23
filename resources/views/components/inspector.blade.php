@@ -2,6 +2,7 @@
 
 use App\Exceptions\PeriodLockedException;
 use App\Models\Account;
+use App\Models\Appointment;
 use App\Models\BudgetCap;
 use App\Models\CategoryRule;
 use App\Models\ChecklistTemplate;
@@ -329,6 +330,7 @@ new class extends Component
                 'food_entry' => FoodEntry::findOrFail($this->id)->delete(),
                 'decision' => Decision::findOrFail($this->id)->delete(),
                 'goal' => Goal::findOrFail($this->id)->delete(),
+                'appointment' => Appointment::findOrFail($this->id)->delete(),
                 default => null,
             };
         } catch (PeriodLockedException $e) {
@@ -453,6 +455,13 @@ new class extends Component
             'food_entry' => __('food entry'),
             'decision' => __('decision'),
             'goal' => __('goal'),
+            'reminder' => __('reminder'),
+            'appointment' => __('appointment'),
+            'subscription' => __('subscription'),
+            'savings_goal' => __('savings goal'),
+            'budget_cap' => __('budget'),
+            'category_rule' => __('category rule'),
+            'tag_rule' => __('tag rule'),
             default => '',
         };
 
