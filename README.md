@@ -1,58 +1,123 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Bureau
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Personal-affairs app for a household of one. Bureau is where I keep the
+long tail of adult life — finances, bills, contracts, insurance, vehicles,
+property, pets, health, taxes, reading, decisions, and whatever else needs
+to be found later. It's built for me; you're welcome to read the code.
 
-## About Laravel
+## Philosophy
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+- **Synthesis over capture.** Dashboards, radars, and timelines are the
+  primary surface. Forms exist to feed them.
+- **Single user, single household.** No multi-tenant plumbing, no RBAC
+  matrices. The bookkeeper portal is the only non-owner audience and is
+  deliberately read-only.
+- **Local-first data with an online surface.** The database is the source
+  of truth; the web UI is a typed-and-templated lens over it.
+- **Features come from personal workflow.** If I don't actually use it
+  every week or two, it doesn't ship. Competitor surveys stay deferred
+  until the shape is settled.
+- **Keyboard and one-hand mobile.** Every quick-add has a letter key;
+  every listing survives `text-sm` as the comfort floor.
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## Stack
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+- PHP 8.3 · Laravel 13 · Livewire 4 (class + Volt SFC) · Alpine.js
+- Vite 8 · Tailwind CSS v4 · TypeScript
+- MariaDB (app DB) · SQLite (not used; migrations target MariaDB dialect)
+- Pest (feature + unit) · Playwright (browser) · PHPStan level 6 · Pint
+- Tesseract for OCR on receipts/bills; inventory photos skip OCR by
+  design. Local-LLM enrichment is deferred until the new GPU lands.
 
-## Learning Laravel
+## What's inside
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+The app is organized by life-area. Rough inventory of shipped modules:
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+- **Money** — Accounts, transactions, ledger, bills (RecurringRule), budgets,
+  savings goals, subscriptions, categories, recurring-pattern discovery,
+  statement import (Citi/Costco/WF), reconciliation workbench, taxes
+  (years, documents, estimated payments, preparer + bookkeeper contacts).
+- **Life > Logs** — Journal entries, decisions (ADR-style), reading/watching
+  media log, food log (with photo capture). Sibling day-logs under one hub.
+- **Goals** — Finite targets (value + deadline, pace tracking) and infinite
+  directions (cadence-based check-ins). Tasks, projects, and journal
+  entries link to goals via the polymorphic subject system.
+- **Schedule** — Tasks (with subtasks via parent_task_id), reminders,
+  meetings, appointments, checklist templates.
+- **Commitments** — Contracts, insurance policies.
+- **Assets** — Properties, vehicles, inventory items, domains, meter
+  readings, vehicle service log.
+- **Records** — Documents, online accounts, notes, physical mail.
+- **Health** — Appointments, prescriptions, health providers, pets
+  (vaccinations, checkups, licenses, grooming cadence).
+- **Time** — Projects, time entries, a header time-tracker widget.
+- **Bookkeeper portal** — Token-gated read-only view for an external CPA,
+  with period locks on closed months and an audit-trailable export.
+- **Dashboards** — Attention radar (aggregates nudges across 20+ sources),
+  money radar, finance overview, weekly review, weekly digest email.
 
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
-
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+## Local development
 
 ```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+composer install
+npm install
+cp .env.example .env
+php artisan key:generate
+php artisan migrate
+npm run dev
+php artisan serve
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+Default credentials live in `DatabaseSeeder`. The single user's profile
+carries locale/timezone/date + time format preferences; middleware applies
+them per-request so the DB stays UTC and the UI renders local.
 
-## Contributing
+### Useful commands
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+```bash
+composer test                  # Pest feature + unit suite
+composer test:refresh          # rebuild the test schema (after migrations)
+composer pint                  # format (required; CI blocks on drift)
+composer phpstan               # static analysis at L6 (baseline may only shrink)
+npx playwright test            # browser tests
 
-## Code of Conduct
+php artisan subscriptions:backfill     # seed subscriptions from existing rules
+php artisan subscriptions:regenerate   # destructive rebuild (confirms)
+php artisan recurring:discover         # scan for new recurring patterns
+```
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+## Themes
 
-## Security Vulnerabilities
+Five palettes shipped; all adapt via CSS custom properties, no dual markup.
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+- `dark` — default.
+- `light` — inverted neutral scale + accent remap for WCAG AA on white.
+- `dusk` — warm midtone stone, easier on the eyes for long sessions.
+- `dusk-comfort` — dusk + `text-sm` floor (no text below 14px).
+- `retro` — monospace, phosphor-glow accents, faint CRT scanlines.
+
+Toggle via `/profile`; resolved synchronously pre-paint to avoid flash.
+
+## Conventions
+
+- Every user-facing string goes through `__()`; JSON lang files per locale.
+- Every file destined to disk uses plain ASCII — no emojis in filenames.
+- Currency is household-level (`Household::default_currency`); no
+  per-field currency picker in forms.
+- Downloads are always gated: auth + household scope + ACL on every media
+  file, export, and backup.
+- Outflow amounts are stored negative; displays show magnitude via
+  explicit `abs()` at render time.
+- Tests run with `DatabaseTransactions`; run `composer test:refresh`
+  after a schema change.
+
+## Deployment
+
+Primary deploy target is a personal VPS behind Cloudflare. There's no
+public registration flow. The bookkeeper portal is the only unauthenticated
+entry point and it requires a pre-shared time-boxed token.
 
 ## License
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+Private. Source is here for reading and reference; reuse requires
+permission.
