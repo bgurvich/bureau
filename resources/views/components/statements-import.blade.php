@@ -2,19 +2,23 @@
 
 use App\Models\Account;
 use App\Models\Category;
+use App\Models\CategoryRule;
 use App\Models\Contact;
 use App\Models\Media;
 use App\Models\Transaction;
 use App\Support\CategorySourceMatcher;
+use App\Support\CurrentHousehold;
 use App\Support\DescriptionNormalizer;
 use App\Support\Formatting;
 use App\Support\MediaFolders;
 use App\Support\ProjectionMatcher;
-use App\Support\VendorReresolver;
 use App\Support\Statements\ParsedStatement;
 use App\Support\Statements\ParserRegistry;
 use App\Support\TransferPairing;
+use App\Support\VendorReresolver;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -22,6 +26,7 @@ use Illuminate\Support\Str;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
+use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 use Livewire\WithFileUploads;
 
 /**
@@ -37,7 +42,7 @@ class extends Component
 {
     use WithFileUploads;
 
-    /** @var array<int, \Livewire\Features\SupportFileUploads\TemporaryUploadedFile> */
+    /** @var array<int, TemporaryUploadedFile> */
     public array $files = [];
 
     /**
@@ -162,7 +167,7 @@ class extends Component
 
                 $fileId = (string) Str::uuid();
                 $this->parseBytes($fileId, $name, $mime, $bytes);
-            } catch (\Throwable $e) {
+            } catch (Throwable $e) {
                 // Never let one broken upload abort the rest of the batch — log
                 // the exception for the operator and surface a short error on
                 // the file tile. User gets a clear failure instead of a silent
@@ -209,7 +214,7 @@ class extends Component
         }
         file_put_contents($tmp, $zipBytes);
 
-        $zip = new \ZipArchive;
+        $zip = new ZipArchive;
         if ($zip->open($tmp) !== true) {
             @unlink($tmp);
             $this->parsed[(string) Str::uuid()] = [
@@ -266,7 +271,7 @@ class extends Component
     private function parseBytes(string $fileId, string $name, string $mime, string $bytes): void
     {
         $hash = hash('sha256', $bytes);
-        $householdId = \App\Support\CurrentHousehold::get()?->id;
+        $householdId = CurrentHousehold::get()?->id;
 
         // File-level dedup: have we seen this hash before in this household?
         $existingMedia = Media::where('hash', $hash)
@@ -297,7 +302,7 @@ class extends Component
             // no way to re-ingest the same file.
             try {
                 Storage::disk((string) $existingMedia->disk)->delete((string) $existingMedia->path);
-            } catch (\Throwable) {
+            } catch (Throwable) {
                 // Best-effort — the file may already be gone on disk.
             }
             $existingMedia->delete();
@@ -307,7 +312,7 @@ class extends Component
         $path = 'statements/'.($householdId ?? 0).'/'.date('Y/m').'/'.$fileId.'.'.$ext;
         try {
             Storage::disk('local')->put($path, $bytes);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             Log::warning('Statement storage write failed', ['name' => $name, 'error' => $e->getMessage()]);
             $this->parsed[$fileId] = [
                 'name' => $name,
@@ -325,7 +330,7 @@ class extends Component
 
         try {
             $statement = $registry->parseFile($stored);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             Log::warning('Statement parser crashed', ['name' => $name, 'error' => $e->getMessage()]);
             $this->parsed[$fileId] = [
                 'name' => $name,
@@ -505,9 +510,9 @@ class extends Component
                 continue;
             }
             try {
-                $carbon = \Carbon\CarbonImmutable::parse($date)->setYear($year);
+                $carbon = CarbonImmutable::parse($date)->setYear($year);
                 $this->parsed[$fileId]['rows'][$i]['occurred_on'] = $carbon->toDateString();
-            } catch (\Throwable) {
+            } catch (Throwable) {
                 // Leave the row alone — bad input upstream, the import
                 // code will refuse to persist it anyway.
             }
@@ -579,8 +584,8 @@ class extends Component
                 ? Transaction::where('account_id', $accountId)
                     ->whereBetween('amount', [$row['amount'] - 0.005, $row['amount'] + 0.005])
                     ->whereBetween('occurred_on', [
-                        \Carbon\CarbonImmutable::parse($row['occurred_on'])->subDays(3)->toDateString(),
-                        \Carbon\CarbonImmutable::parse($row['occurred_on'])->addDays(3)->toDateString(),
+                        CarbonImmutable::parse($row['occurred_on'])->subDays(3)->toDateString(),
+                        CarbonImmutable::parse($row['occurred_on'])->addDays(3)->toDateString(),
                     ])
                     ->exists()
                 : true;
@@ -750,11 +755,12 @@ class extends Component
 
     /**
      * Close the edit strip AND propagate the row's vendor + match
-     * pattern to every other row in the same file whose description
-     * matches the edited match_pattern (case-insensitive substring /
-     * regex). Rationale: user's mental model for editing a row is
-     * "fix this vendor and all similar ones" — doing it one-at-a-time
-     * would be tedious across a year of statements.
+     * pattern to every OTHER row across every currently-loaded file
+     * whose description matches the edited match_pattern (case-
+     * insensitive regex). Rationale: the user's mental model for
+     * editing a row is "fix this vendor and all similar ones" — when
+     * they have a whole year's statements loaded side-by-side, a
+     * same-file-only fan-out is surprising and tedious.
      */
     public function saveRow(string $fileId, int $i): void
     {
@@ -764,17 +770,24 @@ class extends Component
             $overrideId = $source['counterparty_id_override'] ?? null;
 
             if ($pattern !== '' && $overrideId !== null) {
-                foreach ($this->parsed[$fileId]['rows'] as $idx => $otherRow) {
-                    if ((string) $idx === (string) $i) {
+                $needle = '#'.str_replace('#', '\#', $pattern).'#iu';
+                foreach ($this->parsed as $otherFileId => $otherFile) {
+                    if (! isset($otherFile['rows']) || ! is_array($otherFile['rows'])) {
                         continue;
                     }
-                    $descLower = mb_strtolower((string) ($otherRow['description'] ?? ''));
-                    $matched = @preg_match('#'.str_replace('#', '\#', $pattern).'#iu', $descLower) === 1;
-                    if (! $matched) {
-                        continue;
+                    foreach ($otherFile['rows'] as $idx => $otherRow) {
+                        // Skip the row the user just edited; its
+                        // vendor/pattern are already set.
+                        if ($otherFileId === $fileId && (string) $idx === (string) $i) {
+                            continue;
+                        }
+                        $descLower = mb_strtolower((string) ($otherRow['description'] ?? ''));
+                        if (@preg_match($needle, $descLower) !== 1) {
+                            continue;
+                        }
+                        $this->parsed[$otherFileId]['rows'][$idx]['counterparty_id_override'] = $overrideId;
+                        $this->parsed[$otherFileId]['rows'][$idx]['match_pattern'] = $pattern;
                     }
-                    $this->parsed[$fileId]['rows'][$idx]['counterparty_id_override'] = $overrideId;
-                    $this->parsed[$fileId]['rows'][$idx]['match_pattern'] = $pattern;
                 }
             }
         }
@@ -833,9 +846,9 @@ class extends Component
         );
     }
 
-    /** @return \Illuminate\Database\Eloquent\Collection<int, Contact> */
+    /** @return Collection<int, Contact> */
     #[Computed]
-    public function contactOptions(): \Illuminate\Database\Eloquent\Collection
+    public function contactOptions(): Collection
     {
         return Contact::query()->orderBy('display_name')->get(['id', 'display_name']);
     }
@@ -845,7 +858,7 @@ class extends Component
         if (isset($this->parsed[$fileId]['disk_path']) && ($this->parsed[$fileId]['media_id'] ?? null) === null) {
             try {
                 Storage::disk('local')->delete($this->parsed[$fileId]['disk_path']);
-            } catch (\Throwable) {
+            } catch (Throwable) {
             }
         }
         unset($this->parsed[$fileId], $this->accountFor[$fileId], $this->selected[$fileId], $this->duplicates[$fileId]);
@@ -889,7 +902,7 @@ class extends Component
         // Collapse cross-account debit/credit pairs into Transfer records.
         // Keeps net worth honest (same money shouldn't appear on both sides).
         $pairedTransfers = 0;
-        $household = \App\Support\CurrentHousehold::get();
+        $household = CurrentHousehold::get();
         if ($household && $totalCreated > 0) {
             $pairedTransfers = app(TransferPairing::class)->pair($household);
         }
@@ -1007,7 +1020,7 @@ class extends Component
                         'external_id' => $externalId,
                         'import_source' => (string) ($state['import_source'] ?? 'statement:unknown'),
                     ]);
-                } catch (\Illuminate\Database\QueryException $e) {
+                } catch (QueryException $e) {
                     // Unique-constraint collision (account_id, external_id) —
                     // row was imported by a concurrent request or a prior
                     // import we missed in the dedup scan.
@@ -1294,7 +1307,7 @@ class extends Component
 
         $hintPatternList = CategorySourceMatcher::patternList();
 
-        $rules = \App\Models\CategoryRule::query()
+        $rules = CategoryRule::query()
             ->where('active', true)
             ->orderBy('priority')
             ->orderBy('id')
@@ -1427,7 +1440,7 @@ class extends Component
             $displayName = $label;
         }
 
-        $slug = \Illuminate\Support\Str::slug($displayName) ?: 'cat-'.bin2hex(random_bytes(3));
+        $slug = Str::slug($displayName) ?: 'cat-'.bin2hex(random_bytes(3));
         $base = $slug;
         $suffix = 0;
         while (Category::where('slug', $suffix ? "{$base}-{$suffix}" : $base)->exists()) {
@@ -1631,7 +1644,7 @@ class extends Component
         if (! empty($state['media_id'])) {
             return Media::find($state['media_id']);
         }
-        $household = \App\Support\CurrentHousehold::get();
+        $household = CurrentHousehold::get();
 
         return Media::create([
             'household_id' => $household?->id,
@@ -2120,7 +2133,8 @@ class extends Component
                                                             :options="['' => '— ' . __('auto') . ' —'] + $this->contactOptions->mapWithKeys(fn ($c) => [(string) $c->id => $c->display_name])->all()"
                                                             :placeholder="__('— auto —')"
                                                             allow-create
-                                                            create-method="createCounterpartyForRow" />
+                                                            create-method="createCounterpartyForRow"
+                                                            edit-inspector-type="contact" />
                                                     </td>
                                                     <td class="px-2 py-1">
                                                         @php($autoFp = $this->descriptionFingerprint((string) ($row['description'] ?? '')))

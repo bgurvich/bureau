@@ -212,6 +212,46 @@ it('saveRow propagates vendor + pattern to every other row matching the pattern'
         ->and($rows[2]['counterparty_id_override'])->toBe($chosen->id);
 });
 
+it('saveRow fans vendor + pattern out across EVERY loaded statement, not just the same file', function () {
+    authedInHousehold();
+    $chosen = Contact::create(['kind' => 'org', 'display_name' => 'Cross-file Vendor']);
+
+    // Two statements loaded side-by-side: the Citi fixture + a second
+    // CSV whose descriptions also include "Rent" and "Groceries".
+    $fileA = UploadedFile::fake()->createWithContent('citi.csv', citiCheckingCsv());
+    $secondCsv = <<<'CSV'
+Date,Description,Debit,Credit,Balance
+04/05/2026,Direct Deposit,,1500.00,2500.00
+04/12/2026,Rent payment — April,1200.00,,1300.00
+04/20/2026,Uber ride,25.00,,1275.00
+CSV;
+    $fileB = UploadedFile::fake()->createWithContent('chase.csv', $secondCsv);
+
+    $c = Livewire::test('statements-import')->set('files', [$fileA, $fileB]);
+    $fileIds = array_keys($c->get('parsed'));
+    [$fileIdA, $fileIdB] = [$fileIds[0], $fileIds[1]];
+
+    // Edit row 1 of fileA ("Rent") with pattern "rent" + the chosen
+    // vendor. fileA row 1 is the origin; fileB row 1 ("Rent payment —
+    // April") also matches and should pick up the vendor too. Other
+    // rows in either file don't match and stay null.
+    $c->set("parsed.{$fileIdA}.rows.1.match_pattern", 'rent')
+        ->set("parsed.{$fileIdA}.rows.1.counterparty_id_override", $chosen->id)
+        ->call('editRow', $fileIdA, 1)
+        ->call('saveRow', $fileIdA, 1);
+
+    $rowsA = $c->get("parsed.{$fileIdA}.rows");
+    $rowsB = $c->get("parsed.{$fileIdB}.rows");
+
+    expect($rowsA[1]['counterparty_id_override'])->toBe($chosen->id)
+        ->and($rowsA[0]['counterparty_id_override'])->toBeNull()
+        ->and($rowsA[2]['counterparty_id_override'])->toBeNull()
+        ->and($rowsB[1]['counterparty_id_override'])->toBe($chosen->id)
+        ->and($rowsB[1]['match_pattern'])->toBe('rent')
+        ->and($rowsB[0]['counterparty_id_override'])->toBeNull()
+        ->and($rowsB[2]['counterparty_id_override'])->toBeNull();
+});
+
 it('appends the edited match_pattern onto the picked existing vendor on import', function () {
     authedInHousehold();
     $account = Account::create(['type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
