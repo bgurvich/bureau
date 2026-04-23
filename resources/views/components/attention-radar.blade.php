@@ -7,6 +7,7 @@ use App\Models\Domain;
 use App\Models\InventoryItem;
 use App\Models\Media;
 use App\Models\PetCheckup;
+use App\Models\PetLicense;
 use App\Models\PetVaccination;
 use App\Models\RecurringProjection;
 use App\Models\Reminder;
@@ -247,6 +248,16 @@ new class extends Component
             ->count();
     }
 
+    /** Pet licenses expiring within 30 days or already expired. */
+    #[Computed]
+    public function expiringPetLicenses(): int
+    {
+        return PetLicense::query()
+            ->whereNotNull('expires_on')
+            ->where('expires_on', '<=', now()->addDays(30)->toDateString())
+            ->count();
+    }
+
     #[Computed]
     public function total(): int
     {
@@ -267,7 +278,8 @@ new class extends Component
             + $this->unfinishedMorningRituals
             + $this->unfinishedEveningRituals
             + $this->expiringPetVaccinations
-            + $this->overduePetCheckups;
+            + $this->overduePetCheckups
+            + $this->expiringPetLicenses;
     }
 };
 ?>
@@ -408,6 +420,15 @@ new class extends Component
                         {{ __('Overdue pet checkups') }}
                     </a>
                     <span class="tabular-nums text-rose-400">{{ $this->overduePetCheckups }}</span>
+                </li>
+            @endif
+            @if ($this->expiringPetLicenses)
+                <li class="flex items-baseline justify-between">
+                    <a href="{{ route('pets.index', ['tab' => 'licenses', 'status' => 'expiring']) }}"
+                       class="text-neutral-300 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                        {{ __('Pet licenses expiring ≤ 30d') }}
+                    </a>
+                    <span class="tabular-nums text-amber-400">{{ $this->expiringPetLicenses }}</span>
                 </li>
             @endif
         </ul>

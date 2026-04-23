@@ -51,6 +51,12 @@ class Pet extends Model
         return $this->hasMany(PetCheckup::class);
     }
 
+    /** @return HasMany<PetLicense, $this> */
+    public function licenses(): HasMany
+    {
+        return $this->hasMany(PetLicense::class);
+    }
+
     /** @return MorphMany<Prescription, $this> */
     public function prescriptions(): MorphMany
     {

@@ -17,6 +17,7 @@ use App\Models\MeterReading;
 use App\Models\Note;
 use App\Models\OnlineAccount;
 use App\Models\Pet;
+use App\Models\PetLicense;
 use App\Models\PhysicalMail;
 use App\Models\Project;
 use App\Models\Property;
@@ -321,6 +322,7 @@ new class extends Component
                 'meter_reading' => MeterReading::findOrFail($this->id)->delete(),
                 'vehicle_service_log' => VehicleServiceLog::findOrFail($this->id)->delete(),
                 'media_log_entry' => MediaLogEntry::findOrFail($this->id)->delete(),
+                'pet_license' => PetLicense::findOrFail($this->id)->delete(),
                 default => null,
             };
         } catch (PeriodLockedException $e) {
@@ -357,6 +359,7 @@ new class extends Component
         'bill' => ['mediaId' => 'source_media_id'],
         'pet_vaccination' => ['petId' => 'subentityParentId'],
         'pet_checkup' => ['petId' => 'subentityParentId'],
+        'pet_license' => ['petId' => 'subentityParentId'],
         'tax_document' => ['parentId' => 'subentityParentId', 'mediaId' => 'source_media_id'],
         'tax_estimated_payment' => ['parentId' => 'subentityParentId'],
         'meter_reading' => ['parentId' => 'subentityParentId'],
@@ -430,6 +433,7 @@ new class extends Component
             'pet' => __('pet'),
             'pet_vaccination' => __('pet vaccination'),
             'pet_checkup' => __('pet checkup'),
+            'pet_license' => __('pet license'),
             'inventory' => __('inventory item'),
             'time_entry' => __('time entry'),
             'transfer' => __('transfer'),

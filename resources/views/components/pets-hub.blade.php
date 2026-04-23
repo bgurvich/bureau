@@ -19,7 +19,7 @@ class extends Component
 
     public function setTab(string $tab): void
     {
-        if (in_array($tab, ['pets', 'vaccinations', 'checkups', 'grooming'], true)) {
+        if (in_array($tab, ['pets', 'vaccinations', 'checkups', 'grooming', 'licenses'], true)) {
             $this->tab = $tab;
             HubTabMemory::remember('pets', $tab);
         }
@@ -39,6 +39,7 @@ class extends Component
             'vaccinations' => __('Vaccinations'),
             'checkups' => __('Checkups'),
             'grooming' => __('Grooming'),
+            'licenses' => __('Licenses'),
         ];
     @endphp
 
@@ -72,6 +73,9 @@ class extends Component
                      doesn't have to. Future: a dedicated grooming-cadence
                      surface on top of recurring_rules with subject_type=Pet. --}}
                 <livewire:pet-checkups-index :key="'pets-grooming'" :kind-filter="'grooming'" :state-filter="'all'" />
+                @break
+            @case('licenses')
+                <livewire:pet-licenses-index :key="'pets-licenses'" />
                 @break
             @default
                 <livewire:pets-index :key="'pets-list'" />
