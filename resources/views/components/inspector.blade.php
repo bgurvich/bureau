@@ -12,6 +12,7 @@ use App\Models\Domain;
 use App\Models\InventoryItem;
 use App\Models\JournalEntry;
 use App\Models\Meeting;
+use App\Models\MeterReading;
 use App\Models\Note;
 use App\Models\OnlineAccount;
 use App\Models\Pet;
@@ -315,6 +316,7 @@ new class extends Component
                 'tax_year' => TaxYear::findOrFail($this->id)->delete(),
                 'tax_document' => TaxDocument::findOrFail($this->id)->delete(),
                 'tax_estimated_payment' => TaxEstimatedPayment::findOrFail($this->id)->delete(),
+                'meter_reading' => MeterReading::findOrFail($this->id)->delete(),
                 default => null,
             };
         } catch (PeriodLockedException $e) {
@@ -353,6 +355,7 @@ new class extends Component
         'pet_checkup' => ['petId' => 'subentityParentId'],
         'tax_document' => ['parentId' => 'subentityParentId', 'mediaId' => 'source_media_id'],
         'tax_estimated_payment' => ['parentId' => 'subentityParentId'],
+        'meter_reading' => ['parentId' => 'subentityParentId'],
     ];
 
     /**
@@ -429,6 +432,7 @@ new class extends Component
             'tax_year' => __('tax year'),
             'tax_document' => __('tax document'),
             'tax_estimated_payment' => __('estimated payment'),
+            'meter_reading' => __('meter reading'),
             default => '',
         };
 

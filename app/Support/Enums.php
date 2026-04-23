@@ -555,6 +555,40 @@ class Enums
         ];
     }
 
+    /** Utility-meter kinds surfaced in the MeterReadingForm picker.
+     *  Schema column is free string so one-off kinds (regional sewage,
+     *  cell-data caps, propane) fit without a migration. */
+    /** @return array<string, string> */
+    public static function meterReadingKinds(): array
+    {
+        return [
+            'electric' => __('Electric'),
+            'water' => __('Water'),
+            'gas' => __('Gas'),
+            'sewage' => __('Sewage'),
+            'propane' => __('Propane'),
+            'internet_data' => __('Internet data'),
+            'other' => __('Other'),
+        ];
+    }
+
+    /** Default units per meter-kind — the form auto-fills this on kind
+     *  change. US-centric defaults (kWh, gallons, therms); user can
+     *  override with any string. */
+    /** @return array<string, string> */
+    public static function meterReadingDefaultUnits(): array
+    {
+        return [
+            'electric' => 'kWh',
+            'water' => 'gal',
+            'gas' => 'therm',
+            'sewage' => 'gal',
+            'propane' => 'gal',
+            'internet_data' => 'GB',
+            'other' => '',
+        ];
+    }
+
     /** Journal mood vocabulary — short tokens the picker surfaces.
      *  The schema stores free strings so adding one-off moods via
      *  typed input still works; this is only the curated menu. */
