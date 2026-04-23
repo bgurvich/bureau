@@ -12,10 +12,10 @@ use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Pulls PayPal transaction history into Bureau via the Reporting API:
+ * Pulls PayPal transaction history into Secretaire via the Reporting API:
  * GET /v1/reporting/transactions?start_date=...&end_date=...&fields=all.
  *
- * Each PayPal transaction becomes a Bureau Transaction on the mapped
+ * Each PayPal transaction becomes a Secretaire Transaction on the mapped
  * Account (integration.settings.account_id). `external_id` is the PayPal
  * `transaction_id`; `import_source = 'paypal'`; `status` follows the
  * PayPal transaction_status (S=cleared, P=pending). The pivot

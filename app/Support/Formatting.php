@@ -48,7 +48,7 @@ class Formatting
     }
 
     /**
-     * ISO-4217 → symbol map. Only currencies Bureau users are plausibly going
+     * ISO-4217 → symbol map. Only currencies Secretaire users are plausibly going
      * to see; for anything missing we fall back to the raw code so we never
      * silently render the wrong glyph. Keep this list short and precise —
      * ambiguous symbols (e.g. "$" for USD vs MXN vs CAD) are disambiguated

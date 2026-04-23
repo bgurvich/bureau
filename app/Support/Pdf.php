@@ -12,7 +12,7 @@ use Smalot\PdfParser\Parser as SmalotParser;
  * Two backends — pick the faster one that's available. pdftotext (poppler)
  * is ~10x faster on big statements and preserves column alignment better,
  * but installation is per-host. smalot/pdfparser is pure PHP, works in any
- * environment, and is good enough for the bank statements Bureau targets.
+ * environment, and is good enough for the bank statements Secretaire targets.
  *
  * Callers should not care which backend ran — the output contract is
  * "UTF-8 text, roughly reading-order, newlines between lines." Parsers

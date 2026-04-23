@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Http;
  * directly from the browser:
  *   1. Nominatim's usage policy requires a meaningful User-Agent + contact
  *      — harder to guarantee from a browser extension'd tab.
- *   2. We want to cache results so Bureau isn't hammering the public
+ *   2. We want to cache results so Secretaire isn't hammering the public
  *      endpoint on every keystroke, and so repeat queries are instant.
  *   3. Browser CORS would be flakier.
  *
@@ -49,7 +49,7 @@ final class AddressAutocompleteController extends Controller
                 ->withHeaders([
                     // Nominatim's policy asks for a descriptive UA that
                     // identifies the app + a reachable contact point.
-                    'User-Agent' => 'Bureau/1.0 ('.(config('app.url') ?: 'bureau.homes').')',
+                    'User-Agent' => 'Secretaire/1.0 ('.(config('app.url') ?: 'secretaire.aurnata.com').')',
                     'Accept-Language' => 'en',
                 ])
                 ->get(self::NOMINATIM_URL, [

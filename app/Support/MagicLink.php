@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\URL;
 
 /**
  * Generates per-user signed URLs that auto-authenticate the recipient on
- * click, then redirect to an intended destination inside Bureau.
+ * click, then redirect to an intended destination inside Secretaire.
  *
  * Used by notification channels (reminder email, Slack, weekly digest) so
  * a user who taps a link on their phone lands inside the app without

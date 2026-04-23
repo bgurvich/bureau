@@ -164,7 +164,7 @@ final class PayPalWebhookController extends Controller
         if (preg_match('/REFUNDED/i', $eventType)) {
             $amount = abs($amount);
         } elseif ($amount > 0) {
-            // For outgoing payments, PayPal sends positive values — Bureau convention negates them.
+            // For outgoing payments, PayPal sends positive values — Secretaire convention negates them.
             $amount = -$amount;
         }
 

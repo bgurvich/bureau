@@ -32,9 +32,9 @@ use Illuminate\Support\Facades\Artisan;
 
 /**
  * Seeds a household with *primary* facts — the ones a real user would type
- * into Bureau: accounts, contacts, transactions, the rules they set up.
+ * into Secretaire: accounts, contacts, transactions, the rules they set up.
  *
- * Everything *derived* is produced by Bureau's own engines, not
+ * Everything *derived* is produced by Secretaire's own engines, not
  * hardcoded in this file. That keeps demo data aligned with production
  * behavior — if an observer or command changes, the seed output changes
  * with it, and any drift is a genuine bug not a fixture discrepancy.

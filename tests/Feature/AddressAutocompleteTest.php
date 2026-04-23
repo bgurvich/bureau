@@ -59,7 +59,7 @@ it('autocomplete proxies the query to Nominatim and normalizes results', functio
     // Proper User-Agent per Nominatim policy
     Http::assertSent(function ($req) {
         return str_contains($req->url(), 'nominatim.openstreetmap.org/search')
-            && str_contains($req->header('User-Agent')[0] ?? '', 'Bureau');
+            && str_contains($req->header('User-Agent')[0] ?? '', 'Secretaire');
     });
 });
 

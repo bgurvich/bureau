@@ -18,7 +18,7 @@
     <header class="border-b border-neutral-800 bg-neutral-900/40">
         <div class="mx-auto flex max-w-5xl items-baseline justify-between px-5 py-3">
             <div>
-                <div class="text-sm font-semibold text-neutral-100">{{ __('Bureau') }}</div>
+                <div class="text-sm font-semibold text-neutral-100">{{ __('Secretaire') }}</div>
                 <div class="text-[11px] text-neutral-500">{{ __('Bookkeeper portal — read-only') }}</div>
             </div>
         </div>

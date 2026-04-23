@@ -210,7 +210,7 @@ class extends Component
         $maxInnerFiles = 50;
         $maxTotalBytes = 100 * 1024 * 1024; // 100 MiB
 
-        $tmp = tempnam(sys_get_temp_dir(), 'bureau-zip-');
+        $tmp = tempnam(sys_get_temp_dir(), 'secretaire-zip-');
         if ($tmp === false) {
             return;
         }

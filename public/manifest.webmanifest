@@ -1,6 +1,6 @@
 {
-    "name": "Bureau",
-    "short_name": "Bureau",
+    "name": "Secretaire",
+    "short_name": "Secretaire",
     "description": "Personal affairs companion.",
     "start_url": "/m",
     "scope": "/m",

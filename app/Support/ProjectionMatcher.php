@@ -219,7 +219,7 @@ class ProjectionMatcher
 
     /**
      * Given a rule and a transaction date, return the nearest expected
-     * recurrence date. For v1, supports the common RRULE shapes Bureau
+     * recurrence date. For v1, supports the common RRULE shapes Secretaire
      * produces: monthly, weekly, biweekly, yearly. Fallback: dtstart.
      */
     private static function nearestCadenceDate(RecurringRule $rule, CarbonImmutable $occurredOn): ?CarbonImmutable

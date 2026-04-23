@@ -51,7 +51,7 @@ class GmailLabelsCommand extends Command
         $picked = multiselect(
             label: 'Labels to watch',
             options: $labels,
-            hint: 'Only messages with these labels feed into Bureau.',
+            hint: 'Only messages with these labels feed into Secretaire.',
         );
 
         $this->saveLabels($integration, array_values($picked));

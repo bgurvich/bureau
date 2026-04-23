@@ -9,7 +9,7 @@ test.use({ viewport: { width: 390, height: 844 } });
 
 const signIn = async (page) => {
     await page.goto('/login');
-    await page.getByLabel('Email', { exact: true }).fill('owner@bureau.local');
+    await page.getByLabel('Email', { exact: true }).fill('owner@secretaire.local');
     await page.getByLabel('Password').fill('change-me');
     await page.getByRole('button', { name: 'Sign in with password' }).click();
     await expect(page).toHaveURL('/');

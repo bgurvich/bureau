@@ -540,8 +540,8 @@ it('Amex credit CSV parser flips sign on charges', function () {
     expect($parser->fingerprint($content))->toBeTrue();
     $stmt = $parser->parse($content);
     $amounts = array_map(fn ($t) => $t->amount, $stmt->transactions);
-    // Charges (positive on export) → negative in Bureau.
-    // Payments (negative on export) → positive in Bureau.
+    // Charges (positive on export) → negative in Secretaire.
+    // Payments (negative on export) → positive in Secretaire.
     expect($amounts)->toContain(-4.50)
         ->and($amounts)->toContain(100.00);
 });

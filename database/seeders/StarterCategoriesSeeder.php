@@ -14,7 +14,7 @@ use Illuminate\Support\Str;
  * doesn't duplicate or overwrite user renames.
  *
  * Kept distinct from SystemCategoriesSeeder, which adds the handful of
- * slugs Bureau's engines look up by name (e.g. interest-paid). Re-seeding
+ * slugs Secretaire's engines look up by name (e.g. interest-paid). Re-seeding
  * one shouldn't disturb the other.
  *
  * Usage:

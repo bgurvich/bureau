@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Hash;
 
 /**
  * Minimum bootstrap every fresh install needs:
- *   - One Household (the "Bureau" default).
+ *   - One Household (the "Secretaire" default).
  *   - One owner User (credentials read from env, placeholder otherwise).
  *   - Starter + system categories for that household.
  *
@@ -29,16 +29,16 @@ class DatabaseSeeder extends Seeder
     {
         DB::transaction(function () {
             $household = Household::firstOrCreate(
-                ['name' => 'Bureau'],
+                ['name' => 'Secretaire'],
                 ['default_currency' => 'USD']
             );
 
             // Owner creds default to placeholders; the user edits them after
             // first login. Config entries let env tune this without code
             // changes (add SEED_OWNER_EMAIL= etc. in .env if desired).
-            $ownerEmail = (string) config('bureau.seed.owner_email', 'owner@bureau.local');
-            $ownerName = (string) config('bureau.seed.owner_name', 'Owner');
-            $ownerPassword = (string) config('bureau.seed.owner_password', 'change-me');
+            $ownerEmail = (string) config('secretaire.seed.owner_email', 'owner@secretaire.local');
+            $ownerName = (string) config('secretaire.seed.owner_name', 'Owner');
+            $ownerPassword = (string) config('secretaire.seed.owner_password', 'change-me');
 
             $user = User::firstOrCreate(
                 ['email' => $ownerEmail],

@@ -17,7 +17,7 @@ it('forgets any /m/* subpath', function () {
 });
 
 it('forgets the absolute form http(s)://host/m…', function () {
-    session(['url.intended' => 'https://bureau.homes/m/capture']);
+    session(['url.intended' => 'https://secretaire.aurnata.com/m/capture']);
     IntendedUrl::dropMobileShell();
     expect(session('url.intended'))->toBeNull();
 });

@@ -10,7 +10,7 @@ use App\Support\CurrentHousehold;
 use Illuminate\Support\Facades\Mail;
 use Livewire\Livewire;
 
-function seedHouseholdWithOwner(?string $ownerEmail = 'owner@bureau.local'): array
+function seedHouseholdWithOwner(?string $ownerEmail = 'owner@secretaire.local'): array
 {
     $household = Household::create(['name' => 'Test', 'default_currency' => 'USD']);
     $owner = User::create([
@@ -183,7 +183,7 @@ it('blocks removal of the last owner', function () {
 
     // Second owner present → one can be removed, leaving the other as sole owner.
     $other = User::create([
-        'name' => 'Other', 'email' => 'other@bureau.local',
+        'name' => 'Other', 'email' => 'other@secretaire.local',
         'password' => bcrypt('secret-1234'),
         'default_household_id' => $household->id,
     ]);

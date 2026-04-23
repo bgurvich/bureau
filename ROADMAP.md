@@ -1,4 +1,4 @@
-# Bureau — Roadmap
+# Secretaire — Roadmap
 
 Personal-affairs management app. **Primary purpose: grasp the big picture of life state** — synthesis, dashboards, timelines. Detail capture is a means, not the end.
 
@@ -234,7 +234,7 @@ Ordered by ROI for the big-picture goal.
 12. 🧭 **Sharing / partial visibility** — read-only spouse access to selected domains.
 13. 🧭 **Encryption at rest for media** + strong backup story (off-site, encrypted).
 14. 🧭 **Weekly review prompt** — surfaces orphan tasks, unreconciled transactions, stale contracts, expiring documents.
-15. 💡 **Natural-language interface via local LLM + MCP tools** — expose Bureau as a local MCP server so an on-device model (Ollama / llama.cpp / LM Studio) can do data management and tasking through structured tool calls. Nothing leaves the machine.
+15. 💡 **Natural-language interface via local LLM + MCP tools** — expose Secretaire as a local MCP server so an on-device model (Ollama / llama.cpp / LM Studio) can do data management and tasking through structured tool calls. Nothing leaves the machine.
     - **Tool surface (per domain, CRUD + query)**: `transaction.create`, `transaction.find(filters)`, `task.create`, `task.update`, `contact.find`, `document.find_by_tag`, `account.balance_at`, `recurring.upcoming`, `note.capture`, etc. Typed JSON, scoped to the current household.
     - **Use cases**:
       - Capture: "spent $50 at Whole Foods yesterday, groceries" → `transaction.create`.
@@ -243,7 +243,7 @@ Ordered by ROI for the big-picture goal.
       - Synthesis: "what's my net worth trend over the last 6 months" → `snapshot.find` + narrative summary.
       - Maintenance: "categorize last week's uncategorized transactions" → loops `transaction.find` + `transaction.update`.
     - **Guardrails**: every tool write respects `period_locks`, `household_id` scoping, and the download-gating rule. Every invocation lands in an `ai_tool_invocations` audit log (tool, arguments, outcome, latency, caller-client) so the CPA / user can see what the model touched.
-    - **Clients**: Claude Desktop / LM Studio / Cursor pointing at the local MCP endpoint; later a first-party Livewire chat panel in Bureau itself.
+    - **Clients**: Claude Desktop / LM Studio / Cursor pointing at the local MCP endpoint; later a first-party Livewire chat panel in Secretaire itself.
     - **Blocked on**: drill-down UX stable enough that tool contracts reflect the actual domain surface, and backups running (hallucinated deletes must be survivable).
 16. 🧭 **Forecast / prognosis engine** — project future income, spending, and balance from historical data + seasonality.
     - **Deterministic layer** — `recurring_projections` already gives a known-future view for bills, income, transfers, maintenance. Sum forward across accounts → guaranteed-cashflow line.
@@ -434,7 +434,7 @@ Each has a target shape; listed in rough priority based on personal-admin load.
 - 🧭 Media encryption at rest (age/gpg of the file store, or Laravel disk-level encryption).
 - 🧭 Export everything as a zip (DB dump + media + tagged manifest) — lifeboat for portability or recovery.
 - 🧭 Audit log — `audits` table tracking mutations on sensitive models (documents, contracts, accounts).
-- ✅ **OWASP ZAP baseline scan** — wired into `scripts/test-all.sh --zap`, runs `run-zap.sh baseline --ci` against a running Bureau instance on localhost:8000 and fails on High/Medium findings. Opt-in flag keeps the normal dev-loop test-all path fast; ZAP step only fires when explicitly requested.
+- ✅ **OWASP ZAP baseline scan** — wired into `scripts/test-all.sh --zap`, runs `run-zap.sh baseline --ci` against a running Secretaire instance on localhost:8000 and fails on High/Medium findings. Opt-in flag keeps the normal dev-loop test-all path fast; ZAP step only fires when explicitly requested.
 
 ---
 
@@ -451,9 +451,9 @@ Each has a target shape; listed in rough priority based on personal-admin load.
 ---
 
 ## Market research / feature parity
-_(Deferred 2026-04-17 — Bureau is built from personal experience and needs. This audit is a sanity-check for later, once core v1 is feature-complete.)_
+_(Deferred 2026-04-17 — Secretaire is built from personal experience and needs. This audit is a sanity-check for later, once core v1 is feature-complete.)_
 
-- 💡 Map Bureau against the landscape so the roadmap isn't invented in a vacuum:
+- 💡 Map Secretaire against the landscape so the roadmap isn't invented in a vacuum:
   - **Fiscal**: Firefly III, Actual Budget, Lunch Money, YNAB, Monarch Money, Copilot, EveryDollar, Quicken Classic, Tiller, Banktivity.
   - **Home inventory**: HomeZada, Centriq, Sortly, Encircle.
   - **Personal CRM / admin**: Notion / Obsidian PARA setups.
@@ -466,6 +466,6 @@ _(Deferred 2026-04-17 — Bureau is built from personal experience and needs. Th
 
 - Double-entry accounting rigor (business bookkeeping). Personal app, not QuickBooks.
 - Live market feeds for investments. Manual snapshots only.
-- Password vault. Use 1Password/Bitwarden; Bureau links to where things live, not the secrets themselves. _(2026-04-17: flagged for revisit — see task #79.)_
+- Password vault. Use 1Password/Bitwarden; Secretaire links to where things live, not the secrets themselves. _(2026-04-17: flagged for revisit — see task #79.)_
 - Social/collaborative features beyond the household.
 - Real-time sync across devices (use server-of-record + refresh; no CRDTs).

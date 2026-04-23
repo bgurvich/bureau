@@ -17,7 +17,7 @@ class ConnectPayPalCommand extends Command
         {--household= : Household id to attach this integration to}
         {--client-id= : PayPal REST app client id}
         {--client-secret= : PayPal REST app client secret}
-        {--account= : Bureau Account id (the "PayPal" account transactions land on)}
+        {--account= : Secretaire Account id (the "PayPal" account transactions land on)}
         {--webhook-id= : PayPal webhook id for signature verification (optional)}
         {--sandbox : Use PayPal sandbox base URL}';
 
@@ -99,7 +99,7 @@ class ConnectPayPalCommand extends Command
         $options = $accounts->mapWithKeys(fn ($a) => [$a->id => $a->name.' ('.$a->type.')'])->all();
 
         return (int) select(
-            label: 'Target Bureau Account for PayPal transactions',
+            label: 'Target Secretaire Account for PayPal transactions',
             options: $options,
             hint: 'PayPal purchases land here; bank→PayPal transfers get reconciled automatically.'
         );

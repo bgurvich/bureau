@@ -10,11 +10,11 @@
     <meta name="theme-color" content="#d8cfbf">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="Bureau">
+    <meta name="apple-mobile-web-app-title" content="Secretaire">
     <link rel="manifest" href="/manifest.webmanifest">
     <link rel="apple-touch-icon" href="/apple-touch-icon.png">
     <link rel="icon" href="/icon.svg" type="image/svg+xml">
-    <title>{{ $title ?? 'Bureau' }}</title>
+    <title>{{ $title ?? 'Secretaire' }}</title>
     @include('partials.theme-flash')
     @vite(['resources/css/app.css', 'resources/js/app.ts'])
 </head>

@@ -21,9 +21,9 @@ final class BookkeeperExportController extends Controller
         $from = CarbonImmutable::parse($data['from'])->startOfDay();
         $to = CarbonImmutable::parse($data['to'])->endOfDay();
         $household = CurrentHousehold::get();
-        $householdName = is_object($household) && isset($household->name) ? (string) $household->name : 'Bureau';
+        $householdName = is_object($household) && isset($household->name) ? (string) $household->name : 'Secretaire';
         $filename = sprintf(
-            'bureau-bookkeeper-%s-%s-to-%s.zip',
+            'secretaire-bookkeeper-%s-%s-to-%s.zip',
             str(strtolower($householdName))->slug(),
             $from->format('Y-m-d'),
             $from->format('Y-m-d') === $to->format('Y-m-d') ? $from->format('Y-m-d') : $to->format('Y-m-d'),
@@ -54,7 +54,7 @@ final class BookkeeperExportController extends Controller
     private function readme(CarbonImmutable $from, CarbonImmutable $to, string $householdName): string
     {
         return implode("\n", [
-            '# Bureau bookkeeper package',
+            '# Secretaire bookkeeper package',
             '',
             sprintf('Household: %s', $householdName),
             sprintf('Period: %s → %s', $from->toDateString(), $to->toDateString()),

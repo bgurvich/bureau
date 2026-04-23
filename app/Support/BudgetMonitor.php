@@ -43,7 +43,7 @@ class BudgetMonitor
         }
 
         // One sum query per capped category. N caps = N queries — trivial at
-        // the household scale Bureau targets. If this grows, replace with a
+        // the household scale Secretaire targets. If this grows, replace with a
         // single GROUP BY on a JOIN.
         return $caps->map(function (BudgetCap $cap) use ($start, $end): BudgetStatus {
             $spent = (float) abs((float) Transaction::query()

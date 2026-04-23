@@ -17,7 +17,7 @@ use App\Support\Statements\ParsedTransaction;
  *     (it encodes the sign of the balance delta rather than the
  *     absolute refund amount). abs() normalizes either shape.
  *
- * Bureau's credit-card convention is charges negative / refunds-and-
+ * Secretaire's credit-card convention is charges negative / refunds-and-
  * payments positive, which is what we emit.
  *
  * The Category column (Costco-only) is passed through as a

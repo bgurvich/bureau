@@ -7,7 +7,7 @@ use DateTimeInterface;
 
 /**
  * Renders an RFC-5545 RRULE into a short human-readable phrase for
- * dashboards and rule catalogs. Covers the subset Bureau emits:
+ * dashboards and rule catalogs. Covers the subset Secretaire emits:
  * FREQ + INTERVAL + BYMONTHDAY + BYDAY + COUNT=1 (one-off).
  *
  * Unsupported parts are ignored and we fall back to "Repeats <FREQ>".

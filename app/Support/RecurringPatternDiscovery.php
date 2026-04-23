@@ -19,7 +19,7 @@ use Illuminate\Support\Collection;
  * or previously-accepted candidates stay in their states.
  *
  * Explicitly skips groups already covered by an active `RecurringRule` so
- * the user isn't nagged about things Bureau already tracks.
+ * the user isn't nagged about things Secretaire already tracks.
  */
 class RecurringPatternDiscovery
 {

@@ -7,7 +7,7 @@ use Carbon\CarbonInterface;
 use DateTimeInterface;
 
 /**
- * Minimal RFC-5545 RRULE expander. Supports the subset Bureau uses:
+ * Minimal RFC-5545 RRULE expander. Supports the subset Secretaire uses:
  *   FREQ=DAILY|WEEKLY|MONTHLY|YEARLY
  *   INTERVAL
  *   BYMONTHDAY (comma list)

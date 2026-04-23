@@ -73,7 +73,7 @@ final class WellsFargoCreditStatementParser implements StatementParser
                     continue;
                 }
                 // Credit entries (payments/refunds) render as negatives on
-                // credit statements; charges are positive. Bureau stores
+                // credit statements; charges are positive. Secretaire stores
                 // credit-card charges as negative (outflow from credit
                 // account's perspective), so flip.
                 $isCredit = ! empty($m[4]) || $amount < 0;

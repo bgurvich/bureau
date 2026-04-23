@@ -15,7 +15,7 @@
     <main class="flex min-h-screen items-center justify-center p-6">
         <div class="w-full max-w-sm">
             <div class="mb-8 text-center">
-                <div class="text-xl font-semibold tracking-tight">{{ __('Bureau') }}</div>
+                <div class="text-xl font-semibold tracking-tight">{{ __('Secretaire') }}</div>
                 <p class="mt-1 text-xs text-neutral-500">{{ __('Personal affairs, in one place.') }}</p>
             </div>
             {{ $slot }}

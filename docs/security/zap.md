@@ -1,6 +1,6 @@
 # OWASP ZAP scanning — runbook
 
-ZAP (Zed Attack Proxy) is Bureau's web-application security scanner. This doc
+ZAP (Zed Attack Proxy) is Secretaire's web-application security scanner. This doc
 covers three modes — pick the one that matches what you want to learn.
 
 ## 0. When to run which mode
@@ -30,7 +30,7 @@ Target a different URL or port:
 ```sh
 ZAP_TARGET=http://localhost:8000 composer zap
 ZAP_PORT=9001 composer zap
-ZAP_NO_SERVE=1 ZAP_TARGET=https://bureau.example composer zap
+ZAP_NO_SERVE=1 ZAP_TARGET=https://secretaire.example composer zap
 ```
 
 On Linux the script wires `host.docker.internal` to the host gateway via
@@ -44,8 +44,8 @@ flooding.
 
 ```sh
 # 1. Spin up a separate DB
-export DB_DATABASE=bureau_zap
-mysql -uroot -e "DROP DATABASE IF EXISTS bureau_zap; CREATE DATABASE bureau_zap;"
+export DB_DATABASE=secretaire_zap
+mysql -uroot -e "DROP DATABASE IF EXISTS secretaire_zap; CREATE DATABASE secretaire_zap;"
 php artisan migrate --force
 php artisan db:seed   # if you have seeders that make the surface interesting
 
@@ -61,7 +61,7 @@ docker run --rm \
     -r full-$(date +%Y%m%d-%H%M%S).html
 ```
 
-After: drop `bureau_zap`, kill the serve process, and `composer test:refresh`
+After: drop `secretaire_zap`, kill the serve process, and `composer test:refresh`
 before using dev again.
 
 ## 3. Authenticated scan
@@ -71,7 +71,7 @@ looks like (so it can detect session expiry and re-auth).
 
 ### Easiest path: reusable session cookie
 
-1. Log into Bureau in your browser, grab the `bureau_session` cookie value
+1. Log into Secretaire in your browser, grab the `secretaire_session` cookie value
    from DevTools → Application → Cookies.
 2. Run ZAP with the cookie injected on every request:
 
@@ -86,7 +86,7 @@ docker run --rm \
         -config replacer.full_list(0).matchtype=REQ_HEADER \
         -config replacer.full_list(0).matchstr=Cookie \
         -config replacer.full_list(0).regex=false \
-        -config replacer.full_list(0).replacement='bureau_session=<your-cookie-value>'" \
+        -config replacer.full_list(0).replacement='secretaire_session=<your-cookie-value>'" \
     -r auth-baseline-$(date +%Y%m%d-%H%M%S).html
 ```
 
@@ -107,7 +107,7 @@ on Medium+ first. For each:
 
 1. **Reproduce** — ZAP's report has the exact request/response. Paste the
    request into `curl` or a browser; confirm it still fails.
-2. **Diagnose** — is this a real bug or a false positive given how Bureau
+2. **Diagnose** — is this a real bug or a false positive given how Secretaire
    uses the feature? E.g., missing `X-Frame-Options` is a real bug; missing
    `X-Content-Type-Options` on a route that only serves JSON is cosmetic.
 3. **Fix the root cause** — add the header in middleware, set the cookie
@@ -131,7 +131,7 @@ previously appeared is gone — our nonce-based CSP (via the `CspNonce`
 middleware and `SecurityHeaders`) emits a per-request nonce on every
 script tag from Vite, Livewire, and the inline theme-resolver scripts.
 
-## 5. Tuning ZAP for Bureau
+## 5. Tuning ZAP for Secretaire
 
 `.github/zap-rules.tsv` lives next to the GitHub Actions workflow and
 downgrades known-false-positive rules so they don't nag us forever. The
@@ -142,7 +142,7 @@ hiding in plain sight.
 ## 6. Known false positives on `php artisan serve`
 
 Three findings flagged by the baseline scan when running against the dev
-server do **not** appear when Bureau sits behind nginx in production:
+server do **not** appear when Secretaire sits behind nginx in production:
 
 - `X-Content-Type-Options` missing on `/build/assets/*` + `/robots.txt`
 - `Permissions-Policy` missing on `/build/assets/*`
@@ -155,7 +155,7 @@ production these come from the web server, not the app. A minimal nginx
 snippet that covers them:
 
 ```nginx
-# /etc/nginx/conf.d/bureau-headers.conf
+# /etc/nginx/conf.d/secretaire-headers.conf
 add_header X-Content-Type-Options       "nosniff"                                always;
 add_header X-Frame-Options              "DENY"                                   always;
 add_header Referrer-Policy              "strict-origin-when-cross-origin"        always;
@@ -176,7 +176,7 @@ responses. `fastcgi_hide_header` drops what PHP-FPM adds upstream;
 - Weekly against `main` (Mondays 06:00 UTC).
 - On demand via `workflow_dispatch`.
 
-The CI job uses a fresh `bureau` MariaDB service, so findings reflect a
+The CI job uses a fresh `secretaire` MariaDB service, so findings reflect a
 clean-install instance (no dev data leaking into the report). Results are
 uploaded as the `zap-baseline-report` artifact — download it from the
 Actions tab.

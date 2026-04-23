@@ -11,7 +11,7 @@ import { resolve } from 'node:path';
 // Cheaper than a third-party plugin; no new dep.
 function sriManifestPlugin() {
     return {
-        name: 'bureau:sri-manifest',
+        name: 'secretaire:sri-manifest',
         apply: 'build',
         closeBundle() {
             const manifestPath = resolve(process.cwd(), 'public/build/manifest.json');

@@ -1,6 +1,6 @@
-# Bureau
+# Secretaire
 
-Personal-affairs app for a household of one. Bureau is where I keep the
+Personal-affairs app for a household of one. Secretaire is where I keep the
 long tail of adult life — finances, bills, contracts, insurance, vehicles,
 property, pets, health, taxes, reading, decisions, and whatever else needs
 to be found later. It's built for me; you're welcome to read the code.

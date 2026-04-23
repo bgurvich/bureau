@@ -127,7 +127,7 @@ class ConnectFastmailCommand extends Command
             options: fn (string $q) => $q === ''
                 ? $options
                 : array_filter($options, fn ($v) => stripos($v, $q) !== false),
-            hint: 'Only messages arriving in this folder get pulled into Bureau.',
+            hint: 'Only messages arriving in this folder get pulled into Secretaire.',
         );
     }
 }

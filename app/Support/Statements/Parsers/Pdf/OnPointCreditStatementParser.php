@@ -12,7 +12,7 @@ use Carbon\CarbonImmutable;
  *
  * Layout cues: "OnPoint" + "Visa" or "Mastercard" or "Credit Card
  * Statement". Transaction rows: "MM/DD  MM/DD  description  amount" with
- * optional "CR" suffix on credits. Charges positive on source; Bureau
+ * optional "CR" suffix on credits. Charges positive on source; Secretaire
  * stores credit-card charges as negative.
  */
 final class OnPointCreditStatementParser implements StatementParser

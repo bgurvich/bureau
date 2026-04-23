@@ -77,7 +77,7 @@ class VerifyRestoreSnapshot extends Command
         $tempRoot = storage_path('app/backup-verify-'.now()->format('Ymd-His'));
         File::makeDirectory($tempRoot, 0700, true);
 
-        $verifyDb = 'bureau_verify_'.now()->format('YmdHis');
+        $verifyDb = 'secretaire_verify_'.now()->format('YmdHis');
         $cleanup = function () use ($tempRoot, $verifyDb, &$cleanup): void {
             $cleanup = fn () => null; // idempotent — register once via trap
             try {
@@ -142,7 +142,7 @@ class VerifyRestoreSnapshot extends Command
         /** @var string[] $disks */
         $disks = config('backup.backup.destination.disks', ['local']);
         $diskName = $disks[0] ?? 'local';
-        $backupName = (string) config('backup.backup.name', 'Bureau');
+        $backupName = (string) config('backup.backup.name', 'Secretaire');
 
         $disk = Storage::disk($diskName);
         $files = collect($disk->allFiles($backupName))

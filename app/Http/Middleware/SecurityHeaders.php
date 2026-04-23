@@ -17,7 +17,7 @@ use Symfony\Component\HttpFoundation\Response;
  *   to third parties, never the full path.
  * - Permissions-Policy: grants the first-party app access to microphone
  *   + camera (mobile voice note + photo capture) via `(self)`; disables
- *   every other sensor Bureau doesn't use.
+ *   every other sensor Secretaire doesn't use.
  * - Cross-Origin-Opener-Policy: same-origin isolates the page from popups
  *   opened by/to other origins.
  * - Content-Security-Policy: locks script/style/connect sources to 'self';

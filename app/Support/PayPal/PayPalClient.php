@@ -20,7 +20,7 @@ use Illuminate\Support\Facades\Log;
  *   credentials.access_token   — cached
  *   credentials.access_token_expires_at — unix timestamp
  *   settings.base_url          — "https://api-m.sandbox.paypal.com" or live
- *   settings.account_id        — Bureau Account id the transactions land on
+ *   settings.account_id        — Secretaire Account id the transactions land on
  *   settings.cursor            — ISO timestamp of last sync
  *   settings.webhook_id        — PayPal-side webhook id for sig verify
  */

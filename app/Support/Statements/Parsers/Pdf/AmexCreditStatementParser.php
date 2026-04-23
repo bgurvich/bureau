@@ -88,7 +88,7 @@ final class AmexCreditStatementParser implements StatementParser
                     continue;
                 }
                 // Amex credit: charges positive on doc, stored negative.
-                // Payments/credits positive in Bureau.
+                // Payments/credits positive in Secretaire.
                 $signed = $paymentsContext ? abs($amount) : -abs($amount);
                 $rows[] = new ParsedTransaction(
                     occurredOn: $date,

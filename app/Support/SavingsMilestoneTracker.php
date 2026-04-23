@@ -13,7 +13,7 @@ use Illuminate\Support\Collection;
  *
  * Each crossing creates a Reminder row (user's configured channel picks up
  * delivery) rather than sending email directly — consistent with the rest
- * of Bureau's notification pipeline.
+ * of Secretaire's notification pipeline.
  */
 class SavingsMilestoneTracker
 {

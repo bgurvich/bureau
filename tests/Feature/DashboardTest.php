@@ -11,7 +11,7 @@ it('renders the dashboard for an authenticated user with a household', function 
 
     $this->get('/')
         ->assertOk()
-        ->assertSee('Bureau')
+        ->assertSee('Secretaire')
         ->assertSee('Money')
         ->assertSee('Commitments')
         ->assertSee('Attention')

@@ -11,7 +11,7 @@ use Carbon\CarbonImmutable;
  * Runs per Media with a populated `ocr_extracted.amount` + `issued_on`;
  * looks for Transactions in the same household where:
  *   - transaction.amount is the negative of the receipt amount (receipt
- *     amount is always positive; the user's spending is negative in Bureau's
+ *     amount is always positive; the user's spending is negative in Secretaire's
  *     ledger convention),
  *   - transaction.occurred_on is within ±3 days of the receipt's issued_on,
  *   - the transaction doesn't already have a receipt-role media attached.

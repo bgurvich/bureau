@@ -7,7 +7,7 @@ use App\Support\Statements\ParsedTransaction;
 /**
  * OnPoint CU credit card CSV. Header signature: Date, Description, Amount,
  * Card Number (distinguishes from Amex credit via absence of Category and
- * Card Member). Source Amount is positive for charges; Bureau stores
+ * Card Member). Source Amount is positive for charges; Secretaire stores
  * credit-card charges as negative.
  */
 final class OnPointCreditCsvParser extends AbstractCsvStatementParser

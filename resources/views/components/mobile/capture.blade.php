@@ -4,7 +4,7 @@ use Livewire\Attributes\Layout;
 use Livewire\Component;
 
 new
-#[Layout('components.layouts.mobile', ['title' => 'Bureau'])]
+#[Layout('components.layouts.mobile', ['title' => 'Secretaire'])]
 class extends Component
 {
     //

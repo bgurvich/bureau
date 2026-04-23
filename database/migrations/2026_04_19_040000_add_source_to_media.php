@@ -10,7 +10,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('media', function (Blueprint $table) {
-            // Provenance: how the Media row arrived in Bureau. Filterable on
+            // Provenance: how the Media row arrived in Secretaire. Filterable on
             // the Inbox and /media. Values: upload|folder|mail|mobile|api.
             $table->string('source', 16)->default('upload')->after('disk');
             $table->index(['household_id', 'source']);

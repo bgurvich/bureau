@@ -591,7 +591,7 @@ new class extends Component
                 <p><strong class="text-neutral-200">{{ __('PayPal') }}</strong> —
                    {{ __('Provisioned from the CLI: php artisan integrations:connect-paypal. Credentials are encrypted and paired with a webhook id for signature verification.') }}</p>
                 <p><strong class="text-neutral-200">{{ __('Plaid (US banks)') }}</strong> —
-                   {{ __('On the roadmap. Bureau targets Plaid as its single bank-sync provider; no connector ships yet.') }}</p>
+                   {{ __('On the roadmap. Secretaire targets Plaid as its single bank-sync provider; no connector ships yet.') }}</p>
                 <p><strong class="text-neutral-200">{{ __('Slack / Telegram / Twilio') }}</strong> —
                    {{ __('Notification channels listed on /profile are placeholders — the delivery adapters are still to be built.') }}</p>
             </div>
@@ -607,7 +607,7 @@ new class extends Component
             <div>
                 <h3 id="outbound-mail-heading" class="text-sm font-semibold text-neutral-100">{{ __('Outbound mail') }}</h3>
                 <p class="mt-1 text-xs text-neutral-500">
-                    {{ __('How Bureau sends reminders, magic-link sign-ins, and alerts. Configured in .env; see docs/ops/outbound-email.md for provider + DNS setup.') }}
+                    {{ __('How Secretaire sends reminders, magic-link sign-ins, and alerts. Configured in .env; see docs/ops/outbound-email.md for provider + DNS setup.') }}
                 </p>
             </div>
             <x-ui.row-badge :state="$outboundMail['configured'] ? 'active' : 'paused'">

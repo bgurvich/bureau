@@ -1,4 +1,4 @@
-# Bureau — features & roadmap
+# Secretaire — features & roadmap
 
 Two lists: (1) everything already implemented, (2) what's queued. Keep both
 honest: delete shipped items from the roadmap as they land; prune roadmap
@@ -192,7 +192,7 @@ truth.
 - Chain derivation to records (transactions, contracts) via mediables
 
 **Online accounts**
-- Credentials NOT stored (Bureau is not a password manager); only metadata
+- Credentials NOT stored (Secretaire is not a password manager); only metadata
 - MFA method, 2FA flag
 - Importance tier
 - Linked subjects

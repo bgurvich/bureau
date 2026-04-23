@@ -36,7 +36,7 @@
                aria-label="{{ __('Primary') }}">
             <div class="flex h-full flex-col md:sticky md:top-0 md:h-screen">
                 <div class="border-b border-neutral-800 px-5 py-4">
-                    <div class="text-base font-semibold tracking-tight">{{ __('Bureau') }}</div>
+                    <div class="text-base font-semibold tracking-tight">{{ __('Secretaire') }}</div>
                     @auth
                         @php $h = \App\Support\CurrentHousehold::get(); @endphp
                         @if ($h)

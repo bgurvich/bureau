@@ -10,23 +10,23 @@ bash scripts/deploy/install.sh
 
 Runs as the **current user** (not root); escalates via `sudo` where needed. `sudo` credential is kept warm for the length of the run.
 
-Stepped, marker-tracked (`/var/lib/bureau-install/*.done`), safe to re-run. Each step prompts for only the inputs it needs — `--only nginx` won't ask for a DB password it'll never use.
+Stepped, marker-tracked (`/var/lib/secretaire-install/*.done`), safe to re-run. Each step prompts for only the inputs it needs — `--only nginx` won't ask for a DB password it'll never use.
 
 | Step | What it does |
 |---|---|
 | `packages` | PHP 8.3, MariaDB, Redis, nginx, Node (via NVM at `/opt/nvm`), Composer, Certbot, Tesseract, ImageMagick, Poppler, p7zip-full. |
-| `mariadb` | Creates `bureau` DB + user with the chosen password; syncs DB creds into `.env` if it already exists. |
-| `app-user` | Creates the `bureau` OS user. |
-| `permissions` | `chown -R bureau:www-data` on the repo; `chmod o+x` up the ancestor chain so www-data can traverse to `public/`; `ug+rwX,o-rwx` on `storage/` + `bootstrap/cache/`. |
-| `env` | Writes `.env` (APP_ENV=production, APP_URL=`https://bureau.homes`, DB creds, session/cache/queue drivers, mail, backup password); generates APP_KEY if empty; owner `bureau:www-data`, mode `640`. |
-| `composer` | `composer install --no-dev --optimize-autoloader` as `bureau`. |
-| `frontend` | `npm ci && npm run build` as `bureau`. |
+| `mariadb` | Creates `secretaire` DB + user with the chosen password; syncs DB creds into `.env` if it already exists. |
+| `app-user` | Creates the `secretaire` OS user. |
+| `permissions` | `chown -R secretaire:www-data` on the repo; `chmod o+x` up the ancestor chain so www-data can traverse to `public/`; `ug+rwX,o-rwx` on `storage/` + `bootstrap/cache/`. |
+| `env` | Writes `.env` (APP_ENV=production, APP_URL=`https://secretaire.aurnata.com`, DB creds, session/cache/queue drivers, mail, backup password); generates APP_KEY if empty; owner `secretaire:www-data`, mode `640`. |
+| `composer` | `composer install --no-dev --optimize-autoloader` as `secretaire`. |
+| `frontend` | `npm ci && npm run build` as `secretaire`. |
 | `artisan` | `migrate --force`; `db:seed --force` on empty DB; caches config/view/event; reloads php-fpm. |
 | `storage-link` | `artisan storage:link`. |
-| `nginx` | Substitutes placeholders in `nginx-bureau.conf` → `/etc/nginx/sites-available/bureau.conf`; issues a 24h self-signed placeholder cert so nginx boots; tests + reloads. |
-| `ssl` (alias `certbot`) | Issues `bureau.homes` + `www.bureau.homes` via `certbot --webroot`; drops a post-renewal reload hook. |
-| `queue-worker` | Installs `bureau-queue.service` systemd unit running `queue:work --max-time=3600`. |
-| `scheduler` | Minutely cron for `artisan schedule:run` as `bureau`. |
+| `nginx` | Substitutes placeholders in `nginx-secretaire.conf` → `/etc/nginx/sites-available/secretaire.conf`; issues a 24h self-signed placeholder cert so nginx boots; tests + reloads. |
+| `ssl` (alias `certbot`) | Issues `secretaire.aurnata.com` + `www.secretaire.aurnata.com` via `certbot --webroot`; drops a post-renewal reload hook. |
+| `queue-worker` | Installs `secretaire-queue.service` systemd unit running `queue:work --max-time=3600`. |
+| `scheduler` | Minutely cron for `artisan schedule:run` as `secretaire`. |
 | `firewall` | UFW allow SSH + Nginx Full. **Off by default** — opt-in via `--only firewall`. |
 
 ### Flag reference
@@ -46,14 +46,14 @@ The repo has to exist on the box before you run this script (obviously — you'r
 ```bash
 # As your ordinary user (e.g. moshe / ubuntu):
 sudo apt-get install -y git
-sudo mkdir -p /var/www/bureau
-sudo chown $USER: /var/www/bureau
-git clone git@github.com:bgurvich/bureau.git /var/www/bureau
-cd /var/www/bureau
+sudo mkdir -p /var/www/secretaire
+sudo chown $USER: /var/www/secretaire
+git clone git@github.com:bgurvich/secretaire.git /var/www/secretaire
+cd /var/www/secretaire
 bash scripts/deploy/install.sh
 ```
 
-The `permissions` step will re-chown to `bureau:www-data` once the OS user exists.
+The `permissions` step will re-chown to `secretaire:www-data` once the OS user exists.
 
 ## Production release
 

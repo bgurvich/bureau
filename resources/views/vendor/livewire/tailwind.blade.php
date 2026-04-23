@@ -10,7 +10,7 @@ $scrollIntoViewJsSnippet = ($scrollTo !== false)
     : '';
 @endphp
 
-{{-- Bureau-tuned pagination view.
+{{-- Secretaire-tuned pagination view.
      Diff vs Livewire's default:
        * Dark-theme palette baked in (neutral-900/950 chrome, neutral-200 text)
        * CURRENT PAGE is the visually dominant element — filled neutral-100 bg + neutral-900 text.

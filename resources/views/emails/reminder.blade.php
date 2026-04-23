@@ -12,7 +12,7 @@
 @endif
 
 <x-mail::button :url="$url">
-{{ __('Open Bureau') }}
+{{ __('Open Secretaire') }}
 </x-mail::button>
 
 {{ config('app.name') }}

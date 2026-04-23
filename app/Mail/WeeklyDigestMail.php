@@ -40,7 +40,7 @@ class WeeklyDigestMail extends Mailable
 
     public function envelope(): Envelope
     {
-        return new Envelope(subject: __('Bureau · this week at a glance'));
+        return new Envelope(subject: __('Secretaire · this week at a glance'));
     }
 
     public function content(): Content

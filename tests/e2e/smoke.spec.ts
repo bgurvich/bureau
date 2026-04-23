@@ -17,7 +17,7 @@ test('dashboard is behind auth (unauthenticated redirects to login)', async ({ p
 
 test('authenticated user sees the dashboard radars', async ({ page }) => {
     await page.goto('/login');
-    await page.getByLabel('Email', { exact: true }).fill('owner@bureau.local');
+    await page.getByLabel('Email', { exact: true }).fill('owner@secretaire.local');
     await page.getByLabel('Password').fill('change-me');
     await page.getByRole('button', { name: 'Sign in with password' }).click();
 
@@ -29,7 +29,7 @@ test('authenticated user sees the dashboard radars', async ({ page }) => {
 
 test('user-menu dropdown opens and signs out', async ({ page }) => {
     await page.goto('/login');
-    await page.getByLabel('Email', { exact: true }).fill('owner@bureau.local');
+    await page.getByLabel('Email', { exact: true }).fill('owner@secretaire.local');
     await page.getByLabel('Password').fill('change-me');
     await page.getByRole('button', { name: 'Sign in with password' }).click();
     await expect(page).toHaveURL('/');
@@ -50,7 +50,7 @@ test('user-menu dropdown opens and signs out', async ({ page }) => {
 
 test('theme toggle flips the rendered palette', async ({ page }) => {
     await page.goto('/login');
-    await page.getByLabel('Email', { exact: true }).fill('owner@bureau.local');
+    await page.getByLabel('Email', { exact: true }).fill('owner@secretaire.local');
     await page.getByLabel('Password').fill('change-me');
     await page.getByRole('button', { name: 'Sign in with password' }).click();
     await expect(page).toHaveURL('/');

@@ -38,7 +38,7 @@ new class extends Component
     public bool $saved = false;
 
     /**
-     * Matrix keys the notification table shows. Rows = record kinds Bureau
+     * Matrix keys the notification table shows. Rows = record kinds Secretaire
      * emits reminders for; columns = channels a reminder can go out on.
      * Adding a new kind or channel: drop it in here and the matrix expands.
      *

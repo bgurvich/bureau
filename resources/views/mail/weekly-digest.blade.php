@@ -58,13 +58,13 @@
 
 <p style="margin-top:24px">
     <a href="{{ $magicUrl }}" style="display:inline-block;padding:10px 18px;background:#0a0a0a;color:#fff;border-radius:6px;text-decoration:none;font-weight:500">
-        {{ __('Open Bureau') }}
+        {{ __('Open Secretaire') }}
     </a>
 </p>
 
 <p style="color:#888;font-size:12px;margin-top:32px">
-    {{ __('You\'re getting this because you subscribe to Bureau\'s weekly digest. Reply with a tip if anything looked off.') }}
+    {{ __('You\'re getting this because you subscribe to Secretaire\'s weekly digest. Reply with a tip if anything looked off.') }}
 </p>
 <p style="color:#888;font-size:11px;margin-top:8px">
-    {{ __('The "Open Bureau" button signs you in automatically and expires in 48 hours.') }}
+    {{ __('The "Open Secretaire" button signs you in automatically and expires in 48 hours.') }}
 </p>

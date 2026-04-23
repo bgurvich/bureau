@@ -67,7 +67,7 @@ final class SocialLoginController extends Controller
             LoginRecorder::failure('social:'.$provider, 'no-matching-user', $email);
 
             return redirect()->route('login')->withErrors([
-                'email' => __('No Bureau account matches that :p identity. Sign in with email first, then link :p from your profile.', ['p' => ucfirst($provider)]),
+                'email' => __('No Secretaire account matches that :p identity. Sign in with email first, then link :p from your profile.', ['p' => ucfirst($provider)]),
             ]);
         }
 

@@ -17,7 +17,7 @@ class ReminderMail extends Mailable
 
     /**
      * The recipient User is captured so we can embed a MagicLink that
-     * auto-authenticates the recipient when they tap the "Open Bureau"
+     * auto-authenticates the recipient when they tap the "Open Secretaire"
      * button on their phone. Nullable for legacy callers / tests that
      * just render the body without delivering.
      */
