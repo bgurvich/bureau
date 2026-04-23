@@ -445,8 +445,6 @@ new class extends Component
 };
 ?>
 
-?>
-
 <div
     x-data="{
         open: @entangle('open').live,
