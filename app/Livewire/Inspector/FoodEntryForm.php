@@ -6,6 +6,7 @@ namespace App\Livewire\Inspector;
 
 use App\Livewire\Inspector\Concerns\FinalizesSave;
 use App\Livewire\Inspector\Concerns\HasAdminPanel;
+use App\Livewire\Inspector\Concerns\HasPhotos;
 use App\Livewire\Inspector\Concerns\HasTagList;
 use App\Models\FoodEntry;
 use App\Support\Enums;
@@ -18,15 +19,24 @@ use Livewire\Component;
  * Food intake entry. Default eaten_at = now so "ate this right now"
  * flow is a couple of taps: pick kind, type the label, hit save.
  * Nutrition fields are all nullable — a rough log is still useful
- * even if the user only fills calories for half the rows.
+ * even if the user only fills calories for half the rows. Supports
+ * photo attachments via HasPhotos; ensureDraftForPhoto stamps a
+ * minimal record so the "snap the plate, fill details later" mobile
+ * flow works without the photo upload silently dropping.
  */
 class FoodEntryForm extends Component
 {
     use FinalizesSave;
     use HasAdminPanel;
+    use HasPhotos;
     use HasTagList;
 
     public ?int $id = null;
+
+    /** The photos partial reads $this->type to decide whether photo-first
+     *  draft creation is allowed (it is — food is one of the types that
+     *  want mobile snap-the-plate capture). */
+    public string $type = 'food_entry';
 
     public string $kind = 'meal';
 
@@ -117,6 +127,30 @@ class FoodEntryForm extends Component
     protected function adminOwnerField(): ?string
     {
         return 'user_id';
+    }
+
+    /**
+     * Photo-first mobile flow: snap the plate before filling nutrition
+     * details. Stamps a minimal FoodEntry (kind + placeholder label)
+     * so the photo has something to attach to; the full save() call
+     * later updates this same record.
+     */
+    protected function ensureDraftForPhoto(): void
+    {
+        $label = trim($this->label) !== ''
+            ? $this->label
+            : __('Captured :when', ['when' => now()->format('M j, H:i')]);
+
+        $entry = FoodEntry::create([
+            'kind' => $this->kind ?: 'meal',
+            'label' => mb_substr($label, 0, 255),
+            'eaten_at' => $this->eaten_at !== '' ? $this->eaten_at : now(),
+            'source' => 'photo',
+            'user_id' => auth()->id(),
+        ]);
+
+        $this->id = (int) $entry->id;
+        $this->loadAdminMeta();
     }
 
     public function render(): View

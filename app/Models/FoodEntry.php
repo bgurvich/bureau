@@ -3,17 +3,19 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToHousehold;
+use App\Models\Concerns\HasMedia;
 use App\Models\Concerns\HasTags;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * One food-intake row. Manual entries only in v1; a future OCR flow
- * will set source='photo' when a local-LLM pipeline identifies plates.
+ * One food-intake row. Manual + photo attachments in v1; a future OCR
+ * flow will set source='photo' when a local-LLM pipeline identifies
+ * plates from the attached media.
  */
 class FoodEntry extends Model
 {
-    use BelongsToHousehold, HasTags;
+    use BelongsToHousehold, HasMedia, HasTags;
 
     protected $guarded = [];
 

@@ -41,7 +41,7 @@ class extends Component
     {
         /** @var Collection<int, FoodEntry> $list */
         $list = FoodEntry::query()
-            ->with('user:id,name')
+            ->with(['user:id,name', 'media' => fn ($q) => $q->wherePivot('role', 'photo')->orderByPivot('position')->limit(1)])
             ->whereDate('eaten_at', $this->effectiveDate())
             ->orderBy('eaten_at')
             ->get();
@@ -175,7 +175,13 @@ class extends Component
                 @php
                     $kindLabel = \App\Support\Enums::foodEntryKinds()[$e->kind] ?? $e->kind;
                 @endphp
+                @php($cover = $e->media->first())
                 <x-ui.inspector-row type="food_entry" :id="$e->id" :label="$e->label" class="flex items-start gap-4 px-4 py-3 text-sm">
+                    @if ($cover)
+                        <img src="{{ route('media.file', $cover) }}" alt=""
+                             class="h-12 w-12 shrink-0 rounded-md border border-neutral-800 bg-neutral-950 object-cover"
+                             loading="lazy" />
+                    @endif
                     <div class="min-w-0 flex-1">
                         <div class="flex flex-wrap items-baseline gap-2">
                             <span class="w-16 shrink-0 font-mono text-sm text-neutral-500">{{ $e->eaten_at->format('H:i') }}</span>

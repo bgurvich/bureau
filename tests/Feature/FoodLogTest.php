@@ -1,6 +1,8 @@
 <?php
 
 use App\Models\FoodEntry;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 
 it('creates a food entry via the inspector form', function () {
@@ -80,4 +82,31 @@ it('null nutrition fields don\'t break the totals', function () {
     $c = Livewire::test('food-log-index')->set('dateFilter', '2026-04-23');
     expect($c->get('totals')['calories'])->toBe(0)
         ->and($c->get('totals')['protein_g'])->toBe(0.0);
+});
+
+it('photo-first flow: uploading before save stamps a draft entry', function () {
+    authedInHousehold();
+    Storage::fake('local');
+
+    $c = Livewire::test('inspector.food-entry-form')
+        ->set('photoUpload', [UploadedFile::fake()->image('plate.jpg', 200, 200)]);
+
+    expect($c->get('id'))->not->toBeNull();
+    $e = FoodEntry::findOrFail($c->get('id'));
+    expect($e->source)->toBe('photo')
+        ->and($e->media()->count())->toBe(1)
+        ->and($e->media()->first()->pivot->role)->toBe('photo');
+});
+
+it('photo upload on an existing entry attaches without creating a new record', function () {
+    authedInHousehold();
+    Storage::fake('local');
+
+    $entry = FoodEntry::create(['kind' => 'meal', 'label' => 'Salad', 'eaten_at' => '2026-04-23 12:00']);
+
+    Livewire::test('inspector.food-entry-form', ['id' => $entry->id])
+        ->set('photoUpload', [UploadedFile::fake()->image('plate.jpg', 200, 200)]);
+
+    expect(FoodEntry::count())->toBe(1)
+        ->and($entry->fresh()->media()->count())->toBe(1);
 });
