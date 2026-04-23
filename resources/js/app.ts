@@ -88,11 +88,12 @@ function extractTheme(payload: unknown): ThemePref {
 
 // Keyboard shortcuts for the Inspector.
 //   .             — Inspector type picker
-//   t n c x b a d m p h v i s o r e g u l — direct-to-type
+//   t n c x b a d m p h v i s o r e g u l f j — direct-to-type
 //     (task, note, contact, transaction, bill, account, document, meeting,
-//      project, property, vehicle, inventory, insurance, online_account,
-//      reminder, appointment [E=event], savings_goal, subscription,
-//      time_entry [L=log])
+//      project [=P? no, physical_mail], property [H=home], vehicle, inventory,
+//      insurance, online_account, reminder, appointment [E=event],
+//      savings_goal, subscription, time_entry [L=log], checklist_template [K],
+//      food_entry, journal_entry)
 //   \             — time tracker setup / stop
 //   '             — alerts dropdown
 // All skip when the user is typing so they don't hijack normal input.
@@ -119,6 +120,8 @@ const TYPE_SHORTCUTS: Record<string, string> = {
     u: 'subscription',
     l: 'time_entry',
     k: 'checklist_template',
+    f: 'food_entry',
+    j: 'journal_entry',
 };
 
 const GLOBAL_SHORTCUTS: Record<string, () => void> = {

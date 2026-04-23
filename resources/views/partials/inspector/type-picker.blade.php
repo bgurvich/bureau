@@ -16,6 +16,7 @@
             ['note', __('Note'), 'N'],
             ['journal_entry', __('Journal'), 'J'],
             ['media_log_entry', __('Reading / watching'), null],
+            ['food_entry', __('Food entry'), 'F'],
             ['contact', __('Contact'), 'C'],
             ['meeting', __('Meeting'), 'M'],
             ['reminder', __('Reminder'), 'R'],
@@ -41,7 +42,6 @@
         ],
         __('Health') => [
             ['appointment', __('Appointment'), 'E'],
-            ['food_entry', __('Food entry'), 'F'],
             ['pet_license', __('Pet license'), null],
             [null, __('Health provider'), null],
             [null, __('Prescription'), null],
