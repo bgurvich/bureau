@@ -21,9 +21,31 @@ class ChecklistTemplate extends Model
         'dtstart' => 'date',
         'paused_until' => 'date',
         'active' => 'boolean',
-        'is_habit' => 'boolean',
         'sort_order' => 'integer',
     ];
+
+    /**
+     * A template is a habit if it has a recurring rrule — anything that
+     * isn't empty and isn't a single-occurrence COUNT=1. Covers
+     * FREQ=DAILY, weekly, monthly, custom RRULEs with BYDAY/BYMONTH,
+     * etc. Morning/evening routines with multiple items are still
+     * habits; item count isn't the distinction.
+     */
+    public function isHabit(): bool
+    {
+        $rrule = trim((string) $this->rrule);
+        if ($rrule === '') {
+            return false;
+        }
+
+        return ! str_contains(strtoupper($rrule), 'COUNT=1');
+    }
+
+    /** Inverse of isHabit(): one-off checklists (shopping, packing, onboarding). */
+    public function isOneOff(): bool
+    {
+        return ! $this->isHabit();
+    }
 
     /** @return BelongsTo<User, $this> */
     public function user(): BelongsTo

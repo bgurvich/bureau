@@ -18,13 +18,32 @@
 
     <div class="grid grid-cols-2 gap-3">
         <div>
-            <label for="i-ck-recur" class="mb-1 block text-xs text-neutral-400">{{ __('Recurrence') }}</label>
+            <label for="i-ck-recur" class="mb-1 block text-xs text-neutral-400">
+                {{ __('Recurrence') }}
+                @php
+                    // Live classification label so the user sees which bucket
+                    // their dropdown choice lands them in. Recurring = Habit
+                    // (surfaces on /habits with streak); one_off = Checklist
+                    // (surfaces on /checklists). custom-with-COUNT=1 is also
+                    // one-off under the model's isHabit() rule.
+                    $classifiesAs = match (true) {
+                        $checklist_recurrence_mode === 'one_off' => 'one_off',
+                        $checklist_recurrence_mode === 'custom' => str_contains(strtoupper($checklist_rrule), 'COUNT=1') ? 'one_off' : 'habit',
+                        default => 'habit',
+                    };
+                @endphp
+                @if ($classifiesAs === 'habit')
+                    <span class="ml-1 rounded-sm bg-emerald-950/40 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-emerald-300">{{ __('habit') }}</span>
+                @else
+                    <span class="ml-1 rounded-sm bg-sky-950/40 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-sky-300">{{ __('checklist') }}</span>
+                @endif
+            </label>
             <select wire:model.live="checklist_recurrence_mode" id="i-ck-recur"
                     class="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
                 <option value="daily">{{ __('Daily') }}</option>
                 <option value="weekdays">{{ __('Weekdays (Mon–Fri)') }}</option>
                 <option value="weekends">{{ __('Weekends (Sat–Sun)') }}</option>
-                <option value="one_off">{{ __('One-off (single occurrence on start date)') }}</option>
+                <option value="one_off">{{ __('One-off (shopping list, packing, onboarding…)') }}</option>
                 <option value="custom">{{ __('Custom RRULE') }}</option>
             </select>
         </div>
@@ -102,16 +121,14 @@
         @error('checklist_items')<div role="alert" class="mt-1 text-xs text-rose-400">{{ $message }}</div>@enderror
     </fieldset>
 
-    <div class="flex flex-wrap items-center gap-5">
+    <div>
         <label class="flex items-center gap-2 text-sm text-neutral-200">
             <input wire:model="checklist_active" type="checkbox" class="rounded border-neutral-700 bg-neutral-950">
             <span>{{ __('Active') }}</span>
         </label>
-        <label class="flex items-center gap-2 text-sm text-neutral-200"
-               title="{{ __('Surface this on /habits with a streak counter.') }}">
-            <input wire:model="checklist_is_habit" type="checkbox" class="rounded border-neutral-700 bg-neutral-950">
-            <span>{{ __('Treat as habit') }}</span>
-        </label>
+        <p class="mt-1 text-[11px] text-neutral-500">
+            {{ __('Recurring templates (daily / weekly / custom) surface on Habits with a streak. One-off templates surface on Checklists.') }}
+        </p>
     </div>
 
     @include('partials.inspector.fields.tags')

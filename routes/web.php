@@ -121,7 +121,6 @@ Route::middleware(['auth', 'preferences', 'household'])->group(function () {
     Route::livewire('/notes', 'notes-index')->name('records.notes');
     Route::livewire('/logs', 'logs-hub')->name('life.logs');
     Route::livewire('/body', 'body-measurements-index')->name('life.body');
-    Route::livewire('/habits', 'habits-index')->name('life.habits');
     Route::livewire('/money/commitments', 'commitments-hub')->name('fiscal.commitments');
     Route::livewire('/journal', 'journal-index')->name('life.journal');
     Route::livewire('/media-log', 'media-log-index')->name('life.media_log');

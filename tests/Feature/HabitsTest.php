@@ -5,26 +5,29 @@ use App\Models\ChecklistTemplate;
 use Carbon\CarbonImmutable;
 use Livewire\Livewire;
 
-it('surfaces only templates with is_habit = true', function () {
+it('Today tab surfaces only recurring (habit) templates', function () {
     authedInHousehold();
     ChecklistTemplate::create([
-        'name' => 'Meditate', 'rrule' => 'FREQ=DAILY', 'dtstart' => now(), 'active' => true, 'is_habit' => true,
+        'name' => 'Meditate', 'rrule' => 'FREQ=DAILY', 'dtstart' => now(), 'active' => true,
     ]);
     ChecklistTemplate::create([
-        'name' => 'Morning routine', 'rrule' => 'FREQ=DAILY', 'dtstart' => now(), 'active' => true, 'is_habit' => false,
+        'name' => 'Shopping list', 'rrule' => 'FREQ=DAILY;COUNT=1', 'dtstart' => now(), 'active' => true,
+    ]);
+    ChecklistTemplate::create([
+        'name' => 'Ad-hoc list', 'rrule' => null, 'dtstart' => now(), 'active' => true,
     ]);
 
-    $c = Livewire::test('habits-index');
+    $c = Livewire::test('checklists-index')->set('tab', 'today');
     expect($c->get('habits')->pluck('name')->all())->toBe(['Meditate']);
 });
 
-it('toggles today\'s completion via the button', function () {
+it('toggles today\'s completion on a habit via toggleToday()', function () {
     authedInHousehold();
     $habit = ChecklistTemplate::create([
-        'name' => 'Meditate', 'rrule' => 'FREQ=DAILY', 'dtstart' => now()->subDay(), 'active' => true, 'is_habit' => true,
+        'name' => 'Meditate', 'rrule' => 'FREQ=DAILY', 'dtstart' => now()->subDay(), 'active' => true,
     ]);
 
-    $c = Livewire::test('habits-index');
+    $c = Livewire::test('checklists-index')->set('tab', 'today');
     $c->call('toggleToday', $habit->id);
 
     $run = ChecklistRun::where('checklist_template_id', $habit->id)
@@ -32,18 +35,17 @@ it('toggles today\'s completion via the button', function () {
         ->firstOrFail();
     expect($run->completed_at)->not->toBeNull();
 
-    // Second toggle un-completes
     $c->call('toggleToday', $habit->id);
     expect($run->fresh()->completed_at)->toBeNull();
 });
 
-it('refuses to toggle a non-habit template', function () {
+it('refuses to toggle a one-off checklist', function () {
     authedInHousehold();
-    $ritual = ChecklistTemplate::create([
-        'name' => 'Morning ritual', 'rrule' => 'FREQ=DAILY', 'dtstart' => now(), 'active' => true, 'is_habit' => false,
+    $oneOff = ChecklistTemplate::create([
+        'name' => 'Pack for trip', 'rrule' => 'FREQ=DAILY;COUNT=1', 'dtstart' => now(), 'active' => true,
     ]);
 
-    Livewire::test('habits-index')->call('toggleToday', $ritual->id);
+    Livewire::test('checklists-index')->call('toggleToday', $oneOff->id);
 
     expect(ChecklistRun::count())->toBe(0);
 });
@@ -51,7 +53,7 @@ it('refuses to toggle a non-habit template', function () {
 it('streak increments with each consecutive completed day', function () {
     authedInHousehold();
     $habit = ChecklistTemplate::create([
-        'name' => 'Meditate', 'rrule' => 'FREQ=DAILY', 'dtstart' => now()->subDays(10), 'active' => true, 'is_habit' => true,
+        'name' => 'Meditate', 'rrule' => 'FREQ=DAILY', 'dtstart' => now()->subDays(10), 'active' => true,
     ]);
 
     $today = CarbonImmutable::today();
@@ -63,40 +65,70 @@ it('streak increments with each consecutive completed day', function () {
         ]);
     }
 
-    $c = Livewire::test('habits-index');
+    $c = Livewire::test('checklists-index')->set('tab', 'today');
     expect($c->get('streaks')[$habit->id])->toBe(3);
 });
 
-it('inspector saves the is_habit flag', function () {
-    authedInHousehold();
+it('Model::isHabit() returns true for recurring templates and false for one-offs', function () {
+    $h = new ChecklistTemplate(['rrule' => 'FREQ=DAILY']);
+    $o = new ChecklistTemplate(['rrule' => 'FREQ=DAILY;COUNT=1']);
+    $n = new ChecklistTemplate(['rrule' => null]);
 
-    Livewire::test('inspector.checklist-template-form')
-        ->set('checklist_name', 'Walk 30 min')
-        ->set('checklist_dtstart', now()->toDateString())
-        ->set('checklist_recurrence_mode', 'daily')
-        ->set('checklist_is_habit', true)
-        ->call('save');
-
-    $t = ChecklistTemplate::where('name', 'Walk 30 min')->firstOrFail();
-    expect($t->is_habit)->toBeTrue();
+    expect($h->isHabit())->toBeTrue()
+        ->and($o->isHabit())->toBeFalse()
+        ->and($o->isOneOff())->toBeTrue()
+        ->and($n->isHabit())->toBeFalse();
 });
 
-it('inspector mount with asHabit=true pre-checks the habit flag', function () {
+it('inspector mount with asHabit=true pre-selects daily recurrence', function () {
     authedInHousehold();
 
     Livewire::test('inspector.checklist-template-form', ['asHabit' => true])
-        ->assertSet('checklist_is_habit', true);
+        ->assertSet('checklist_recurrence_mode', 'daily');
 });
 
-it('inspector mount without asHabit keeps the habit flag off by default', function () {
+it('inspector mount with oneOff=true pre-selects one_off recurrence', function () {
     authedInHousehold();
 
-    Livewire::test('inspector.checklist-template-form')
-        ->assertSet('checklist_is_habit', false);
+    Livewire::test('inspector.checklist-template-form', ['oneOff' => true])
+        ->assertSet('checklist_recurrence_mode', 'one_off');
 });
 
-it('/habits route renders for an authed user', function () {
+it('History tab surfaces the 60-day heat grid data for habits', function () {
+    authedInHousehold();
+    $habit = ChecklistTemplate::create([
+        'name' => 'Meditate', 'rrule' => 'FREQ=DAILY', 'dtstart' => now()->subDays(5), 'active' => true,
+    ]);
+    ChecklistRun::create([
+        'checklist_template_id' => $habit->id,
+        'run_date' => now()->subDays(2)->toDateString(),
+        'completed_at' => now()->subDays(2),
+    ]);
+
+    $c = Livewire::test('checklists-index')->set('tab', 'history');
+    $history = $c->get('history');
+
+    expect($history)->toHaveKey($habit->id)
+        ->and($history[$habit->id])->toHaveCount(1);
+});
+
+it('All tab filters by type chip (habit / one_off / all)', function () {
+    authedInHousehold();
+    ChecklistTemplate::create(['name' => 'Daily ritual', 'rrule' => 'FREQ=DAILY', 'dtstart' => now(), 'active' => true]);
+    ChecklistTemplate::create(['name' => 'Shopping list', 'rrule' => 'FREQ=DAILY;COUNT=1', 'dtstart' => now(), 'active' => true]);
+
+    $c = Livewire::test('checklists-index')->set('tab', 'all');
+    expect($c->get('templates')->count())->toBe(2);
+
+    $c->set('typeFilter', 'habit');
+    expect($c->get('templates')->pluck('name')->all())->toBe(['Daily ritual']);
+
+    $c->set('typeFilter', 'one_off');
+    expect($c->get('templates')->pluck('name')->all())->toBe(['Shopping list']);
+});
+
+it('/life/checklists route renders for an authed user', function () {
     $user = authedInHousehold();
     $this->actingAs($user);
-    $this->get(route('life.habits'))->assertOk();
+    $this->get(route('life.checklists.index'))->assertOk();
 });
