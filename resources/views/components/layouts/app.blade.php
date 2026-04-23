@@ -66,6 +66,8 @@
                                 [__('Reading / watching'), 'life.media_log', 'note'],
                                 [__('Food log'), 'life.food', 'pie'],
                                 [__('Contacts'), 'relationships.contacts', 'user'],
+                                [__('Assets'), 'assets.index', 'box'],
+                                [__('Records'), 'records.index', 'file-text'],
                             ],
                             __('Time') => [
                                 [__('Projects'), 'time.projects', 'folder'],
@@ -74,12 +76,6 @@
                             __('Commitments') => [
                                 [__('Contracts'), 'relationships.contracts', 'file-signature'],
                                 [__('Insurance'), 'relationships.insurance', 'shield'],
-                            ],
-                            __('Assets') => [
-                                [__('Assets'), 'assets.index', 'box'],
-                            ],
-                            __('Records') => [
-                                [__('Records'), 'records.index', 'file-text'],
                             ],
                             __('Health') => [
                                 [__('Health'), 'health.index', 'stethoscope'],
