@@ -9,7 +9,9 @@ use App\Models\Transaction;
 use App\Support\CategorySourceMatcher;
 use App\Support\CurrentHousehold;
 use App\Support\DescriptionNormalizer;
-use App\Support\Formatting;
+// App\Support\Formatting is referenced only from the template section
+// via \App\Support\Formatting::money(...) — kept out of the `use` list
+// so Pint's no_unused_imports fixer doesn't strip it on every run.
 use App\Support\MediaFolders;
 use App\Support\ProjectionMatcher;
 use App\Support\Statements\ParsedStatement;
@@ -274,55 +276,63 @@ class extends Component
         $householdId = CurrentHousehold::get()?->id;
 
         // File-level dedup: have we seen this hash before in this household?
+        // When yes AND the resulting transactions are still on file, we
+        // no longer short-circuit. Instead the normal parse path runs,
+        // and the row-level dedup at recomputeDuplicates() auto-deselects
+        // whatever is already in the DB so the user can import the delta
+        // (missing rows the parser now extracts that weren't there before,
+        // transactions the user had deleted, etc.). Any transactions the
+        // import creates attach to the EXISTING Media row via
+        // ensureMediaForFile's media_id short-circuit.
         $existingMedia = Media::where('hash', $hash)
             ->when($householdId, fn ($q) => $q->where('household_id', $householdId))
             ->first();
+        $prevImportedCount = 0;
+        $reuseMediaId = null;
         if ($existingMedia) {
             $prevImportedCount = Transaction::whereHas('media', fn ($q) => $q->where('media.id', $existingMedia->id))
                 ->count();
             if ($prevImportedCount > 0) {
-                // Normal dedup path: file has been imported and the rows
-                // it produced are still in the DB. Nothing to do.
+                // Re-scan path: reuse the existing Media row + file on
+                // disk; let the normal parse + dedup flow surface the
+                // delta. No status='already_imported' short-circuit.
+                $reuseMediaId = (int) $existingMedia->id;
+            } else {
+                // Orphan: the Media row lingered but every Transaction
+                // it was attached to has since been deleted (manual DB
+                // wipe, household reset). Drop the stale Media + its
+                // on-disk file so the normal path below recreates both
+                // cleanly.
+                try {
+                    Storage::disk((string) $existingMedia->disk)->delete((string) $existingMedia->path);
+                } catch (Throwable) {
+                    // Best-effort — the file may already be gone on disk.
+                }
+                $existingMedia->delete();
+            }
+        }
+
+        $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION)) ?: 'bin';
+        // Re-scan path reuses the existing Media's file on disk so we
+        // don't leave orphan copies under two paths for the same hash.
+        if ($reuseMediaId !== null && $existingMedia !== null && Storage::disk((string) $existingMedia->disk)->exists((string) $existingMedia->path)) {
+            $path = (string) $existingMedia->path;
+        } else {
+            $path = 'statements/'.($householdId ?? 0).'/'.date('Y/m').'/'.$fileId.'.'.$ext;
+            try {
+                Storage::disk('local')->put($path, $bytes);
+            } catch (Throwable $e) {
+                Log::warning('Statement storage write failed', ['name' => $name, 'error' => $e->getMessage()]);
                 $this->parsed[$fileId] = [
                     'name' => $name,
-                    'status' => 'already_imported',
+                    'status' => 'failed',
+                    'error' => __('Could not save file to disk. Check storage permissions.'),
                     'hash' => $hash,
-                    'media_id' => $existingMedia->id,
-                    'prev_imported_count' => $prevImportedCount,
                     'rows' => [],
                 ];
 
                 return;
             }
-            // Orphan: the Media row lingered but every Transaction it was
-            // attached to has since been deleted (manual DB wipe, household
-            // reset). Drop the stale Media + its on-disk file so the normal
-            // parse/persist path below can recreate both cleanly — otherwise
-            // the user is stuck on "already imported, 0 transactions" with
-            // no way to re-ingest the same file.
-            try {
-                Storage::disk((string) $existingMedia->disk)->delete((string) $existingMedia->path);
-            } catch (Throwable) {
-                // Best-effort — the file may already be gone on disk.
-            }
-            $existingMedia->delete();
-        }
-
-        $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION)) ?: 'bin';
-        $path = 'statements/'.($householdId ?? 0).'/'.date('Y/m').'/'.$fileId.'.'.$ext;
-        try {
-            Storage::disk('local')->put($path, $bytes);
-        } catch (Throwable $e) {
-            Log::warning('Statement storage write failed', ['name' => $name, 'error' => $e->getMessage()]);
-            $this->parsed[$fileId] = [
-                'name' => $name,
-                'status' => 'failed',
-                'error' => __('Could not save file to disk. Check storage permissions.'),
-                'hash' => $hash,
-                'rows' => [],
-            ];
-
-            return;
         }
 
         $registry = app(ParserRegistry::class);
@@ -435,6 +445,15 @@ class extends Component
             'disk_path' => $path,
             'mime' => $mime,
             'size' => strlen($bytes),
+            // When set, ensureMediaForFile() short-circuits to this id
+            // instead of creating a fresh Media — reuses the existing
+            // pivot so re-imports don't fork the statement's scan rows
+            // across two Media records.
+            'media_id' => $reuseMediaId,
+            // Count of transactions already attached to the reused Media
+            // row before this re-scan started. Zero on fresh imports.
+            // Preview renders an info chip when > 0.
+            'prev_imported_count' => $prevImportedCount,
         ];
 
         // Default all rows selected — dedup computation lands once account picked.
@@ -564,8 +583,16 @@ class extends Component
 
     /**
      * Row-level dedup: flag rows that overlap with existing Transactions on
-     * the picked account. Uses (account + amount ±0.01 + date ±3d) OR same
-     * external_id.
+     * the picked account.
+     *
+     * Two paths: exact (`external_id` = sha1 of account+date+description+amount
+     * — caught by the unique index at import time) OR fuzzy (same account +
+     * same amount ±$0.01 + same date ±3d + SAME whitespace-collapsed
+     * description). The description equality is what stops two unrelated
+     * $25 purchases three days apart from flagging each other as
+     * duplicates; the external_id hash already encodes description, but
+     * the fuzzy branch used to ignore it, producing false positives the
+     * user then had to un-deselect row by row.
      */
     private function recomputeDuplicates(string $fileId): void
     {
@@ -580,6 +607,7 @@ class extends Component
             $hasExternal = Transaction::where('account_id', $accountId)
                 ->where('external_id', $externalId)
                 ->exists();
+            $rowDesc = trim((string) preg_replace('/\s+/', ' ', (string) ($row['description'] ?? '')));
             $hasFuzzy = ! $hasExternal
                 ? Transaction::where('account_id', $accountId)
                     ->whereBetween('amount', [$row['amount'] - 0.005, $row['amount'] + 0.005])
@@ -587,6 +615,10 @@ class extends Component
                         CarbonImmutable::parse($row['occurred_on'])->subDays(3)->toDateString(),
                         CarbonImmutable::parse($row['occurred_on'])->addDays(3)->toDateString(),
                     ])
+                    ->whereRaw(
+                        "LOWER(TRIM(REGEXP_REPLACE(COALESCE(description, ''), '[[:space:]]+', ' '))) = ?",
+                        [mb_strtolower($rowDesc)],
+                    )
                     ->exists()
                 : true;
             $dupes[$i] = $hasExternal || $hasFuzzy;
@@ -1871,6 +1903,9 @@ class extends Component
                                     {{ $state['bank_label'] }}
                                     @if ($state['account_last4']) · {{ __('acct ···:n', ['n' => $state['account_last4']]) }} @endif
                                     @if ($state['period_start'] && $state['period_end']) · {{ $state['period_start'] }} → {{ $state['period_end'] }} @endif
+                                    @if (! empty($state['prev_imported_count']))
+                                        · <span class="text-amber-400">{{ __('re-scan · :n already on file', ['n' => $state['prev_imported_count']]) }}</span>
+                                    @endif
                                 @elseif ($state['status'] === 'already_imported')
                                     {{ __('Already imported · :n transactions created earlier', ['n' => $state['prev_imported_count']]) }}
                                 @elseif ($state['status'] === 'unrecognized')
@@ -1931,7 +1966,7 @@ class extends Component
                                 </div>
                                 @if ($state['opening'] !== null || $state['closing'] !== null)
                                     <div class="text-[11px] text-neutral-500">
-                                        {{ __('Open :o · Close :c', ['o' => $state['opening'] !== null ? Formatting::money((float) $state['opening'], $rowCurrency) : '—', 'c' => $state['closing'] !== null ? Formatting::money((float) $state['closing'], $rowCurrency) : '—']) }}
+                                        {{ __('Open :o · Close :c', ['o' => $state['opening'] !== null ? \App\Support\Formatting::money((float) $state['opening'], $rowCurrency) : '—', 'c' => $state['closing'] !== null ? \App\Support\Formatting::money((float) $state['closing'], $rowCurrency) : '—']) }}
                                     </div>
                                 @endif
                                 <div class="ml-auto flex items-center gap-2 text-[11px] text-neutral-500">
@@ -2229,7 +2264,7 @@ class extends Component
                                                         @endif
                                                     </td>
                                                     <td class="px-2 py-1 text-right tabular-nums {{ $row['amount'] >= 0 ? 'text-emerald-400' : 'text-neutral-100' }}">
-                                                        {{ Formatting::money((float) $row['amount'], $rowCurrency) }}
+                                                        {{ \App\Support\Formatting::money((float) $row['amount'], $rowCurrency) }}
                                                     </td>
                                                     <td class="px-2 py-1 text-right">
                                                         @if ($isDup)

@@ -88,13 +88,15 @@ it('surfaces the vendor pattern that matched a preview row', function () {
 it('flags already-imported rows after the user picks an account', function () {
     $user = authedInHousehold();
     $account = Account::create(['type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
-    // Pre-existing row that will conflict on fuzzy amount+date match.
+    // Pre-existing row that conflicts on account+amount+date AND
+    // description — fuzzy dedup requires all four to agree so two
+    // unrelated same-amount purchases within 3 days don't false-match.
     Transaction::create([
         'account_id' => $account->id,
         'occurred_on' => '2026-03-10',
         'amount' => -1200.00,
         'currency' => 'USD',
-        'description' => 'Old rent import',
+        'description' => 'Rent',
         'status' => 'cleared',
     ]);
 
@@ -107,6 +109,80 @@ it('flags already-imported rows after the user picks an account', function () {
     $dupes = $c->get('duplicates')[$fileId];
     // Row 1 ("Rent" on 03/10 for -1200) should be flagged.
     expect($dupes)->toContain(true);
+});
+
+it('re-scans a previously imported statement and surfaces only the missing rows', function () {
+    authedInHousehold();
+    $account = Account::create(['type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
+
+    // First import — all three Citi rows land on file.
+    $fileA = UploadedFile::fake()->createWithContent('citi.csv', citiCheckingCsv());
+    $c1 = Livewire::test('statements-import')->set('files', [$fileA]);
+    $fileIdA = array_keys($c1->get('parsed'))[0];
+    $c1->call('setAccount', $fileIdA, $account->id)->call('importAll');
+    expect(Transaction::count())->toBe(3);
+
+    // The user then decides to delete the middle row manually (say it
+    // was mis-categorised and they want to re-ingest cleanly). Re-upload
+    // the SAME file — with the old behaviour the UI said "already
+    // imported, nothing to do" and the user was stuck. Now parse runs,
+    // row 1 is the only unflagged one, selected by default.
+    Transaction::where('description', 'Rent')->delete();
+    expect(Transaction::count())->toBe(2);
+
+    $fileB = UploadedFile::fake()->createWithContent('citi.csv', citiCheckingCsv());
+    $c2 = Livewire::test('statements-import')->set('files', [$fileB]);
+    $fileIdB = array_keys($c2->get('parsed'))[0];
+    $state = $c2->get('parsed')[$fileIdB];
+
+    expect($state['status'])->toBe('ready')
+        // Count reflects live state at rescan time — 2 after the
+        // Rent-row delete above, not the 3 from the first import.
+        ->and($state['prev_imported_count'])->toBe(2)
+        ->and($state['media_id'])->not->toBeNull();
+
+    $c2->call('setAccount', $fileIdB, $account->id);
+    $dupes = $c2->get('duplicates')[$fileIdB];
+
+    // Rows 0 (Direct Deposit) + 2 (Groceries) stay on file, so they're
+    // flagged as duplicates. Row 1 (Rent) was deleted, so it's NOT a
+    // duplicate and remains selectable.
+    expect($dupes[0])->toBeTrue()
+        ->and($dupes[1])->toBeFalse()
+        ->and($dupes[2])->toBeTrue();
+
+    // Importing the re-scan adds the missing row back WITHOUT forking
+    // the statement across a second Media — createTransactions attaches
+    // to the original Media via ensureMediaForFile's media_id path.
+    $c2->call('importAll');
+    $rentRow = Transaction::where('description', 'Rent')->firstOrFail();
+    expect($rentRow->media()->where('media.id', $state['media_id'])->exists())->toBeTrue();
+    expect(Media::where('hash', $state['hash'])->count())->toBe(1);
+});
+
+it('does not false-flag two same-amount rows with different descriptions as duplicates', function () {
+    authedInHousehold();
+    $account = Account::create(['type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
+
+    // Pre-existing transaction with the SAME account + amount + close
+    // date as a row in the upload — but a different description. Under
+    // the old fuzzy rule this would flag the incoming "Rent" row as a
+    // duplicate; with the description-aware check it must not.
+    Transaction::create([
+        'account_id' => $account->id,
+        'occurred_on' => '2026-03-10',
+        'amount' => -1200.00,
+        'currency' => 'USD',
+        'description' => 'Car repair deposit',
+        'status' => 'cleared',
+    ]);
+
+    $file = UploadedFile::fake()->createWithContent('citi.csv', citiCheckingCsv());
+    $c = Livewire::test('statements-import')->set('files', [$file]);
+    $fileId = array_keys($c->get('parsed'))[0];
+    $c->call('setAccount', $fileId, $account->id);
+
+    expect($c->get('duplicates')[$fileId])->not->toContain(true);
 });
 
 it('imports selected rows and deterministic external_id prevents re-import duplicates', function () {
@@ -125,15 +201,25 @@ it('imports selected rows and deterministic external_id prevents re-import dupli
     $externalIds = Transaction::pluck('external_id')->filter()->all();
     expect(count(array_unique($externalIds)))->toBe(3);
 
-    // Re-upload same file → file-level dedup flips to already_imported.
+    // Re-upload same file → rescan. File-level dedup now shows the
+    // preview with prev_imported_count so the user can see any missing
+    // rows, and every row is auto-deselected by the dedup pass since
+    // they all still match the originally-imported transactions.
     $file2 = UploadedFile::fake()->createWithContent('citi.csv', citiCheckingCsv());
     $c2 = Livewire::test('statements-import')->set('files', [$file2]);
-    $re = array_values($c2->get('parsed'))[0];
-    expect($re['status'])->toBe('already_imported')
-        ->and($re['prev_imported_count'])->toBe(3);
+    $fileId2 = array_keys($c2->get('parsed'))[0];
+    $re = $c2->get('parsed')[$fileId2];
+    expect($re['status'])->toBe('ready')
+        ->and($re['prev_imported_count'])->toBe(3)
+        ->and($re['media_id'])->not->toBeNull();
 
-    // And even if we didn't have file-level dedup, row-level external_id
-    // uniqueness prevents duplication.
+    $c2->call('setAccount', $fileId2, $account->id);
+    expect($c2->get('duplicates')[$fileId2])->toBe([true, true, true]);
+
+    // Importing with everything still flagged-as-dup short-circuits at
+    // the unique-index guard for any stragglers; the row count stays at
+    // the original 3 either way.
+    $c2->call('importAll');
     expect(Transaction::count())->toBe(3);
 });
 
