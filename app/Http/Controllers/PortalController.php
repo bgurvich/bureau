@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\PortalGrant;
+use App\Support\PortalActivityLog;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -36,11 +37,19 @@ final class PortalController extends Controller
         // channel that leaked an anonymous session id.
         $request->session()->regenerate();
 
+        PortalActivityLog::record('consumed_token', $grant, $request);
+
         return redirect()->route('portal.dashboard');
     }
 
     public function logout(Request $request): RedirectResponse
     {
+        $grantId = $request->session()->get('portal_grant_id');
+        $grant = $grantId ? PortalGrant::query()->withoutGlobalScope('household')->find($grantId) : null;
+        if ($grant) {
+            PortalActivityLog::record('signed_out', $grant, $request);
+        }
+
         $request->session()->forget('portal_grant_id');
 
         return redirect()->route('portal.expired');

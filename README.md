@@ -121,3 +121,22 @@ entry point and it requires a pre-shared time-boxed token.
 
 Private. Source is here for reading and reference; reuse requires
 permission.
+
+
+  ┌────────────────────┬──────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+  │        Task        │                                              Command / location                                              │
+  ├────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Update your .env   │ APP_NAME=Secretaire, DB_DATABASE=secretaire, DB_USERNAME=secretaire, APP_URL=https://secretaire.aurnata.com  │
+  ├────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Rename physical DB │ MariaDB doesn't RENAME DATABASE; create fresh secretaire DB + mysqldump bureau | mysql secretaire + drop old │
+  ├────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Rename test DB     │ bureau_test → secretaire_test (then update phpunit.xml, .env.testing, and tests/Pest.php)                    │
+  ├────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Rename GitHub repo │ bgurvich/bureau → bgurvich/secretaire; then git remote set-url origin git@github.com:bgurvich/secretaire.git │
+  ├────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Rename working dir │ mv /home/moshe/bureau /home/moshe/secretaire (close editors first)                                           │
+  ├────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Cloudflare DNS     │ secretaire.aurnata.com → your VPS                                                                            │
+  ├────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Server migration   │ Rename Unix user bureau (or leave), rename nginx-bureau.conf, update install.sh defaults, re-run deploy      │
+  └────────────────────┴──────────────────────────────────────────────────────────────────────────────────────────────────────────────┘

@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\PortalActivityEvent;
 use App\Models\PortalGrant;
 use App\Support\CurrentHousehold;
 use Carbon\CarbonImmutable;
@@ -104,6 +105,27 @@ new class extends Component
     {
         $this->oneTimeUrl = null;
     }
+
+    /**
+     * Recent audit events across all grants for this household.
+     * Preview grants are out of sight on the grants list above, but
+     * their events surface here so the owner can still review their own
+     * "View as CPA would" rehearsals.
+     *
+     * @return Collection<int, PortalActivityEvent>
+     */
+    #[Computed]
+    public function activity(): Collection
+    {
+        /** @var Collection<int, PortalActivityEvent> $rows */
+        $rows = PortalActivityEvent::query()
+            ->with('grant:id,label,token_tail,is_preview')
+            ->orderByDesc('created_at')
+            ->limit(30)
+            ->get();
+
+        return $rows;
+    }
 };
 ?>
 
@@ -173,6 +195,7 @@ new class extends Component
     @if ($this->grants->isEmpty())
         <p class="text-xs text-neutral-500">{{ __('No grants yet.') }}</p>
     @else
+        <h3 class="mb-1 text-[10px] font-medium uppercase tracking-wider text-neutral-500">{{ __('Grants') }}</h3>
         <ul class="divide-y divide-neutral-800/60 text-sm">
             @foreach ($this->grants as $g)
                 @php($status = $g->revoked_at ? 'revoked' : ($g->expires_at?->isPast() ? 'expired' : 'active'))
@@ -208,5 +231,47 @@ new class extends Component
                 </li>
             @endforeach
         </ul>
+    @endif
+
+    @if ($this->activity->isNotEmpty())
+        <details class="mt-5">
+            <summary class="cursor-pointer text-[10px] font-medium uppercase tracking-wider text-neutral-500 hover:text-neutral-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                {{ __('Recent activity') }}
+                <span class="ml-1 tabular-nums text-neutral-600">· {{ $this->activity->count() }}</span>
+            </summary>
+            <ul class="mt-2 divide-y divide-neutral-800/40 rounded-md border border-neutral-800/60 bg-neutral-900/40 text-[11px]">
+                @foreach ($this->activity as $event)
+                    <li class="flex flex-wrap items-baseline gap-2 px-2 py-1.5">
+                        <span class="w-32 shrink-0 font-mono tabular-nums text-neutral-500">{{ $event->created_at->diffForHumans() }}</span>
+                        <span class="text-neutral-200">
+                            @switch($event->action)
+                                @case('consumed_token') {{ __('Signed in') }} @break
+                                @case('page_view') {{ __('Viewed dashboard') }} @break
+                                @case('export_csv') {{ __('Exported CSV') }} @break
+                                @case('signed_out') {{ __('Signed out') }} @break
+                                @default {{ $event->action }}
+                            @endswitch
+                        </span>
+                        <span class="text-neutral-500">
+                            @if ($event->grant)
+                                @if ($event->grant->is_preview)
+                                    <span class="rounded-sm bg-amber-950/40 px-1 font-mono uppercase tracking-wider text-amber-300">{{ __('preview') }}</span>
+                                @endif
+                                {{ $event->grant->label ?: __('(unlabeled)') }}
+                                <span class="font-mono text-neutral-600">…{{ $event->grant->token_tail }}</span>
+                            @else
+                                <span class="italic text-neutral-600">{{ __('grant deleted') }}</span>
+                            @endif
+                        </span>
+                        @if ($event->action === 'export_csv' && ! empty($event->metadata['filename']))
+                            <span class="ml-auto truncate font-mono text-[10px] text-neutral-500">{{ $event->metadata['filename'] }}</span>
+                        @endif
+                        @if (! empty($event->metadata['ip']))
+                            <span class="ml-auto font-mono text-[10px] text-neutral-600">{{ $event->metadata['ip'] }}</span>
+                        @endif
+                    </li>
+                @endforeach
+            </ul>
+        </details>
     @endif
 </section>

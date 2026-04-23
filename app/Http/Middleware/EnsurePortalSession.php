@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Models\PortalGrant;
 use App\Support\CurrentHousehold;
+use App\Support\PortalActivityLog;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -39,6 +40,15 @@ class EnsurePortalSession
 
         CurrentHousehold::set($grant->household);
         $request->attributes->set('portal_grant', $grant);
+
+        // Log one page_view per GET request. POSTs (form submits) and
+        // file downloads register their own events at the controller so
+        // we don't double-count.
+        if ($request->isMethod('GET') && $request->routeIs('portal.dashboard')) {
+            PortalActivityLog::record('page_view', $grant, $request, [
+                'route' => (string) $request->route()?->getName(),
+            ]);
+        }
 
         return $next($request);
     }

@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Models\Concerns\BelongsToHousehold;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Str;
 
 /**
@@ -99,5 +100,11 @@ class PortalGrant extends Model
     public function revoke(): void
     {
         $this->forceFill(['revoked_at' => now()])->saveQuietly();
+    }
+
+    /** @return HasMany<PortalActivityEvent, $this> */
+    public function events(): HasMany
+    {
+        return $this->hasMany(PortalActivityEvent::class)->orderByDesc('created_at');
     }
 }

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\PortalGrant;
 use App\Models\Transaction;
+use App\Support\PortalActivityLog;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -30,6 +31,12 @@ final class PortalExportController extends Controller
             ->find($request->session()->get('portal_grant_id'));
         $slug = $grant?->label ? preg_replace('/[^a-z0-9-]+/i', '-', strtolower($grant->label)) : 'transactions';
         $filename = 'secretaire-portal-'.$slug.'-'.now()->format('Y-m-d').'.csv';
+
+        PortalActivityLog::record('export_csv', $grant, $request, [
+            'filename' => $filename,
+            'from' => $data['from'] ?? null,
+            'to' => $data['to'] ?? null,
+        ]);
 
         return new StreamedResponse(function () use ($data) {
             $out = fopen('php://output', 'w');
