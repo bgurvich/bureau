@@ -601,6 +601,9 @@ new class extends Component
     {{-- Bookkeeper portal (read-only grants for external CPA) ─────────── --}}
     <livewire:portal-grants-manager />
 
+    {{-- Settings bags (app / household / user) ────────────────────────── --}}
+    <livewire:settings-bags-editor />
+
     {{-- Outbound mail (Postmark / SMTP / log) ──────────────────────────── --}}
     <section aria-labelledby="outbound-mail-heading" class="rounded-xl border border-neutral-800 bg-neutral-900/40 p-5">
         <header class="mb-3 flex items-baseline justify-between gap-4">

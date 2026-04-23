@@ -13,7 +13,11 @@ use Illuminate\Notifications\Notifiable;
 use Laragear\WebAuthn\Contracts\WebAuthnAuthenticatable;
 use Laragear\WebAuthn\WebAuthnAuthentication;
 
-#[Fillable(['name', 'email', 'password', 'default_household_id', 'locale', 'timezone', 'date_format', 'time_format', 'week_starts_on', 'theme'])]
+/**
+ * @property array<string, mixed>|null $settings Free-form per-user settings bag;
+ *                                               typed access via App\Support\Settings::get('user', ...).
+ */
+#[Fillable(['name', 'email', 'password', 'default_household_id', 'locale', 'timezone', 'date_format', 'time_format', 'week_starts_on', 'theme', 'settings'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable implements WebAuthnAuthenticatable
 {
@@ -35,6 +39,7 @@ class User extends Authenticatable implements WebAuthnAuthenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'week_starts_on' => 'integer',
+            'settings' => 'array',
         ];
     }
 
