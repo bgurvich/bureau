@@ -2,6 +2,7 @@
 
 use App\Models\ChecklistRun;
 use App\Models\ChecklistTemplate;
+use App\Models\ChecklistTemplateItem;
 use Carbon\CarbonImmutable;
 use Livewire\Livewire;
 
@@ -19,6 +20,44 @@ it('Today tab surfaces only recurring (habit) templates', function () {
 
     $c = Livewire::test('checklists-index')->set('tab', 'today');
     expect($c->get('habits')->pluck('name')->all())->toBe(['Meditate']);
+});
+
+it('toggleItem ticks a single item on the Today card and auto-completes when all items ticked', function () {
+    authedInHousehold();
+    $habit = ChecklistTemplate::create([
+        'name' => 'Morning routine', 'rrule' => 'FREQ=DAILY', 'dtstart' => now()->subDay(), 'active' => true,
+    ]);
+    $itemA = ChecklistTemplateItem::create(['checklist_template_id' => $habit->id, 'label' => 'Stretch', 'position' => 0]);
+    $itemB = ChecklistTemplateItem::create(['checklist_template_id' => $habit->id, 'label' => 'Meditate', 'position' => 1]);
+
+    $c = Livewire::test('checklists-index')->set('tab', 'today');
+    $c->call('toggleItem', $habit->id, $itemA->id);
+
+    $run = ChecklistRun::firstOrFail();
+    expect($run->tickedIds())->toBe([$itemA->id])
+        ->and($run->completed_at)->toBeNull();
+
+    $c->call('toggleItem', $habit->id, $itemB->id);
+    expect($run->fresh()->completed_at)->not->toBeNull();
+
+    $c->call('toggleItem', $habit->id, $itemA->id);
+    expect($run->fresh()->completed_at)->toBeNull();
+});
+
+it('toggleItem refuses items outside the habit\'s active set', function () {
+    authedInHousehold();
+    $habit = ChecklistTemplate::create([
+        'name' => 'Morning', 'rrule' => 'FREQ=DAILY', 'dtstart' => now()->subDay(), 'active' => true,
+    ]);
+    // Item belongs to a DIFFERENT template — must not be tickable as part of $habit.
+    $otherHabit = ChecklistTemplate::create([
+        'name' => 'Evening', 'rrule' => 'FREQ=DAILY', 'dtstart' => now()->subDay(), 'active' => true,
+    ]);
+    $stranger = ChecklistTemplateItem::create(['checklist_template_id' => $otherHabit->id, 'label' => 'Wind down', 'position' => 0]);
+
+    Livewire::test('checklists-index')->set('tab', 'today')->call('toggleItem', $habit->id, $stranger->id);
+
+    expect(ChecklistRun::count())->toBe(0);
 });
 
 it('toggles today\'s completion on a habit via toggleToday()', function () {
