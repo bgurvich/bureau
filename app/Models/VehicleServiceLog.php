@@ -24,6 +24,8 @@ class VehicleServiceLog extends Model
         'service_date' => 'date',
         'odometer' => 'integer',
         'cost' => 'decimal:2',
+        'next_due_on' => 'date',
+        'next_due_odometer' => 'integer',
     ];
 
     /** @return BelongsTo<Vehicle, $this> */

@@ -18,6 +18,7 @@ use App\Models\SavingsGoal;
 use App\Models\Task;
 use App\Models\TaxEstimatedPayment;
 use App\Models\Transaction;
+use App\Models\VehicleServiceLog;
 use App\Support\BudgetMonitor;
 use App\Support\ChecklistScheduling;
 use App\Support\SpendingAnomalyDetector;
@@ -327,6 +328,26 @@ new class extends Component
             ->count();
     }
 
+    /**
+     * Vehicle services whose next_due_on is within 30 days (or already
+     * past). Restricted to the latest log per (vehicle, kind) pair so
+     * a stale 2022 oil change with a 2023 due date doesn't keep firing
+     * after a newer log supersedes it.
+     */
+    #[Computed]
+    public function vehicleServicesDueSoon(): int
+    {
+        return VehicleServiceLog::query()
+            ->from('vehicle_service_log as vsl')
+            ->whereNotNull('next_due_on')
+            ->where('next_due_on', '<=', now()->addDays(30)->toDateString())
+            ->whereRaw('vsl.service_date = (
+                SELECT MAX(service_date) FROM vehicle_service_log
+                WHERE vehicle_id = vsl.vehicle_id AND kind = vsl.kind
+            )')
+            ->count();
+    }
+
     #[Computed]
     public function total(): int
     {
@@ -352,7 +373,8 @@ new class extends Component
             + $this->decisionFollowUpsDue
             + $this->goalsBehindPace
             + $this->goalsStale
-            + $this->integrationsNeedingReconnect;
+            + $this->integrationsNeedingReconnect
+            + $this->vehicleServicesDueSoon;
     }
 };
 ?>
@@ -538,6 +560,15 @@ new class extends Component
                         {{ __('Integrations need reconnection') }}
                     </a>
                     <span class="tabular-nums text-rose-400">{{ $this->integrationsNeedingReconnect }}</span>
+                </li>
+            @endif
+            @if ($this->vehicleServicesDueSoon)
+                <li class="flex items-baseline justify-between">
+                    <a href="{{ route('assets.vehicle_services') }}"
+                       class="text-neutral-300 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                        {{ __('Vehicle services due ≤ 30d') }}
+                    </a>
+                    <span class="tabular-nums text-amber-400">{{ $this->vehicleServicesDueSoon }}</span>
                 </li>
             @endif
         </ul>

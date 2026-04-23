@@ -55,6 +55,10 @@ class VehicleServiceLogForm extends Component
 
     public string $notes = '';
 
+    public string $next_due_on = '';
+
+    public string $next_due_odometer = '';
+
     public function mount(?int $id = null, ?int $parentId = null): void
     {
         $this->id = $id;
@@ -73,6 +77,8 @@ class VehicleServiceLogForm extends Component
             $this->currency = $s->currency ?: $householdCurrency;
             $this->provider_contact_id = $s->provider_contact_id;
             $this->notes = (string) ($s->notes ?? '');
+            $this->next_due_on = $s->next_due_on ? $s->next_due_on->toDateString() : '';
+            $this->next_due_odometer = $s->next_due_odometer !== null ? (string) $s->next_due_odometer : '';
             $this->loadAdminMeta();
             $this->loadTagList();
         } else {
@@ -106,6 +112,8 @@ class VehicleServiceLogForm extends Component
             'currency' => 'nullable|string|size:3',
             'provider_contact_id' => 'nullable|integer|exists:contacts,id',
             'notes' => 'nullable|string|max:5000',
+            'next_due_on' => 'nullable|date|after_or_equal:service_date',
+            'next_due_odometer' => 'nullable|integer|min:0',
         ]);
 
         $payload = [
@@ -119,6 +127,8 @@ class VehicleServiceLogForm extends Component
             'currency' => $data['currency'] ?: null,
             'provider_contact_id' => $data['provider_contact_id'] ?: null,
             'notes' => $data['notes'] ?: null,
+            'next_due_on' => ($data['next_due_on'] ?? '') ?: null,
+            'next_due_odometer' => ($data['next_due_odometer'] ?? '') !== '' ? (int) $data['next_due_odometer'] : null,
         ];
 
         if ($this->id !== null) {

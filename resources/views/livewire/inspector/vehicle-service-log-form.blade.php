@@ -79,6 +79,28 @@
         </div>
     </div>
 
+    <fieldset class="space-y-3 rounded-md border border-neutral-800 bg-neutral-900/40 px-3 py-3">
+        <legend class="px-1 text-[10px] font-medium uppercase tracking-wider text-neutral-500">{{ __('Next service (optional)') }}</legend>
+        <div class="grid grid-cols-2 gap-3">
+            <div>
+                <label for="i-vs-due-on" class="mb-1 block text-xs text-neutral-400">{{ __('Due on') }}</label>
+                <input wire:model="next_due_on" id="i-vs-due-on" type="date"
+                       class="w-full rounded-md border border-neutral-700 bg-neutral-950 px-2 py-2 text-sm text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                @error('next_due_on')<div role="alert" class="mt-1 text-xs text-rose-400">{{ $message }}</div>@enderror
+            </div>
+            <div>
+                <label for="i-vs-due-odo" class="mb-1 block text-xs text-neutral-400">{{ __('Due at odometer') }}
+                    <span class="ml-1 font-mono text-[10px] text-neutral-500">{{ $odometer_unit }}</span>
+                </label>
+                <input wire:model="next_due_odometer" id="i-vs-due-odo" type="number" min="0" step="1" inputmode="numeric"
+                       class="w-full rounded-md border border-neutral-700 bg-neutral-950 px-2 py-2 text-sm tabular-nums text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+            </div>
+        </div>
+        <p class="text-[11px] text-neutral-500">
+            {{ __('Attention radar pings you when the due date arrives. Odometer reading is informational — no live mileage feed today.') }}
+        </p>
+    </fieldset>
+
     @include('partials.inspector.fields.notes')
     @include('partials.inspector.fields.tags')
     @include('partials.inspector.fields.admin')
