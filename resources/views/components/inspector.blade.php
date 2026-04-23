@@ -9,6 +9,7 @@ use App\Models\Contact;
 use App\Models\Contract;
 use App\Models\Document;
 use App\Models\Domain;
+use App\Models\FoodEntry;
 use App\Models\InventoryItem;
 use App\Models\JournalEntry;
 use App\Models\MediaLogEntry;
@@ -323,6 +324,7 @@ new class extends Component
                 'vehicle_service_log' => VehicleServiceLog::findOrFail($this->id)->delete(),
                 'media_log_entry' => MediaLogEntry::findOrFail($this->id)->delete(),
                 'pet_license' => PetLicense::findOrFail($this->id)->delete(),
+                'food_entry' => FoodEntry::findOrFail($this->id)->delete(),
                 default => null,
             };
         } catch (PeriodLockedException $e) {
@@ -444,6 +446,7 @@ new class extends Component
             'meter_reading' => __('meter reading'),
             'vehicle_service_log' => __('vehicle service'),
             'media_log_entry' => __('media entry'),
+            'food_entry' => __('food entry'),
             default => '',
         };
 

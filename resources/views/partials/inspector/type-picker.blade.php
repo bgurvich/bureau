@@ -41,6 +41,7 @@
         ],
         __('Health') => [
             ['appointment', __('Appointment'), 'E'],
+            ['food_entry', __('Food entry'), 'F'],
             ['pet_license', __('Pet license'), null],
             [null, __('Health provider'), null],
             [null, __('Prescription'), null],

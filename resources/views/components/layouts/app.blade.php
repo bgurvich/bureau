@@ -63,6 +63,7 @@
                                 [__('Schedule'), 'life.schedule', 'calendar'],
                                 [__('Journal'), 'life.journal', 'book'],
                                 [__('Reading / watching'), 'life.media_log', 'note'],
+                                [__('Food log'), 'life.food', 'pie'],
                                 [__('Contacts'), 'relationships.contacts', 'user'],
                             ],
                             __('Time') => [

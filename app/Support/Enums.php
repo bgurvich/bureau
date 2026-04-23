@@ -583,6 +583,18 @@ class Enums
         ];
     }
 
+    /** Food-log entry kinds. Stored free-string; this is the picker. */
+    /** @return array<string, string> */
+    public static function foodEntryKinds(): array
+    {
+        return [
+            'meal' => __('Meal'),
+            'snack' => __('Snack'),
+            'drink' => __('Drink'),
+            'other' => __('Other'),
+        ];
+    }
+
     /** Vehicle-service kinds — surfaced in the VehicleServiceLogForm
      *  picker. Free string at the schema level so one-off services
      *  ("winter storage prep", "detailing") fit without a migration. */
