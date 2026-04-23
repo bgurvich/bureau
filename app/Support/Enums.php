@@ -522,24 +522,31 @@ class Enums
         ];
     }
 
-    /** Tax document kinds. Presentation order mirrors what arrives in the mail each Jan/Feb. */
-    /** @return array<string, string> */
+    /**
+     * Tax document kinds. Presentation order mirrors what arrives in the mail each Jan/Feb.
+     *
+     * Key type is int|string because PHP coerces all-digit string keys ('1098')
+     * to int; __() returns string for string keys (translations are strings in
+     * our lang files) but its generic signature is array|string, so we cast.
+     *
+     * @return array<int|string, string>
+     */
     public static function taxDocumentKinds(): array
     {
         return [
-            'W-2' => __('W-2 (wages)'),
-            '1099-NEC' => __('1099-NEC (nonemployee comp.)'),
-            '1099-MISC' => __('1099-MISC'),
-            '1099-INT' => __('1099-INT (interest)'),
-            '1099-DIV' => __('1099-DIV (dividends)'),
-            '1099-B' => __('1099-B (brokerage)'),
-            '1099-R' => __('1099-R (retirement)'),
-            '1099-G' => __('1099-G (gov. payments)'),
-            '1098' => __('1098 (mortgage interest)'),
-            'K-1' => __('K-1 (partnership)'),
-            'receipt' => __('Receipt'),
-            'schedule' => __('Schedule'),
-            'other' => __('Other'),
+            'W-2' => (string) __('W-2 (wages)'),
+            '1099-NEC' => (string) __('1099-NEC (nonemployee comp.)'),
+            '1099-MISC' => (string) __('1099-MISC'),
+            '1099-INT' => (string) __('1099-INT (interest)'),
+            '1099-DIV' => (string) __('1099-DIV (dividends)'),
+            '1099-B' => (string) __('1099-B (brokerage)'),
+            '1099-R' => (string) __('1099-R (retirement)'),
+            '1099-G' => (string) __('1099-G (gov. payments)'),
+            '1098' => (string) __('1098 (mortgage interest)'),
+            'K-1' => (string) __('K-1 (partnership)'),
+            'receipt' => (string) __('Receipt'),
+            'schedule' => (string) __('Schedule'),
+            'other' => (string) __('Other'),
         ];
     }
 
@@ -670,6 +677,36 @@ class Enums
             'grateful' => __('Grateful'),
             'frustrated' => __('Frustrated'),
             'reflective' => __('Reflective'),
+        ];
+    }
+
+    /** Goal category bucket — coarse enough to chip-filter on the
+     *  index without turning into a dropdown jungle. Order is how the
+     *  picker lays them out. */
+    /** @return array<string, string> */
+    public static function goalCategories(): array
+    {
+        return [
+            'health' => __('Health'),
+            'learning' => __('Learning'),
+            'creative' => __('Creative'),
+            'career' => __('Career'),
+            'financial' => __('Financial'),
+            'relationships' => __('Relationships'),
+            'other' => __('Other'),
+        ];
+    }
+
+    /** Goal status lifecycle: active by default, paused for on-hold,
+     *  achieved on completion, abandoned when dropped. */
+    /** @return array<string, string> */
+    public static function goalStatuses(): array
+    {
+        return [
+            'active' => __('Active'),
+            'paused' => __('Paused'),
+            'achieved' => __('Achieved'),
+            'abandoned' => __('Abandoned'),
         ];
     }
 }

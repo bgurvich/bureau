@@ -123,6 +123,7 @@ Route::middleware(['auth', 'preferences', 'household'])->group(function () {
     Route::livewire('/media-log', 'media-log-index')->name('life.media_log');
     Route::livewire('/food', 'food-log-index')->name('life.food');
     Route::livewire('/decisions', 'decisions-index')->name('life.decisions');
+    Route::livewire('/goals', 'goals-index')->name('life.goals');
     Route::livewire('/time/projects', 'projects-index')->name('time.projects');
     Route::livewire('/time/entries', 'time-entries-index')->name('time.entries');
     Route::livewire('/properties', 'properties-index')->name('assets.properties');

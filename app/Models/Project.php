@@ -6,6 +6,7 @@ use App\Models\Concerns\BelongsToHousehold;
 use App\Models\Concerns\HasLinkedNotes;
 use App\Models\Concerns\HasLinkedTasks;
 use App\Models\Concerns\HasLinkedTransactions;
+use App\Models\Concerns\HasSubjects;
 use App\Models\Concerns\HasTags;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -13,9 +14,19 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Project extends Model
 {
-    use BelongsToHousehold, HasLinkedNotes, HasLinkedTasks, HasLinkedTransactions, HasTags;
+    use BelongsToHousehold, HasLinkedNotes, HasLinkedTasks, HasLinkedTransactions, HasSubjects, HasTags;
 
     protected $guarded = [];
+
+    protected function subjectsTable(): string
+    {
+        return 'project_subjects';
+    }
+
+    protected function subjectsForeignKey(): string
+    {
+        return 'project_id';
+    }
 
     protected $casts = [
         'billable' => 'boolean',

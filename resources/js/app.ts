@@ -125,6 +125,7 @@ const TYPE_SHORTCUTS: Record<string, string> = {
     z: 'decision',
     w: 'media_log_entry',
     y: 'meter_reading',
+    q: 'goal',
 };
 
 const GLOBAL_SHORTCUTS: Record<string, () => void> = {

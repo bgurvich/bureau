@@ -5,6 +5,7 @@ use App\Models\ChecklistRun;
 use App\Models\Contract;
 use App\Models\Decision;
 use App\Models\Domain;
+use App\Models\Goal;
 use App\Models\InventoryItem;
 use App\Models\Media;
 use App\Models\PetCheckup;
@@ -270,6 +271,47 @@ new class extends Component
             ->count();
     }
 
+    /**
+     * Active target-mode goals whose actual progress trails expected
+     * pacing by 10% or more — quick SQL approximation of onTrack(),
+     * aligned with the listing's amber bar. Count not rows: cheap.
+     */
+    #[Computed]
+    public function goalsBehindPace(): int
+    {
+        return Goal::query()
+            ->where('status', 'active')
+            ->where('mode', 'target')
+            ->whereNotNull('target_date')
+            ->whereNotNull('started_on')
+            ->whereNotNull('target_value')
+            ->where('target_value', '>', 0)
+            ->where('started_on', '<=', now()->toDateString())
+            ->where('target_date', '>', 'started_on')
+            // elapsed% > progress% + 10 → behind pace
+            ->whereRaw('(DATEDIFF(LEAST(CURDATE(), target_date), started_on) / DATEDIFF(target_date, started_on)) > (current_value / target_value) + 0.10')
+            ->count();
+    }
+
+    /**
+     * Active direction-mode goals whose last_reflected_at + cadence has
+     * passed (or who have never been reflected on at all). Mirrors the
+     * listing's "time for a check-in" chip.
+     */
+    #[Computed]
+    public function goalsStale(): int
+    {
+        return Goal::query()
+            ->where('status', 'active')
+            ->where('mode', 'direction')
+            ->whereNotNull('cadence_days')
+            ->where(function ($q) {
+                $q->whereNull('last_reflected_at')
+                    ->orWhereRaw('DATE_ADD(last_reflected_at, INTERVAL cadence_days DAY) <= NOW()');
+            })
+            ->count();
+    }
+
     #[Computed]
     public function total(): int
     {
@@ -292,7 +334,9 @@ new class extends Component
             + $this->expiringPetVaccinations
             + $this->overduePetCheckups
             + $this->expiringPetLicenses
-            + $this->decisionFollowUpsDue;
+            + $this->decisionFollowUpsDue
+            + $this->goalsBehindPace
+            + $this->goalsStale;
     }
 };
 ?>
@@ -451,6 +495,24 @@ new class extends Component
                         {{ __('Decisions awaiting follow-up') }}
                     </a>
                     <span class="tabular-nums text-amber-400">{{ $this->decisionFollowUpsDue }}</span>
+                </li>
+            @endif
+            @if ($this->goalsBehindPace)
+                <li class="flex items-baseline justify-between">
+                    <a href="{{ route('life.goals', ['mode' => 'target', 'status' => 'active']) }}"
+                       class="text-neutral-300 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                        {{ __('Goals behind pace') }}
+                    </a>
+                    <span class="tabular-nums text-amber-400">{{ $this->goalsBehindPace }}</span>
+                </li>
+            @endif
+            @if ($this->goalsStale)
+                <li class="flex items-baseline justify-between">
+                    <a href="{{ route('life.goals', ['mode' => 'direction', 'status' => 'active']) }}"
+                       class="text-neutral-300 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                        {{ __('Directions due for check-in') }}
+                    </a>
+                    <span class="tabular-nums text-amber-400">{{ $this->goalsStale }}</span>
                 </li>
             @endif
         </ul>

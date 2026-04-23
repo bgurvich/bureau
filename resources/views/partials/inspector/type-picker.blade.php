@@ -16,6 +16,7 @@
             ['note', __('Note'), 'N'],
             ['journal_entry', __('Journal'), 'J'],
             ['decision', __('Decision'), 'Z'],
+            ['goal', __('Goal'), 'Q'],
             ['media_log_entry', __('Reading / watching'), 'W'],
             ['food_entry', __('Food entry'), 'F'],
             ['contact', __('Contact'), 'C'],

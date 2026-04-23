@@ -63,6 +63,7 @@
                                 [__('Schedule'), 'life.schedule', 'calendar'],
                                 [__('Journal'), 'life.journal', 'book'],
                                 [__('Decisions'), 'life.decisions', 'check-square'],
+                                [__('Goals'), 'life.goals', 'pie'],
                                 [__('Reading / watching'), 'life.media_log', 'note'],
                                 [__('Food log'), 'life.food', 'pie'],
                                 [__('Contacts'), 'relationships.contacts', 'user'],

@@ -6,6 +6,7 @@ namespace App\Livewire\Inspector;
 
 use App\Livewire\Inspector\Concerns\FinalizesSave;
 use App\Livewire\Inspector\Concerns\HasAdminPanel;
+use App\Livewire\Inspector\Concerns\HasSubjectRefs;
 use App\Livewire\Inspector\Concerns\HasTagList;
 use App\Livewire\Inspector\Concerns\WithCounterpartyPicker;
 use App\Models\Project;
@@ -20,12 +21,15 @@ use Livewire\Component;
  * hourly-rate row conditionally, slug auto-derives from name when blank.
  * Uses HasAdminPanel + HasTagList for the standard admin + tag-input
  * plumbing. Client picker reuses the shared contacts list with the
- * inline createCounterparty create-method.
+ * inline createCounterparty create-method. HasSubjectRefs opts the
+ * project into the shared subject picker so it can be tethered to
+ * Goal (or any other subject-capable model).
  */
 class ProjectForm extends Component
 {
     use FinalizesSave;
     use HasAdminPanel;
+    use HasSubjectRefs;
     use HasTagList;
     use WithCounterpartyPicker;
 
@@ -63,6 +67,7 @@ class ProjectForm extends Component
             $this->project_client_id = $p->client_contact_id;
             $this->project_archived = (bool) $p->archived;
             $this->notes = (string) ($p->notes ?? '');
+            $this->subject_refs = $this->subjectRefsFrom($p);
             $this->loadAdminMeta();
             $this->loadTagList();
         } else {
@@ -101,11 +106,15 @@ class ProjectForm extends Component
         ];
 
         if ($this->id !== null) {
-            Project::findOrFail($this->id)->update($payload);
+            $project = Project::findOrFail($this->id);
+            $project->update($payload);
         } else {
             $payload['user_id'] = auth()->id();
-            $this->id = (int) Project::create($payload)->id;
+            $project = Project::create($payload);
+            $this->id = (int) $project->id;
         }
+
+        $project->syncSubjects($this->parseSubjectRefs($this->subject_refs));
 
         $this->persistAdminOwner();
         $this->persistTagList();

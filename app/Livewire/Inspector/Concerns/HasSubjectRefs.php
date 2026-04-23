@@ -9,6 +9,7 @@ use App\Models\Contact;
 use App\Models\Contract;
 use App\Models\Decision;
 use App\Models\Document;
+use App\Models\Goal;
 use App\Models\HealthProvider;
 use App\Models\InventoryItem;
 use App\Models\JournalEntry;
@@ -58,6 +59,7 @@ trait HasSubjectRefs
         'recurring_rule' => RecurringRule::class,
         'journal_entry' => JournalEntry::class,
         'decision' => Decision::class,
+        'goal' => Goal::class,
     ];
 
     /** @return array<int, array{ref: string, label: string, kind_label: string, name: string}> */
@@ -262,6 +264,7 @@ trait HasSubjectRefs
             'recurring_rule' => __('Bill'),
             'journal_entry' => __('Journal entry'),
             'decision' => __('Decision'),
+            'goal' => __('Goal'),
             default => ucfirst($kind),
         };
     }
@@ -283,6 +286,7 @@ trait HasSubjectRefs
             RecurringRule::class => 'title',
             JournalEntry::class => 'title',
             Decision::class => 'title',
+            Goal::class => 'title',
             default => 'name',
         };
     }

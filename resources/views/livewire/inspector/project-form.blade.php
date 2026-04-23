@@ -42,6 +42,7 @@
                    class="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm tabular-nums text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
         </div>
     @endif
+    @include('partials.inspector.fields.subjects')
     @include('partials.inspector.fields.notes')
     @include('partials.inspector.fields.tags')
     @include('partials.inspector.fields.admin')

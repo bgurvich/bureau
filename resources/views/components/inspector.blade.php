@@ -11,6 +11,7 @@ use App\Models\Decision;
 use App\Models\Document;
 use App\Models\Domain;
 use App\Models\FoodEntry;
+use App\Models\Goal;
 use App\Models\InventoryItem;
 use App\Models\JournalEntry;
 use App\Models\MediaLogEntry;
@@ -327,6 +328,7 @@ new class extends Component
                 'pet_license' => PetLicense::findOrFail($this->id)->delete(),
                 'food_entry' => FoodEntry::findOrFail($this->id)->delete(),
                 'decision' => Decision::findOrFail($this->id)->delete(),
+                'goal' => Goal::findOrFail($this->id)->delete(),
                 default => null,
             };
         } catch (PeriodLockedException $e) {
@@ -450,6 +452,7 @@ new class extends Component
             'media_log_entry' => __('media entry'),
             'food_entry' => __('food entry'),
             'decision' => __('decision'),
+            'goal' => __('goal'),
             default => '',
         };
 
