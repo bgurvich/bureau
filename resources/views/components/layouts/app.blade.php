@@ -61,11 +61,8 @@
                             ],
                             __('Life') => [
                                 [__('Schedule'), 'life.schedule', 'calendar'],
-                                [__('Journal'), 'life.journal', 'book'],
-                                [__('Decisions'), 'life.decisions', 'check-square'],
+                                [__('Logs'), 'life.logs', 'book'],
                                 [__('Goals'), 'life.goals', 'pie'],
-                                [__('Reading / watching'), 'life.media_log', 'note'],
-                                [__('Food log'), 'life.food', 'pie'],
                                 [__('Contacts'), 'relationships.contacts', 'user'],
                                 [__('Assets'), 'assets.index', 'box'],
                                 [__('Records'), 'records.index', 'file-text'],
