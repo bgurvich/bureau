@@ -52,6 +52,14 @@ return [
         'key' => env('RESEND_API_KEY'),
     ],
 
+    // Fastmail JMAP API token — optional prefill for integrations:connect-fastmail.
+    // Generate at fastmail.com → Settings → Password & Security → API tokens.
+    // Stored encrypted on the integrations row after the command runs; the
+    // env var only seeds the first-time provisioning.
+    'fastmail' => [
+        'api_token' => env('FASTMAIL_API_TOKEN'),
+    ],
+
     'ses' => [
         'key' => env('AWS_ACCESS_KEY_ID'),
         'secret' => env('AWS_SECRET_ACCESS_KEY'),

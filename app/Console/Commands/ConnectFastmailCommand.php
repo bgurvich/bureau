@@ -28,10 +28,15 @@ class ConnectFastmailCommand extends Command
             return self::FAILURE;
         }
 
-        $token = (string) ($this->option('token') ?: password(
-            label: 'Fastmail API token',
-            hint: 'Generate at fastmail.com → Settings → Password & Security → API tokens'
-        ));
+        // Precedence: --token flag → FASTMAIL_API_TOKEN env → interactive
+        // prompt. Env-driven flow lets deploy scripts provision Fastmail
+        // without tty access.
+        $token = (string) ($this->option('token')
+            ?: config('services.fastmail.api_token')
+            ?: password(
+                label: 'Fastmail API token',
+                hint: 'Generate at fastmail.com → Settings → Password & Security → API tokens'
+            ));
         if ($token === '') {
             $this->error('Token is required.');
 
