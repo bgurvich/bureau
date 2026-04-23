@@ -15,6 +15,7 @@
             ['task', __('Task'), 'T'],
             ['note', __('Note'), 'N'],
             ['journal_entry', __('Journal'), 'J'],
+            ['media_log_entry', __('Reading / watching'), null],
             ['contact', __('Contact'), 'C'],
             ['meeting', __('Meeting'), 'M'],
             ['reminder', __('Reminder'), 'R'],

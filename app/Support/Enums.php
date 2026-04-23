@@ -555,6 +555,34 @@ class Enums
         ];
     }
 
+    /** Media-log kinds — what flavour of creative work the entry is. */
+    /** @return array<string, string> */
+    public static function mediaLogKinds(): array
+    {
+        return [
+            'book' => __('Book'),
+            'film' => __('Film'),
+            'show' => __('TV show'),
+            'podcast' => __('Podcast'),
+            'article' => __('Article'),
+            'game' => __('Game'),
+            'other' => __('Other'),
+        ];
+    }
+
+    /** Media-log status lifecycle. */
+    /** @return array<string, string> */
+    public static function mediaLogStatuses(): array
+    {
+        return [
+            'wishlist' => __('Wishlist'),
+            'in_progress' => __('In progress'),
+            'paused' => __('Paused'),
+            'done' => __('Done'),
+            'dropped' => __('Dropped'),
+        ];
+    }
+
     /** Vehicle-service kinds — surfaced in the VehicleServiceLogForm
      *  picker. Free string at the schema level so one-off services
      *  ("winter storage prep", "detailing") fit without a migration. */

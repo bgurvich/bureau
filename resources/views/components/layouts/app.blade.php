@@ -62,6 +62,7 @@
                             __('Life') => [
                                 [__('Schedule'), 'life.schedule', 'calendar'],
                                 [__('Journal'), 'life.journal', 'book'],
+                                [__('Reading / watching'), 'life.media_log', 'note'],
                                 [__('Contacts'), 'relationships.contacts', 'user'],
                             ],
                             __('Time') => [

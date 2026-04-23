@@ -11,6 +11,7 @@ use App\Models\Document;
 use App\Models\Domain;
 use App\Models\InventoryItem;
 use App\Models\JournalEntry;
+use App\Models\MediaLogEntry;
 use App\Models\Meeting;
 use App\Models\MeterReading;
 use App\Models\Note;
@@ -319,6 +320,7 @@ new class extends Component
                 'tax_estimated_payment' => TaxEstimatedPayment::findOrFail($this->id)->delete(),
                 'meter_reading' => MeterReading::findOrFail($this->id)->delete(),
                 'vehicle_service_log' => VehicleServiceLog::findOrFail($this->id)->delete(),
+                'media_log_entry' => MediaLogEntry::findOrFail($this->id)->delete(),
                 default => null,
             };
         } catch (PeriodLockedException $e) {
@@ -437,6 +439,7 @@ new class extends Component
             'tax_estimated_payment' => __('estimated payment'),
             'meter_reading' => __('meter reading'),
             'vehicle_service_log' => __('vehicle service'),
+            'media_log_entry' => __('media entry'),
             default => '',
         };
 
