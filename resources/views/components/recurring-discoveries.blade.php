@@ -90,12 +90,18 @@ new class extends Component
             default => 'FREQ=MONTHLY;INTERVAL=1',
         };
 
-        $signedAmount = -abs((float) $d->median_amount);
+        // Discoveries surface BOTH inflows (salary, refunds) and outflows
+        // (subscriptions, bills). Preserve the sign from median_amount and
+        // derive kind from it — forcing everything negative-expense turned
+        // income rules into "expense with negative amount", breaking
+        // projections and the Subscription sign convention.
+        $amount = (float) $d->median_amount;
+        $kind = $amount > 0 ? 'income' : 'bill';
 
         \App\Models\RecurringRule::create([
             'title' => (string) ($d->counterparty?->display_name ?? $d->description_fingerprint),
-            'kind' => 'expense',
-            'amount' => $signedAmount,
+            'kind' => $kind,
+            'amount' => $amount,
             'currency' => 'USD',
             'rrule' => $rrule,
             'dtstart' => $d->last_seen_on ?? now(),

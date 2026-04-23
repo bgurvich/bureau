@@ -26,7 +26,7 @@
         ],
         __('Commitments') => [
             ['contract', __('Contract'), null],
-            ['insurance', __('Insurance policy'), 'S'],
+            ['insurance', __('Insurance policy'), null],
         ],
         __('Assets') => [
             ['property', __('Property'), 'H'],
@@ -34,7 +34,7 @@
             ['inventory', __('Inventory item'), 'I'],
             ['domain', __('Domain'), null],
             ['meter_reading', __('Meter reading'), 'Y'],
-            ['vehicle_service_log', __('Vehicle service'), null],
+            ['vehicle_service_log', __('Vehicle service'), 'S'],
         ],
         __('Records') => [
             ['document', __('Document'), 'D'],

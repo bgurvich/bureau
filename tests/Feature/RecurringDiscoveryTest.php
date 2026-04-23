@@ -121,6 +121,40 @@ it('acceptAsSubscription creates a RecurringRule and auto-creates a Subscription
     expect($d->fresh()->status)->toBe('accepted')
         ->and(RecurringRule::count())->toBeGreaterThanOrEqual(1)
         ->and(Subscription::count())->toBeGreaterThanOrEqual(1);
+
+    // Outflow discovery → negative-signed bill rule (so downstream
+    // subscription sync + projection + display pipelines treat it as
+    // an outflow).
+    $rule = RecurringRule::first();
+    expect($rule->kind)->toBe('bill')
+        ->and((float) $rule->amount)->toBe(-15.99);
+});
+
+it('acceptAsSubscription preserves positive sign and flags kind=income for inflow discoveries', function () {
+    $user = authedInHousehold();
+    $account = Account::create(['type' => 'checking', 'name' => 'Main', 'currency' => 'USD', 'opening_balance' => 0]);
+    $today = CarbonImmutable::now();
+    for ($i = 0; $i < 7; $i++) {
+        Transaction::create([
+            'account_id' => $account->id,
+            'occurred_on' => $today->subMonths(7 - $i)->setDay(15)->toDateString(),
+            'amount' => 2500.00, // positive = inflow
+            'currency' => 'USD',
+            'description' => 'ACME PAYROLL DIRECT DEP',
+            'status' => 'cleared',
+        ]);
+    }
+    app(RecurringPatternDiscovery::class)->discover($user->defaultHousehold);
+
+    $d = RecurringDiscovery::firstOrFail();
+    Livewire::test('recurring-discoveries')->call('acceptAsSubscription', $d->id);
+
+    $rule = RecurringRule::first();
+    expect($rule->kind)->toBe('income')
+        ->and((float) $rule->amount)->toBe(2500.00)
+        // SubscriptionSync guards on amount<0; inflow rules must not
+        // create a subscription (they're not subscriptions).
+        ->and(Subscription::count())->toBe(0);
 });
 
 it('dismissAll marks every pending discovery dismissed', function () {
