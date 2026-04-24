@@ -82,7 +82,7 @@ class extends Component
     public function tasks(): Collection
     {
         return Task::query()
-            ->with(['assignedUser:id,name', 'tags:id,name,slug'])
+            ->with(['assignedUser:id,name', 'tags:id,name,slug', 'predecessors:id,state'])
             ->when($this->stateFilter !== '', fn ($q) => $q->where('state', $this->stateFilter))
             ->when($this->priorityFilter !== '', fn ($q) => $q->where('priority', (int) $this->priorityFilter))
             ->when($this->tagFilter !== '', fn ($q) => $q
@@ -322,8 +322,14 @@ class extends Component
                     <button type="button"
                             wire:click="$dispatch('inspector-open', { type: 'task', id: {{ $task->id }} })"
                             class="min-w-0 flex-1 cursor-pointer text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                        @php($isBlocked = ! $isDone && $task->isBlocked())
                         <div class="flex items-baseline gap-2">
-                            <span class="{{ $isDone ? 'text-neutral-500 line-through' : 'text-neutral-100' }} truncate">{{ $task->title }}</span>
+                            <span class="truncate {{ $isDone ? 'text-neutral-500 line-through' : ($isBlocked ? 'text-neutral-500' : 'text-neutral-100') }}">{{ $task->title }}</span>
+                            @if ($isBlocked)
+                                <span class="shrink-0 rounded border border-neutral-700 bg-neutral-900/60 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-neutral-400" title="{{ __('Waiting on a predecessor to finish.') }}">
+                                    {{ __('blocked') }}
+                                </span>
+                            @endif
                             <span class="shrink-0 rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wider
                                          {{ match ((int) $task->priority) {
                                             1 => 'bg-rose-900/30 text-rose-300',

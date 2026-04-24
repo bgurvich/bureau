@@ -101,7 +101,7 @@ class extends Component
     public function tasks(): Collection
     {
         return Task::query()
-            ->with(['tags:id,name,slug'])
+            ->with(['tags:id,name,slug', 'predecessors:id,state'])
             ->where('state', '!=', 'done')
             ->orderBy('project_id')
             ->orderBy('position')
@@ -231,9 +231,10 @@ class extends Component
                         $task = $node['task'];
                         $depth = $node['depth'];
                         $isDone = $task->state === 'done';
+                        $isBlocked = ! $isDone && $task->isBlocked();
                         $dueAt = $task->due_at ? CarbonImmutable::parse($task->due_at) : null;
-                        $isOverdue = ! $isDone && $dueAt && $dueAt->isPast() && ! $dueAt->isToday();
-                        $isDueToday = ! $isDone && $dueAt && $dueAt->isToday();
+                        $isOverdue = ! $isDone && ! $isBlocked && $dueAt && $dueAt->isPast() && ! $dueAt->isToday();
+                        $isDueToday = ! $isDone && ! $isBlocked && $dueAt && $dueAt->isToday();
                         $indentStyle = $depth > 0 ? 'padding-left: '.(1 + $depth * 1.5).'rem' : '';
                         $subjects = $task->subjects();
                     @endphp
@@ -266,7 +267,12 @@ class extends Component
                                 <span aria-hidden="true"
                                       class="mt-0.5 h-2 w-2 shrink-0 rounded-full {{ $priorityDot($task->priority) }}"
                                       title="P{{ $task->priority }}"></span>
-                                <span class="{{ $isDone ? 'text-neutral-500 line-through' : 'text-neutral-100' }} truncate">{{ $task->title }}</span>
+                                <span class="truncate {{ $isDone ? 'text-neutral-500 line-through' : ($isBlocked ? 'text-neutral-500' : 'text-neutral-100') }}">{{ $task->title }}</span>
+                                @if ($isBlocked)
+                                    <span class="shrink-0 rounded border border-neutral-700 bg-neutral-900/60 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-neutral-400" title="{{ __('Waiting on a predecessor to finish.') }}">
+                                        {{ __('blocked') }}
+                                    </span>
+                                @endif
                                 @if ($dueAt)
                                     <span class="shrink-0 text-[11px] tabular-nums {{ $isOverdue ? 'text-rose-400' : ($isDueToday ? 'text-amber-400' : 'text-neutral-500') }}">
                                         {{ Formatting::date($dueAt) }}

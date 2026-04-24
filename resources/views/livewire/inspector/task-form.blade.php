@@ -60,6 +60,45 @@
         <p class="mt-1 text-[11px] text-neutral-500">{{ __('Nest this under another task. Only open and waiting tasks are offered as parents.') }}</p>
         @error('parent_task_id')<div role="alert" class="mt-1 text-xs text-rose-400">{{ $message }}</div>@enderror
     </div>
+    <div>
+        <label class="mb-1 block text-xs text-neutral-400">{{ __('Depends on') }}</label>
+        <p class="mb-2 text-[11px] text-neutral-500">{{ __('This task stays blocked until each predecessor is marked done.') }}</p>
+        @if ($this->dependencyChips)
+            <ul class="mb-2 flex flex-wrap gap-1.5">
+                @foreach ($this->dependencyChips as $chip)
+                    <li class="inline-flex items-center gap-1.5 rounded border border-neutral-700 bg-neutral-900/60 px-2 py-0.5 text-xs text-neutral-300">
+                        @if ($chip['state'] === 'done')
+                            <span aria-hidden="true" class="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
+                        @else
+                            <span aria-hidden="true" class="h-1.5 w-1.5 rounded-full bg-amber-400"></span>
+                        @endif
+                        <span>{{ $chip['title'] }}</span>
+                        <button type="button"
+                                wire:click="removeDependency({{ $chip['id'] }})"
+                                aria-label="{{ __('Remove dependency') }}"
+                                class="ml-0.5 text-neutral-500 hover:text-rose-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                            ×
+                        </button>
+                    </li>
+                @endforeach
+            </ul>
+        @endif
+        <div x-data="{ picked: '' }" class="flex items-center gap-2">
+            <select x-model="picked"
+                    class="w-full rounded-md border border-neutral-700 bg-neutral-950 px-2 py-2 text-sm text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                <option value="">{{ __('— add a predecessor —') }}</option>
+                @foreach ($this->dependencyPickerOptions as $id => $title)
+                    <option value="{{ $id }}">{{ $title }}</option>
+                @endforeach
+            </select>
+            <button type="button"
+                    x-on:click="if (picked) { $wire.addDependency(Number(picked)); picked = ''; }"
+                    class="shrink-0 rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2 text-xs text-neutral-300 hover:border-neutral-600 hover:text-neutral-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                {{ __('Add') }}
+            </button>
+        </div>
+        @error('depends_on_task_ids.*')<div role="alert" class="mt-1 text-xs text-rose-400">{{ $message }}</div>@enderror
+    </div>
     @include('partials.inspector.fields.subjects')
     @include('partials.inspector.fields.tags')
     @include('partials.inspector.fields.admin')
