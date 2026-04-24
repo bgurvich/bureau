@@ -1,9 +1,13 @@
 <?php
 
+use App\Models\Contact;
+use App\Models\Tag;
 use App\Models\Task;
 use App\Support\Formatting;
+use App\Support\TaskLineParser;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Str;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\On;
@@ -25,6 +29,88 @@ class extends Component
 
     #[Url(as: 'q')]
     public string $search = '';
+
+    public bool $bulkOpen = false;
+
+    public string $bulkInput = '';
+
+    /** @var array<int, string> */
+    public array $bulkNotes = [];
+
+    public function toggleBulk(): void
+    {
+        $this->bulkOpen = ! $this->bulkOpen;
+        if (! $this->bulkOpen) {
+            $this->bulkNotes = [];
+        }
+    }
+
+    /**
+     * Parse the textarea, create one task per non-empty line, and link
+     * up tags + @contact matches found inline. Unmatched @patterns are
+     * reported back so the user sees which contacts weren't found.
+     */
+    public function bulkSave(): void
+    {
+        $rows = TaskLineParser::parseBlock($this->bulkInput);
+        if ($rows === []) {
+            return;
+        }
+
+        $created = 0;
+        $unmatchedContacts = [];
+
+        foreach ($rows as $row) {
+            $task = Task::create([
+                'title' => $row['title'],
+                'due_at' => $row['due_at'],
+                'state' => 'open',
+                'priority' => $row['priority'] ?? 3,
+            ]);
+
+            if ($row['tags'] !== []) {
+                $ids = [];
+                foreach ($row['tags'] as $name) {
+                    $slug = Str::slug($name);
+                    if ($slug === '') {
+                        continue;
+                    }
+                    $tag = Tag::firstOrCreate(['slug' => $slug], ['name' => $name]);
+                    $ids[] = $tag->id;
+                }
+                if ($ids !== []) {
+                    $task->tags()->syncWithoutDetaching($ids);
+                }
+            }
+
+            $refs = [];
+            foreach ($row['contact_patterns'] as $pattern) {
+                $hit = Contact::query()
+                    ->where('display_name', 'like', '%'.$pattern.'%')
+                    ->orderByRaw('LENGTH(display_name)')
+                    ->first();
+                if ($hit === null) {
+                    $unmatchedContacts[] = '@'.$pattern;
+
+                    continue;
+                }
+                $refs[] = ['type' => Contact::class, 'id' => $hit->id];
+            }
+            if ($refs !== []) {
+                $task->syncSubjects($refs);
+            }
+
+            $created++;
+        }
+
+        $notes = [__('Added :n task(s).', ['n' => $created])];
+        if ($unmatchedContacts !== []) {
+            $notes[] = __('Unmatched contacts: :list', ['list' => implode(', ', array_unique($unmatchedContacts))]);
+        }
+        $this->bulkNotes = $notes;
+        $this->bulkInput = '';
+        unset($this->tasks, $this->counts);
+    }
 
     public function toggle(int $id): void
     {
@@ -150,8 +236,40 @@ class extends Component
             <h2 class="text-base font-semibold text-neutral-100">{{ __('Tasks') }}</h2>
             <p class="mt-1 text-xs text-neutral-500">{{ __('Open work, sorted by priority and due date.') }}</p>
         </div>
-        <x-ui.new-record-button type="task" :label="__('New task')" shortcut="T" />
+        <div class="flex items-center gap-2">
+            <button type="button" wire:click="toggleBulk"
+                    aria-expanded="{{ $bulkOpen ? 'true' : 'false' }}"
+                    aria-controls="task-bulk-panel"
+                    class="rounded-md border border-neutral-800 bg-neutral-900 px-3 py-1.5 text-xs text-neutral-300 hover:border-neutral-600 hover:text-neutral-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                {{ $bulkOpen ? __('Close bulk add') : __('Bulk add') }}
+            </button>
+            <x-ui.new-record-button type="task" :label="__('New task')" shortcut="T" />
+        </div>
     </header>
+
+    @if ($bulkOpen)
+        <section id="task-bulk-panel"
+                 class="rounded-xl border border-neutral-800 bg-neutral-900/50 p-4"
+                 aria-label="{{ __('Bulk task entry') }}">
+            <label for="task-bulk-input" class="block text-[10px] uppercase tracking-wider text-neutral-500">{{ __('One task per line') }}</label>
+            <p class="mt-1 text-xs text-neutral-500">{{ __('Use #tag, @contact, P1–P5, and mm-dd anywhere on the line. Leftover text becomes the title.') }}</p>
+            <textarea id="task-bulk-input"
+                      wire:model="bulkInput"
+                      rows="6"
+                      placeholder="{{ __("Pick up dry cleaning #errands 05-03\nCall @alice about taxes #admin P2\nBook dentist 06-15") }}"
+                      class="mt-2 block w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 font-mono text-sm text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300"
+                      spellcheck="false"></textarea>
+            <div class="mt-3 flex items-center gap-3">
+                <button type="button" wire:click="bulkSave"
+                        class="rounded-md border border-emerald-700/50 bg-emerald-900/30 px-3 py-1.5 text-xs font-medium text-emerald-200 hover:bg-emerald-900/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                    {{ __('Add tasks') }}
+                </button>
+                @foreach ($bulkNotes as $note)
+                    <span role="status" class="text-xs text-neutral-400">{{ $note }}</span>
+                @endforeach
+            </div>
+        </section>
+    @endif
 
     <dl class="flex gap-5 text-xs">
             <div>
