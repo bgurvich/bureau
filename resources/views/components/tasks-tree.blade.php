@@ -258,9 +258,10 @@ class extends Component
 
     /**
      * Two-level grouping: Goals contain Projects, Projects contain the
-     * task rows produced by groupedTree(). Goals without a project and
-     * projects without a goal live in "unassigned" buckets that only
-     * render when they have content.
+     * task rows produced by groupedTree(). Goals and projects render
+     * even when they hold zero tasks — empty rows read as "this is
+     * where new work goes" in the tree. The tail "Unassigned to
+     * project" bucket still only surfaces when it actually has tasks.
      *
      * @return array<int, array{
      *     goal: ?Goal,
@@ -279,9 +280,6 @@ class extends Component
         $out = [];
         foreach ($this->goals as $g) {
             $buckets = $projectsByGoal[$g->id] ?? [];
-            if ($buckets === []) {
-                continue; // empty goals don't render in the tree
-            }
             $out[] = [
                 'goal' => $g,
                 'projects' => array_map(fn ($p) => [
@@ -306,7 +304,8 @@ class extends Component
         }
 
         // Unassigned-to-project bucket gets its own tail row so tasks
-        // with no project appear at the bottom regardless of goals.
+        // with no project appear at the bottom. Kept gated on having
+        // content — an empty Unassigned slot just adds noise.
         if ($projectRows['unassigned']->isNotEmpty()) {
             $out[] = [
                 'goal' => null,
@@ -381,9 +380,6 @@ class extends Component
         @php
             $goal = $goalBlock['goal'];
             $goalTotal = collect($goalBlock['projects'])->sum(fn ($b) => $b['rows']->count());
-            if ($goalTotal === 0) {
-                continue;
-            }
         @endphp
         <section class="space-y-3"
                  @if ($goal) aria-labelledby="goal-{{ $goal->id }}-h" @endif>
@@ -404,14 +400,17 @@ class extends Component
                 </header>
             @endif
 
+            @if (count($goalBlock['projects']) === 0)
+                <div class="rounded-xl border border-dashed border-neutral-800 bg-neutral-900/20 px-4 py-3 text-xs text-neutral-500">
+                    {{ __('No projects under this goal yet.') }}
+                </div>
+            @endif
+
             @foreach ($goalBlock['projects'] as $projBlock)
                 @php
                     $project = $projBlock['project'];
                     $groupKey = $projBlock['key'];
                     $rows = $projBlock['rows'];
-                    if ($rows->isEmpty()) {
-                        continue;
-                    }
                 @endphp
                 <section class="rounded-xl border border-neutral-800 bg-neutral-900/40"
                          aria-labelledby="group-{{ $groupKey }}-h"
@@ -437,6 +436,11 @@ class extends Component
                         </h3>
                         <span class="text-[11px] text-neutral-500 tabular-nums">{{ __(':n open', ['n' => $rows->count()]) }}</span>
                     </header>
+                    @if ($rows->isEmpty())
+                        <div class="px-4 py-3 text-xs text-neutral-500">
+                            {{ __('No open tasks. Drop one here or use + New task above.') }}
+                        </div>
+                    @else
             <ul class="divide-y divide-neutral-800/60">
                 @foreach ($rows as $node)
                     @php
@@ -523,14 +527,15 @@ class extends Component
                     </li>
                 @endforeach
             </ul>
+                    @endif
                 </section>
             @endforeach
         </section>
     @endforeach
 
-    @if ($this->tasks->isEmpty())
+    @if ($this->goals->isEmpty() && $this->projects->isEmpty() && $this->tasks->isEmpty())
         <div class="rounded-xl border border-dashed border-neutral-800 bg-neutral-900/40 p-10 text-center text-sm text-neutral-500">
-            {{ __('No open tasks.') }}
+            {{ __('No goals, projects, or open tasks yet.') }}
         </div>
     @endif
 </div>

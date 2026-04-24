@@ -67,6 +67,30 @@ it('toggle() flips state and refreshes the tree', function () {
     expect($t->fresh()->state)->toBe('done');
 });
 
+it('includes goals with no projects in the tree', function () {
+    authedInHousehold();
+    $goal = Goal::create(['title' => 'Aspire', 'mode' => 'direction', 'status' => 'active', 'category' => 'other']);
+
+    $tree = Livewire::test('tasks-tree')->get('goalGroupedTree');
+
+    $block = collect($tree)->first(fn ($b) => $b['goal']?->id === $goal->id);
+    expect($block)->not->toBeNull();
+    expect($block['projects'])->toBe([]);
+});
+
+it('includes projects with no tasks inside their goal block', function () {
+    authedInHousehold();
+    $goal = Goal::create(['title' => 'Ship v1', 'mode' => 'target', 'status' => 'active', 'category' => 'work']);
+    $project = Project::create(['name' => 'Alpha', 'slug' => 'alpha', 'goal_id' => $goal->id]);
+
+    $tree = Livewire::test('tasks-tree')->get('goalGroupedTree');
+
+    $block = collect($tree)->first(fn ($b) => $b['goal']?->id === $goal->id);
+    expect($block)->not->toBeNull();
+    expect(collect($block['projects'])->pluck('project.id')->all())->toBe([$project->id]);
+    expect($block['projects'][0]['rows'])->toHaveCount(0);
+});
+
 it('goalGroupedTree nests projects under their goal', function () {
     authedInHousehold();
     $goal = Goal::create(['title' => 'Ship v1', 'mode' => 'target', 'status' => 'active', 'category' => 'work']);
