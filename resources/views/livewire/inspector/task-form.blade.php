@@ -40,6 +40,16 @@
         </select>
     </div>
     <div>
+        <label for="i-task-project" class="mb-1 block text-xs text-neutral-400">{{ __('Project') }}</label>
+        <x-ui.searchable-select
+            id="i-task-project"
+            model="project_id"
+            :options="['' => '— '.__('none').' —'] + $this->projectPickerOptions"
+            placeholder="{{ __('— none —') }}"
+            edit-inspector-type="project" />
+        @error('project_id')<div role="alert" class="mt-1 text-xs text-rose-400">{{ $message }}</div>@enderror
+    </div>
+    <div>
         <label for="i-task-parent" class="mb-1 block text-xs text-neutral-400">{{ __('Parent task') }}</label>
         <x-ui.searchable-select
             id="i-task-parent"

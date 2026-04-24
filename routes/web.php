@@ -108,6 +108,7 @@ Route::middleware(['auth', 'preferences', 'household'])->group(function () {
     Route::post('/bookkeeper/export', BookkeeperExportController::class)->name('bookkeeper.export');
     Route::livewire('/calendar', 'calendar-index')->name('calendar.index');
     Route::livewire('/tasks', 'tasks-index')->name('calendar.tasks');
+    Route::livewire('/tasks/tree', 'tasks-tree')->name('calendar.tasks.tree');
     Route::livewire('/meetings', 'meetings-index')->name('calendar.meetings');
     Route::livewire('/life/checklists', 'checklists-index')->name('life.checklists.index');
     // Legacy dedicated today page — now absorbed into the hub's Today

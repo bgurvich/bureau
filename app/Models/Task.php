@@ -21,7 +21,14 @@ class Task extends Model
         'due_at' => 'datetime',
         'completed_at' => 'datetime',
         'priority' => 'integer',
+        'position' => 'integer',
     ];
+
+    /** @return BelongsTo<Project, $this> */
+    public function project(): BelongsTo
+    {
+        return $this->belongsTo(Project::class);
+    }
 
     /** @return BelongsTo<Task, $this> */
     public function parent(): BelongsTo

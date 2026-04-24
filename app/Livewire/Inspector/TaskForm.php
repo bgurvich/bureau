@@ -8,6 +8,7 @@ use App\Livewire\Inspector\Concerns\FinalizesSave;
 use App\Livewire\Inspector\Concerns\HasAdminPanel;
 use App\Livewire\Inspector\Concerns\HasSubjectRefs;
 use App\Livewire\Inspector\Concerns\HasTagList;
+use App\Models\Project;
 use App\Models\Task;
 use App\Support\Enums;
 use Illuminate\Contracts\View\View;
@@ -46,6 +47,8 @@ class TaskForm extends Component
 
     public ?int $parent_task_id = null;
 
+    public ?int $project_id = null;
+
     public function mount(?int $id = null, ?int $parentId = null): void
     {
         $this->id = $id;
@@ -57,6 +60,7 @@ class TaskForm extends Component
             $this->priority = (int) $t->priority;
             $this->state = (string) $t->state;
             $this->parent_task_id = $t->parent_task_id;
+            $this->project_id = $t->project_id;
             $this->subject_refs = $this->subjectRefsFrom($t);
             $this->loadAdminMeta();
             $this->loadTagList();
@@ -76,6 +80,7 @@ class TaskForm extends Component
             'due_at' => 'nullable|date',
             'priority' => 'required|integer|between:1,5',
             'state' => ['required', Rule::in(array_keys(Enums::taskStates()))],
+            'project_id' => 'nullable|integer|exists:projects,id',
             'parent_task_id' => [
                 'nullable',
                 'integer',
@@ -97,6 +102,7 @@ class TaskForm extends Component
         $data['description'] = $data['description'] ?: null;
         $data['due_at'] = $data['due_at'] ?: null;
         $data['parent_task_id'] = $data['parent_task_id'] ?: null;
+        $data['project_id'] = $data['project_id'] ?: null;
         if ($data['state'] === 'done' && $this->id) {
             $data['completed_at'] = now();
         } elseif ($data['state'] !== 'done') {
@@ -118,6 +124,24 @@ class TaskForm extends Component
         $this->persistTagList();
 
         $this->finalizeSave();
+    }
+
+    /**
+     * Project-assignment options. Archived projects are hidden from the
+     * picker — if the task is already on an archived one, the form
+     * shows the current value but the user has to un-archive the
+     * project to keep working with it, or drop it entirely.
+     *
+     * @return array<int, string>
+     */
+    #[Computed]
+    public function projectPickerOptions(): array
+    {
+        return Project::query()
+            ->where('archived', false)
+            ->orderBy('name')
+            ->pluck('name', 'id')
+            ->all();
     }
 
     /**
