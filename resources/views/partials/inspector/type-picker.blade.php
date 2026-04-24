@@ -32,6 +32,7 @@
             ['property', __('Property'), 'H'],
             ['vehicle', __('Vehicle'), 'V'],
             ['inventory', __('Inventory item'), 'I'],
+            ['location', __('Location'), null],
             ['listing', __('Listing'), null],
             ['domain', __('Domain'), null],
             ['meter_reading', __('Meter reading'), 'Y'],

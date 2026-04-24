@@ -17,6 +17,7 @@ use App\Models\Goal;
 use App\Models\InventoryItem;
 use App\Models\JournalEntry;
 use App\Models\Listing;
+use App\Models\Location;
 use App\Models\MediaLogEntry;
 use App\Models\Meeting;
 use App\Models\MeterReading;
@@ -346,6 +347,7 @@ new class extends Component
                 'goal' => Goal::findOrFail($this->id)->delete(),
                 'appointment' => Appointment::findOrFail($this->id)->delete(),
                 'listing' => Listing::findOrFail($this->id)->delete(),
+                'location' => Location::findOrFail($this->id)->delete(),
                 'pet_preventive_care' => PetPreventiveCare::findOrFail($this->id)->delete(),
                 'body_measurement' => BodyMeasurement::findOrFail($this->id)->delete(),
                 default => null,
@@ -393,6 +395,7 @@ new class extends Component
         'task' => ['parentId' => 'subentityParentId'],
         'checklist_template' => ['asHabit' => 'asHabitMode'],
         'listing' => ['parentId' => 'subentityParentId'],
+        'location' => ['parentId' => 'subentityParentId'],
     ];
 
     /**
@@ -486,6 +489,7 @@ new class extends Component
             'budget_cap' => __('budget'),
             'category_rule' => __('category rule'),
             'tag_rule' => __('tag rule'),
+            'location' => __('location'),
             default => '',
         };
 
