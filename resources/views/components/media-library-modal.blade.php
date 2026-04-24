@@ -304,6 +304,8 @@ new class extends Component
                         <li>
                             <button type="button"
                                     wire:click="toggleSelect({{ $m->id }})"
+                                    :aria-pressed="@js($selected)"
+                                    aria-label="{{ $selected ? __('Deselect :name', ['name' => $m->original_name ?: __('untitled')]) : __('Select :name', ['name' => $m->original_name ?: __('untitled')]) }}"
                                     class="flex w-full flex-col gap-1 rounded-md border p-1 text-left transition {{ $selected ? 'border-emerald-500 ring-2 ring-emerald-500/30' : 'border-neutral-800 hover:border-neutral-600' }} focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
                                 <span class="block aspect-square overflow-hidden rounded bg-neutral-950">
                                     @if (str_starts_with((string) $m->mime, 'image/'))

@@ -70,7 +70,8 @@
                  x-on:click="open = null"
                  x-on:keydown.escape.window="open = null"
                  class="fixed inset-0 z-[70] flex items-center justify-center bg-black/90 p-6"
-                 role="dialog" aria-modal="true" aria-label="{{ __('Photo preview') }}">
+                 role="dialog" aria-modal="true" aria-labelledby="photo-preview-heading">
+                <h2 id="photo-preview-heading" class="sr-only">{{ __('Photo preview') }}</h2>
                 @foreach ($photos as $photo)
                     <img x-show="open === {{ $photo->id }}"
                          src="{{ route('media.file', $photo) }}"
