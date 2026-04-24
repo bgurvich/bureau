@@ -4,28 +4,57 @@ namespace Database\Seeders;
 
 use App\Models\Account;
 use App\Models\AccountBalance;
+use App\Models\Appointment;
 use App\Models\AssetValuation;
+use App\Models\BodyMeasurement;
 use App\Models\BudgetCap;
 use App\Models\Category;
 use App\Models\CategoryRule;
+use App\Models\ChecklistTemplate;
+use App\Models\ChecklistTemplateItem;
 use App\Models\Contact;
 use App\Models\Contract;
+use App\Models\Decision;
 use App\Models\Document;
+use App\Models\Domain;
+use App\Models\FoodEntry;
+use App\Models\Goal;
+use App\Models\HealthProvider;
 use App\Models\Household;
 use App\Models\InsurancePolicy;
+use App\Models\Integration;
+use App\Models\InventoryItem;
+use App\Models\JournalEntry;
+use App\Models\Listing;
+use App\Models\Media;
+use App\Models\MediaLogEntry;
 use App\Models\Meeting;
+use App\Models\MeterReading;
+use App\Models\OnlineAccount;
+use App\Models\Pet;
+use App\Models\PetCheckup;
+use App\Models\PetLicense;
+use App\Models\PetPreventiveCare;
+use App\Models\PetVaccination;
+use App\Models\Prescription;
 use App\Models\Project;
 use App\Models\Property;
+use App\Models\RecurringProjection;
 use App\Models\RecurringRule;
+use App\Models\Reminder;
 use App\Models\SavingsGoal;
 use App\Models\Tag;
 use App\Models\TagRule;
 use App\Models\Task;
+use App\Models\TaxDocument;
+use App\Models\TaxEstimatedPayment;
+use App\Models\TaxYear;
 use App\Models\TimeEntry;
 use App\Models\Transaction;
 use App\Models\Transfer;
 use App\Models\User;
 use App\Models\Vehicle;
+use App\Models\VehicleServiceLog;
 use App\Support\CurrentHousehold;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Artisan;
@@ -85,17 +114,42 @@ class DemoDataSeeder extends Seeder
             return;
         }
 
-        if (Account::exists()) {
-            $this->command->info('DemoDataSeeder: demo data already present — skipping.');
+        $primaryDone = Account::exists();
 
-            return;
+        if (! $primaryDone) {
+            $this->command->info('DemoDataSeeder: seeding primary entities…');
+            $this->seedPrimary($household, $user);
+        } else {
+            $this->command->info('DemoDataSeeder: primary data already present — only topping up missing coverage.');
         }
 
-        $this->command->info('DemoDataSeeder: seeding primary entities…');
-        $this->seedPrimary($household, $user);
+        $this->command->info('DemoDataSeeder: seeding coverage data (pets, logs, assets, radar)…');
+        $this->seedCoverage($household, $user);
 
         $this->command->info('DemoDataSeeder: running derivation pipeline…');
         $this->runDerivations($household);
+
+        // Post-derivation: flip one generated projection to overdue so
+        // the bills radar tile fires. Done after recurring:project
+        // materialized the rows, since we can't create them ourselves
+        // without duplicating the generator's logic.
+        $this->lightUpOverdueBill();
+    }
+
+    /**
+     * Per-section idempotency: skip a coverage block if a signature
+     * record is already there. Lets the seeder re-run and fill in
+     * just the blocks the user hasn't seen yet, instead of bailing
+     * on the first existing row.
+     */
+    private function skipIf(string $label, bool $already, callable $run): void
+    {
+        if ($already) {
+            $this->command->line("   · {$label} already present");
+
+            return;
+        }
+        $run();
     }
 
     protected function seedPrimary(Household $household, User $user): void
@@ -557,5 +611,604 @@ class DemoDataSeeder extends Seeder
     private function catId(string $slug, string $kind = 'expense'): ?int
     {
         return Category::where('kind', $kind)->where('slug', $slug)->value('id');
+    }
+
+    /**
+     * Everything seedPrimary() doesn't touch. Covers the remaining
+     * models + lights up every radar tile. Each block mirrors a
+     * hub/domain so it's easy to audit what's here.
+     */
+    protected function seedCoverage(Household $household, User $user): void
+    {
+        $this->skipIf('Pets', Pet::exists(), fn () => $this->seedPets($user));
+        $this->skipIf('Health providers', HealthProvider::where('specialty', 'primary_care')->exists(), fn () => $this->seedHealthExtras());
+        $this->skipIf('Checklists', ChecklistTemplate::exists(), fn () => $this->seedChecklists());
+        $this->skipIf('Goals', Goal::exists(), fn () => $this->seedGoals());
+        $this->skipIf('Logs', JournalEntry::exists(), fn () => $this->seedLogs());
+        $this->skipIf('Domains/meters/online accounts', Domain::exists(), fn () => $this->seedDomainsMetersOnlineAccounts());
+        $this->skipIf('Inventory + listings', Listing::exists(), fn () => $this->seedInventoryAndListings());
+        $this->skipIf('Vehicle services', VehicleServiceLog::exists(), fn () => $this->seedVehicleServices());
+        $this->skipIf('Taxes', TaxYear::exists(), fn () => $this->seedTaxes());
+        $this->skipIf('Reminders + appointments', Reminder::exists(), fn () => $this->seedRemindersAndAppointments());
+        $this->skipIf('Integrations', Integration::exists(), fn () => $this->seedIntegrations());
+        $this->skipIf('Trial contract + gift card', Account::where('type', 'gift_card')->exists(), fn () => $this->seedContractsAndAccountsExtras());
+        $this->skipIf('Bills inbox media', Media::whereNull('processed_at')->where('ocr_status', 'done')->exists(), fn () => $this->seedBillsInboxMedia());
+        $this->closeOneSavingsGoal();
+    }
+
+    // ── Pets ───────────────────────────────────────────────────────────────
+    protected function seedPets(User $user): void
+    {
+        $vet = HealthProvider::create([
+            'specialty' => 'vet',
+            'name' => 'Greenbrook Animal Hospital',
+            'notes' => 'Dr. Alvarez — front-desk 9-5 weekdays.',
+        ]);
+
+        $rex = Pet::create([
+            'species' => 'dog', 'name' => 'Rex', 'breed' => 'Labrador',
+            'color' => 'yellow', 'date_of_birth' => now()->subYears(6)->toDateString(),
+            'sex' => 'male', 'primary_owner_user_id' => $user->id,
+            'vet_provider_id' => $vet->id, 'is_active' => true,
+        ]);
+        $biscuit = Pet::create([
+            'species' => 'dog', 'name' => 'Biscuit', 'breed' => 'Mixed',
+            'color' => 'brown', 'date_of_birth' => now()->subYears(3)->toDateString(),
+            'sex' => 'female', 'primary_owner_user_id' => $user->id,
+            'vet_provider_id' => $vet->id, 'is_active' => true,
+        ]);
+        $mochi = Pet::create([
+            'species' => 'cat', 'name' => 'Mochi', 'breed' => 'Domestic shorthair',
+            'color' => 'black', 'date_of_birth' => now()->subYears(4)->toDateString(),
+            'sex' => 'female', 'primary_owner_user_id' => $user->id,
+            'vet_provider_id' => $vet->id, 'is_active' => true,
+        ]);
+
+        // Vaccinations — one expiring soon (radar fires)
+        PetVaccination::create([
+            'pet_id' => $rex->id, 'vaccine_name' => 'Rabies',
+            'administered_on' => now()->subMonths(11)->toDateString(),
+            'valid_until' => now()->addDays(12)->toDateString(),
+        ]);
+        PetVaccination::create([
+            'pet_id' => $biscuit->id, 'vaccine_name' => 'DHPP',
+            'administered_on' => now()->subYears(2)->toDateString(),
+            'valid_until' => now()->subDays(20)->toDateString(), // expired
+        ]);
+        PetVaccination::create([
+            'pet_id' => $mochi->id, 'vaccine_name' => 'FVRCP',
+            'administered_on' => now()->subMonths(6)->toDateString(),
+            'valid_until' => now()->addMonths(6)->toDateString(),
+        ]);
+
+        // Checkups — one overdue (radar fires)
+        PetCheckup::create([
+            'pet_id' => $rex->id, 'provider_id' => $vet->id,
+            'kind' => 'annual_checkup', 'checkup_on' => now()->subMonths(14)->toDateString(),
+            'next_due_on' => now()->subDays(30)->toDateString(),
+            'cost' => 185.00, 'currency' => 'USD',
+        ]);
+        PetCheckup::create([
+            'pet_id' => $biscuit->id, 'provider_id' => $vet->id,
+            'kind' => 'annual_checkup', 'checkup_on' => now()->subMonths(3)->toDateString(),
+            'next_due_on' => now()->addMonths(9)->toDateString(),
+            'cost' => 195.00, 'currency' => 'USD',
+        ]);
+
+        // Licenses — one expiring soon (radar fires)
+        PetLicense::create([
+            'pet_id' => $rex->id, 'authority' => 'San Mateo County',
+            'license_number' => 'SMC-20250412',
+            'issued_on' => now()->subMonths(11)->toDateString(),
+            'expires_on' => now()->addDays(18)->toDateString(),
+            'fee' => 22.00, 'currency' => 'USD',
+        ]);
+
+        // Preventive care — one due soon (radar fires)
+        PetPreventiveCare::create([
+            'pet_id' => $rex->id, 'kind' => 'heartworm', 'label' => 'Heartgard',
+            'applied_on' => now()->subDays(26)->toDateString(),
+            'interval_days' => 30,
+            'next_due_on' => now()->addDays(4)->toDateString(),
+            'cost' => 15.00, 'currency' => 'USD',
+        ]);
+        PetPreventiveCare::create([
+            'pet_id' => $biscuit->id, 'kind' => 'flea_tick', 'label' => 'Bravecto',
+            'applied_on' => now()->subDays(60)->toDateString(),
+            'interval_days' => 90,
+            'next_due_on' => now()->addDays(30)->toDateString(),
+            'cost' => 65.00, 'currency' => 'USD',
+        ]);
+
+        // Prescription — a pet meds example.
+        Prescription::create([
+            'subject_type' => Pet::class, 'subject_id' => $rex->id,
+            'name' => 'Apoquel', 'dosage' => '16 mg / day',
+            'active_from' => now()->subMonths(2)->toDateString(),
+            'refills_left' => 2,
+            'next_refill_on' => now()->addDays(15)->toDateString(),
+        ]);
+    }
+
+    // ── Health provider for humans ────────────────────────────────────────
+    protected function seedHealthExtras(): void
+    {
+        HealthProvider::create([
+            'specialty' => 'primary_care',
+            'name' => 'Bay Family Medicine',
+            'notes' => 'Dr. Okafor. Portal at bfm.health.',
+        ]);
+        HealthProvider::create(['specialty' => 'dentist', 'name' => 'Smile Bright Dental']);
+    }
+
+    // ── Checklists ────────────────────────────────────────────────────────
+    protected function seedChecklists(): void
+    {
+        $morning = ChecklistTemplate::create([
+            'name' => 'Morning ritual',
+            'time_of_day' => 'morning',
+            'rrule' => 'FREQ=DAILY',
+            'dtstart' => now()->subMonth()->toDateString(),
+            'active' => true,
+            'color' => '#f59e0b',
+            'sort_order' => 1,
+        ]);
+        foreach (['Hydrate', 'Stretch 5 min', 'Feed pets', 'Check calendar'] as $i => $label) {
+            ChecklistTemplateItem::create([
+                'checklist_template_id' => $morning->id,
+                'label' => $label,
+                'position' => $i,
+                'active' => true,
+            ]);
+        }
+
+        $evening = ChecklistTemplate::create([
+            'name' => 'Evening ritual',
+            'time_of_day' => 'evening',
+            'rrule' => 'FREQ=DAILY',
+            'dtstart' => now()->subMonth()->toDateString(),
+            'active' => true,
+            'color' => '#6366f1',
+            'sort_order' => 2,
+        ]);
+        foreach (['Dishes', 'Lay out clothes', 'Lights out by 23:00'] as $i => $label) {
+            ChecklistTemplateItem::create([
+                'checklist_template_id' => $evening->id,
+                'label' => $label,
+                'position' => $i,
+                'active' => true,
+            ]);
+        }
+
+        // Shopping list — one-off, as a checklist
+        $shop = ChecklistTemplate::create([
+            'name' => 'Weekend shopping',
+            'time_of_day' => 'anytime',
+            'rrule' => null,
+            'dtstart' => now()->toDateString(),
+            'active' => true,
+            'sort_order' => 10,
+        ]);
+        foreach (['Milk', 'Eggs', 'Coffee beans', 'Dog food'] as $i => $label) {
+            ChecklistTemplateItem::create([
+                'checklist_template_id' => $shop->id,
+                'label' => $label,
+                'position' => $i,
+                'active' => true,
+            ]);
+        }
+    }
+
+    // ── Goals (productivity hub / radar) ──────────────────────────────────
+    protected function seedGoals(): void
+    {
+        // Target mode, behind pace: 100 days elapsed of 200-day target,
+        // but only 20/100 progress → elapsed 50%, progress 20% → behind.
+        Goal::create([
+            'title' => 'Ship v1 of Secretaire',
+            'category' => 'work',
+            'mode' => 'target',
+            'target_value' => 100,
+            'current_value' => 20,
+            'unit' => '%',
+            'started_on' => now()->subDays(100)->toDateString(),
+            'target_date' => now()->addDays(100)->toDateString(),
+            'status' => 'active',
+        ]);
+
+        // Direction mode, stale: 7-day cadence, last reflected 10 days ago.
+        Goal::create([
+            'title' => 'Keep learning — read one book per month',
+            'category' => 'learning',
+            'mode' => 'direction',
+            'target_value' => 0,
+            'current_value' => 0,
+            'cadence_days' => 7,
+            'last_reflected_at' => now()->subDays(10),
+            'started_on' => now()->subMonths(3)->toDateString(),
+            'status' => 'active',
+        ]);
+
+        // Healthy on-track goal for visual variety.
+        Goal::create([
+            'title' => 'Run 500 km this year',
+            'category' => 'health',
+            'mode' => 'target',
+            'target_value' => 500,
+            'current_value' => 180,
+            'unit' => 'km',
+            'started_on' => now()->startOfYear()->toDateString(),
+            'target_date' => now()->endOfYear()->toDateString(),
+            'status' => 'active',
+        ]);
+    }
+
+    // ── Logs hub (journal, decisions, reading, food, body) ────────────────
+    protected function seedLogs(): void
+    {
+        JournalEntry::create([
+            'occurred_on' => now()->subDay()->toDateString(),
+            'title' => 'First walk after the storm',
+            'body' => 'Took Rex out along the trail. Ground still damp; air felt clean.',
+            'mood' => 'calm',
+        ]);
+        JournalEntry::create([
+            'occurred_on' => now()->toDateString(),
+            'title' => null,
+            'body' => 'Shipping-sprint day. Radar finally shows something useful. Three snoozed, two critical.',
+            'mood' => 'focused',
+        ]);
+
+        // Decision with follow-up due (radar fires)
+        Decision::create([
+            'decided_on' => now()->subDays(14)->toDateString(),
+            'title' => 'Switch email provider',
+            'context' => 'Current provider has kept losing filters.',
+            'options_considered' => "Stay with Fastmail\nMigrate to Proton\nRoll own",
+            'chosen' => 'Migrate to Proton',
+            'rationale' => 'Better filter UX; comparable pricing.',
+            'follow_up_on' => now()->subDays(2)->toDateString(), // past → radar fires
+            'outcome' => null,
+        ]);
+        Decision::create([
+            'decided_on' => now()->subMonths(2)->toDateString(),
+            'title' => 'Adopt Tailwind v4',
+            'chosen' => 'Yes — after JIT matures',
+            'rationale' => 'Build speed + smaller bundle won.',
+            'outcome' => 'Worked well. No regrets.',
+        ]);
+
+        MediaLogEntry::create([
+            'title' => 'The Design of Everyday Things',
+            'kind' => 'book',
+            'started_on' => now()->subDays(8)->toDateString(),
+            'finished_on' => now()->subDays(1)->toDateString(),
+            'rating' => 4,
+        ]);
+        MediaLogEntry::create([
+            'title' => 'The Diplomat — S2',
+            'kind' => 'show',
+            'started_on' => now()->subDays(3)->toDateString(),
+        ]);
+
+        FoodEntry::create([
+            'eaten_at' => now()->subHours(6),
+            'label' => 'Oatmeal with banana + coffee',
+            'kind' => 'breakfast',
+        ]);
+        FoodEntry::create([
+            'eaten_at' => now()->subHours(1),
+            'label' => 'Chicken bowl from lunch spot',
+            'kind' => 'lunch',
+        ]);
+
+        BodyMeasurement::create([
+            'measured_at' => now()->startOfDay()->addHours(7),
+            'weight_kg' => 75.2,
+            'body_fat_pct' => 21.4,
+            'muscle_pct' => 41.0,
+        ]);
+        BodyMeasurement::create([
+            'measured_at' => now()->subWeek()->startOfDay()->addHours(7),
+            'weight_kg' => 75.8,
+            'body_fat_pct' => 21.8,
+            'muscle_pct' => 40.6,
+        ]);
+    }
+
+    // ── Assets: domains, meters, online accounts, inventory, listings ────
+    protected function seedDomainsMetersOnlineAccounts(): void
+    {
+        // Domain expiring soon, not auto-renewing (radar fires)
+        Domain::create([
+            'name' => 'aurnata.com',
+            'registrar' => 'Hover',
+            'registered_on' => now()->subYears(2)->toDateString(),
+            'expires_on' => now()->addDays(22)->toDateString(),
+            'auto_renew' => false,
+            'annual_cost' => 12.99, 'currency' => 'USD',
+        ]);
+        Domain::create([
+            'name' => 'secretaire.aurnata.com',
+            'registrar' => 'Hover',
+            'registered_on' => now()->subYears(1)->toDateString(),
+            'expires_on' => now()->addMonths(11)->toDateString(),
+            'auto_renew' => true,
+        ]);
+
+        $property = Property::first();
+        if ($property) {
+            foreach (['water', 'electric', 'gas'] as $kind) {
+                for ($i = 5; $i >= 0; $i--) {
+                    MeterReading::create([
+                        'property_id' => $property->id,
+                        'kind' => $kind,
+                        'read_on' => now()->subMonths($i)->startOfMonth()->toDateString(),
+                        'value' => 1000 + ($i * 120) + random_int(-15, 15),
+                        'unit' => match ($kind) {
+                            'water' => 'gal',
+                            'electric' => 'kWh',
+                            'gas' => 'therms',
+                        },
+                    ]);
+                }
+            }
+        }
+
+        OnlineAccount::create([
+            'service_name' => 'GitHub',
+            'url' => 'https://github.com',
+            'login_email' => 'user@example.com',
+            'mfa_method' => 'security_key',
+            'importance_tier' => 'critical',
+            'in_case_of_pack' => true,
+        ]);
+        OnlineAccount::create([
+            'service_name' => 'Fastmail',
+            'url' => 'https://fastmail.com',
+            'login_email' => 'user@example.com',
+            'mfa_method' => 'totp',
+            'importance_tier' => 'critical',
+            'in_case_of_pack' => true,
+        ]);
+    }
+
+    protected function seedInventoryAndListings(): void
+    {
+        // One processed, one unprocessed (radar fires on the latter)
+        InventoryItem::create([
+            'name' => 'Sony WH-1000XM5 Headphones',
+            'category' => 'electronic',
+            'room' => 'Office',
+            'purchased_on' => now()->subYears(1)->toDateString(),
+            'cost_amount' => 399.99, 'cost_currency' => 'USD',
+            'brand' => 'Sony', 'model_number' => 'WH-1000XM5',
+            'serial_number' => 'ABCD12345',
+            'warranty_expires_on' => now()->addYears(1)->toDateString(),
+            'processed_at' => now()->subMonth(),
+        ]);
+        InventoryItem::create([
+            'name' => 'Unsorted camera kit',
+            'category' => 'electronic',
+            'room' => 'Closet',
+            'processed_at' => null,
+        ]);
+
+        Listing::create([
+            'platform' => 'ebay',
+            'status' => 'live',
+            'title' => 'Vintage lens, used condition',
+            'price' => 120, 'currency' => 'USD',
+            'external_url' => 'https://ebay.com/itm/0000',
+            'posted_on' => now()->subDays(25)->toDateString(),
+            'expires_on' => now()->addDays(3)->toDateString(), // radar fires
+        ]);
+        Listing::create([
+            'platform' => 'craigslist',
+            'status' => 'live',
+            'title' => 'Office chair',
+            'price' => 60, 'currency' => 'USD',
+            'posted_on' => now()->subDays(5)->toDateString(),
+            'expires_on' => now()->addMonths(1)->toDateString(),
+        ]);
+    }
+
+    protected function seedVehicleServices(): void
+    {
+        $vehicle = Vehicle::first();
+        if (! $vehicle) {
+            return;
+        }
+
+        // Old oil change with a next-due in the past → radar fires.
+        VehicleServiceLog::create([
+            'vehicle_id' => $vehicle->id,
+            'service_date' => now()->subMonths(7)->toDateString(),
+            'kind' => 'oil_change',
+            'label' => 'Full synthetic',
+            'odometer' => 78000,
+            'odometer_unit' => 'mi',
+            'cost' => 95.00, 'currency' => 'USD',
+            'next_due_on' => now()->subDays(10)->toDateString(),
+        ]);
+        VehicleServiceLog::create([
+            'vehicle_id' => $vehicle->id,
+            'service_date' => now()->subMonths(2)->toDateString(),
+            'kind' => 'tire_rotation',
+            'odometer' => 79500,
+            'odometer_unit' => 'mi',
+            'cost' => 40.00, 'currency' => 'USD',
+            'next_due_on' => now()->addMonths(4)->toDateString(),
+        ]);
+    }
+
+    protected function seedTaxes(): void
+    {
+        $currentYear = (int) now()->year;
+        $ty = TaxYear::create([
+            'year' => $currentYear,
+            'jurisdiction' => 'US-federal',
+            'state' => 'prep',
+        ]);
+        // Quarterly estimated payments — Q1/Q2 paid, Q3 unpaid due soon (radar fires)
+        foreach ([
+            ['Q1', now()->subDays(120)->toDateString(), 1500, now()->subDays(122)->toDateString()],
+            ['Q2', now()->subDays(30)->toDateString(), 1500, now()->subDays(32)->toDateString()],
+            ['Q3', now()->addDays(20)->toDateString(), 1500, null],
+            ['Q4', now()->addMonths(5)->toDateString(), 1500, null],
+        ] as [$q, $dueOn, $amt, $paidOn]) {
+            TaxEstimatedPayment::create([
+                'tax_year_id' => $ty->id,
+                'quarter' => $q,
+                'due_on' => $dueOn,
+                'paid_on' => $paidOn,
+                'amount' => $amt,
+                'currency' => 'USD',
+            ]);
+        }
+
+        TaxDocument::create([
+            'tax_year_id' => $ty->id,
+            'kind' => 'w2',
+            'label' => 'W-2 (employer)',
+        ]);
+    }
+
+    protected function seedRemindersAndAppointments(): void
+    {
+        // Reminder pending + past remind_at (radar fires)
+        Reminder::create([
+            'title' => 'Call dad',
+            'body' => 'Quick check-in.',
+            'remind_at' => now()->subHours(2),
+            'state' => 'pending',
+            'channel' => 'in_app',
+        ]);
+        Reminder::create([
+            'title' => 'Pay quarterly tax',
+            'remind_at' => now()->addDays(18),
+            'state' => 'pending',
+            'channel' => 'email',
+        ]);
+
+        $pet = Pet::first();
+        if ($pet) {
+            Appointment::create([
+                'subject_type' => Pet::class, 'subject_id' => $pet->id,
+                'purpose' => 'Annual checkup + boosters',
+                'starts_at' => now()->addDays(10)->setTime(14, 0),
+                'ends_at' => now()->addDays(10)->setTime(15, 0),
+                'location' => 'Greenbrook Animal Hospital',
+                'state' => 'scheduled',
+            ]);
+        }
+    }
+
+    protected function seedIntegrations(): void
+    {
+        // One healthy, one in error (radar fires)
+        Integration::create([
+            'provider' => 'google_cal',
+            'kind' => 'calendar',
+            'label' => 'Personal calendar',
+            'status' => 'active',
+            'last_synced_at' => now()->subHour(),
+        ]);
+        Integration::create([
+            'provider' => 'gmail',
+            'kind' => 'mail',
+            'label' => 'Personal inbox',
+            'status' => 'error',
+            'last_synced_at' => now()->subDays(2),
+            'last_error' => 'invalid_grant: refresh token revoked.',
+        ]);
+    }
+
+    protected function seedContractsAndAccountsExtras(): void
+    {
+        // Trial ending soon (radar fires)
+        $svc = Contact::firstOrCreate(['kind' => 'org', 'display_name' => 'Linear']);
+        $trial = Contract::create([
+            'kind' => 'subscription',
+            'title' => 'Linear trial',
+            'starts_on' => now()->subDays(7)->toDateString(),
+            'trial_ends_on' => now()->addDays(5)->toDateString(),
+            'state' => 'active',
+            'auto_renews' => true,
+            'cancellation_url' => 'https://linear.app/settings/billing',
+            'monthly_cost_amount' => 8, 'monthly_cost_currency' => 'USD',
+        ]);
+        $trial->contacts()->attach($svc->id, ['party_role' => 'counterparty']);
+
+        // Gift card account expiring soon (radar fires)
+        Account::create([
+            'name' => 'Apple Gift Card',
+            'type' => 'gift_card',
+            'currency' => 'USD',
+            'expires_on' => now()->addDays(25)->toDateString(),
+            'is_active' => true,
+        ]);
+    }
+
+    /**
+     * Seeds a Media row styled like a processed bill the OCR pipeline
+     * has extracted but the user hasn't reconciled yet — fires the
+     * Bills Inbox radar tile.
+     */
+    protected function seedBillsInboxMedia(): void
+    {
+        Media::create([
+            'disk' => 'local',
+            'path' => 'seed/bills/pge-nov.pdf',
+            'original_name' => 'PGE-Statement-Nov.pdf',
+            'mime' => 'application/pdf',
+            'size' => 128_456,
+            'ocr_status' => 'done',
+            'ocr_extracted' => [
+                'merchant' => 'Pacific Gas & Electric',
+                'total' => 142.35,
+                'currency' => 'USD',
+                'issued_on' => now()->subDays(4)->toDateString(),
+            ],
+            'processed_at' => null,
+        ]);
+    }
+
+    /**
+     * Flips an existing active savings goal to 100% so the
+     * "savings goals ready to close" radar tile fires.
+     */
+    protected function closeOneSavingsGoal(): void
+    {
+        $g = SavingsGoal::where('state', 'active')->orderBy('id')->first();
+        if (! $g) {
+            return;
+        }
+        $target = (float) $g->target_amount;
+        if ($target <= 0) {
+            return;
+        }
+        // saved_amount is the "how much sits in the jar" field; hitting
+        // target makes the radar "ready to close" tile fire.
+        $g->update(['saved_amount' => $target]);
+    }
+
+    /**
+     * Promote one generated projection to overdue so the Overdue Bills
+     * radar tile lights up. Runs after recurring:project.
+     */
+    protected function lightUpOverdueBill(): void
+    {
+        $p = RecurringProjection::query()
+            ->where('autopay', false)
+            ->orderBy('due_on')
+            ->first();
+        if (! $p) {
+            return;
+        }
+        $p->update([
+            'status' => 'overdue',
+            'due_on' => now()->subDays(3)->toDateString(),
+        ]);
     }
 }
