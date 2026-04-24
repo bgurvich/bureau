@@ -14,7 +14,7 @@ it('creates one task per non-empty line with tags + dates', function () {
 
     Livewire::test('tasks-index')
         ->set('bulkOpen', true)
-        ->set('bulkInput', "Pick up dry cleaning #errands 05-03\n\nBook dentist 06-15 #health")
+        ->set('bulkInput', "Pick up dry cleaning #errands by 5/3\n\nBook dentist by 6/15 #health")
         ->call('bulkSave')
         ->assertSet('bulkInput', '');
 

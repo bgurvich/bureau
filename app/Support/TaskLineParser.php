@@ -9,13 +9,15 @@ use Carbon\CarbonImmutable;
 /**
  * Parses a single-line task draft for bulk entry.
  *
- * Input form: `<title text> [#tag]* [@contact_pattern]* [mm-dd]?`
+ * Input form: `<title text> [#tag]* [@contact_pattern]* [by M/D]?`
  * — tokens can appear in any order; the title is whatever remains after
  * the recognized fragments are plucked out.
  *
- * mm-dd coerces to the current year; if that date is already in the
- * past (strictly before today) it rolls to next year so "01-05" typed
- * in December means January 5 next year, not last January.
+ * `by M/D` (or `by MM/DD`) coerces to the current year; if that date is
+ * already in the past (strictly before today) it rolls to next year so
+ * "by 1/5" typed in December means January 5 next year, not last January.
+ * The `by` prefix is required so bare numeric fragments (phone numbers,
+ * jersey numbers, etc.) don't get absorbed into due_at.
  *
  * Ambiguous or malformed fragments are left in the title rather than
  * dropped, so the user sees them and can correct. No contact lookups,
@@ -61,7 +63,7 @@ final class TaskLineParser
         }, $line) ?? $line;
 
         $dueAt = null;
-        $line = preg_replace_callback('/\b(\d{1,2})-(\d{1,2})\b/', function ($m) use (&$dueAt) {
+        $line = preg_replace_callback('/\bby\s+(\d{1,2})\/(\d{1,2})\b/i', function ($m) use (&$dueAt) {
             if ($dueAt !== null) {
                 return $m[0];
             }
