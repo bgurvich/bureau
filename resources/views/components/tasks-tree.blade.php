@@ -46,6 +46,46 @@ class extends Component
         unset($this->projects, $this->tasks);
     }
 
+    /**
+     * Persist a drop: rewrite project_id + position for every task
+     * in the target group to the sequence the DOM committed. Tasks
+     * left behind in the source group keep their positions; gaps
+     * are fine since ORDER BY position is monotonic either way.
+     *
+     * Only top-level tasks (parent_task_id=null) participate in the
+     * tree drag surface, so this doesn't accidentally strand a
+     * subtask under a different project than its parent.
+     *
+     * @param  array<int, int>  $taskIds
+     */
+    public function moveToGroup(string $groupKey, array $taskIds): void
+    {
+        $projectId = null;
+        if (str_starts_with($groupKey, 'project:')) {
+            $projectId = (int) substr($groupKey, 8);
+        } elseif ($groupKey !== 'unassigned') {
+            return;
+        }
+        if ($projectId !== null && ! Project::where('id', $projectId)->exists()) {
+            return;
+        }
+
+        foreach ($taskIds as $i => $id) {
+            $id = (int) $id;
+            if ($id <= 0) {
+                continue;
+            }
+            Task::where('id', $id)
+                ->whereNull('parent_task_id')
+                ->update([
+                    'project_id' => $projectId,
+                    'position' => $i,
+                ]);
+        }
+
+        unset($this->projects, $this->tasks);
+    }
+
     /** @return Collection<int, Project> */
     #[Computed]
     public function projects(): Collection
@@ -162,7 +202,12 @@ class extends Component
             }
         @endphp
         <section class="rounded-xl border border-neutral-800 bg-neutral-900/40"
-                 aria-labelledby="group-{{ $groupKey }}-h">
+                 aria-labelledby="group-{{ $groupKey }}-h"
+                 x-data="taskTreeSortable"
+                 data-tt-group-key="{{ $groupKey }}"
+                 @dragover="onDragOver($event)"
+                 @drop="onDrop($event)"
+                 @dragend="onDragEnd()">
             <header class="flex items-baseline justify-between border-b border-neutral-800/60 px-4 py-2">
                 <h3 id="group-{{ $groupKey }}-h" class="flex items-center gap-2 text-sm font-medium text-neutral-200">
                     @if ($project && $project->color)
@@ -193,7 +238,12 @@ class extends Component
                         $subjects = $task->subjects();
                     @endphp
                     <li class="group relative flex items-start gap-3 px-4 py-2.5 text-sm transition hover:bg-neutral-800/30"
-                        style="{{ $indentStyle }}">
+                        style="{{ $indentStyle }}"
+                        @if ($depth === 0)
+                            data-tt-task-id="{{ $task->id }}"
+                            draggable="true"
+                            @dragstart="onDragStart({{ $task->id }}, $event)"
+                        @endif>
                         @if ($depth > 0)
                             <span aria-hidden="true"
                                   class="absolute top-0 bottom-0 w-px bg-neutral-800"

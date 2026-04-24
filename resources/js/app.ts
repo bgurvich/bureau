@@ -316,6 +316,101 @@ document.addEventListener('alpine:init', () => {
         },
     })) as unknown as (...args: unknown[]) => Record<string, unknown>);
 
+    // Cross-list sortable for the /tasks/tree page. Unlike
+    // checklistItemsSortable (single <ul>), this one tracks drag state
+    // at module scope so a row picked up from one project's <ul> can
+    // be dropped into another's. Only rows marked draggable participate;
+    // subtasks stay parked under their parent.
+    type TaskTreeSortableData = {
+        $el: HTMLElement;
+        $wire: Record<string, unknown>;
+        onDragStart(taskId: number | string, evt: DragEvent): void;
+        onDragOver(evt: DragEvent): void;
+        onDrop(evt: DragEvent): void;
+        onDragEnd(): void;
+    };
+
+    type DragSnapshotItem = {
+        el: HTMLElement;
+        parent: Node;
+        next: Node | null;
+    };
+
+    let treeDragId: string | null = null;
+    let treeDragCommitted = false;
+    let treeDragSnapshot: DragSnapshotItem[] = [];
+
+    alpine.data('taskTreeSortable', (() => ({
+        onDragStart(this: TaskTreeSortableData, taskId: number | string, evt: DragEvent): void {
+            treeDragId = String(taskId);
+            treeDragCommitted = false;
+            treeDragSnapshot = Array.from(
+                document.querySelectorAll<HTMLElement>('[data-tt-task-id]'),
+            ).map((el) => ({
+                el,
+                parent: el.parentNode as Node,
+                next: el.nextElementSibling,
+            }));
+            if (evt.dataTransfer) {
+                evt.dataTransfer.effectAllowed = 'move';
+                evt.dataTransfer.setData('text/plain', String(taskId));
+                const row = (evt.target as HTMLElement | null)?.closest<HTMLElement>('[data-tt-task-id]');
+                if (row) evt.dataTransfer.setDragImage(row, 20, 20);
+            }
+        },
+        onDragOver(this: TaskTreeSortableData, evt: DragEvent): void {
+            if (!treeDragId) return;
+            evt.preventDefault();
+            const dragEl = document.querySelector<HTMLElement>(
+                `[data-tt-task-id="${CSS.escape(treeDragId)}"]`,
+            );
+            if (!dragEl) return;
+            const target = (evt.target as HTMLElement | null)?.closest<HTMLElement>('[data-tt-task-id]');
+            if (target && target !== dragEl) {
+                const rect = target.getBoundingClientRect();
+                const before = evt.clientY < rect.top + rect.height / 2;
+                if (before) {
+                    target.parentNode?.insertBefore(dragEl, target);
+                } else {
+                    target.parentNode?.insertBefore(dragEl, target.nextSibling);
+                }
+                return;
+            }
+            // Empty list (or hovering outside any row): allow landing by
+            // appending to this <ul>. Only fires if the current <ul>
+            // has no rows or the cursor is below them all.
+            if (this.$el instanceof HTMLElement && ! this.$el.contains(dragEl)) {
+                this.$el.appendChild(dragEl);
+            }
+        },
+        onDrop(this: TaskTreeSortableData, evt: DragEvent): void {
+            if (!treeDragId) return;
+            evt.preventDefault();
+            treeDragCommitted = true;
+            const groupKey = this.$el.dataset.ttGroupKey ?? '';
+            const taskIds = Array.from(
+                this.$el.querySelectorAll<HTMLElement>('[data-tt-task-id]'),
+            )
+                .map((el) => Number(el.getAttribute('data-tt-task-id')))
+                .filter((n) => Number.isFinite(n));
+            const method = this.$wire['moveToGroup'];
+            if (typeof method === 'function') {
+                (method as (...a: unknown[]) => unknown).call(this.$wire, groupKey, taskIds);
+            }
+            treeDragId = null;
+        },
+        onDragEnd(this: TaskTreeSortableData): void {
+            if (!treeDragCommitted && treeDragSnapshot.length) {
+                for (const item of treeDragSnapshot) {
+                    item.parent.insertBefore(item.el, item.next);
+                }
+            }
+            treeDragId = null;
+            treeDragCommitted = false;
+            treeDragSnapshot = [];
+        },
+    })) as unknown as (...args: unknown[]) => Record<string, unknown>);
+
     alpine.data('searchableSelect', ((config: SearchableSelectConfig) => ({
         search: '',
         open: false,
