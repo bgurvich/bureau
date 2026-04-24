@@ -142,6 +142,7 @@ Route::middleware(['auth', 'preferences', 'household'])->group(function () {
     Route::livewire('/properties', 'properties-index')->name('assets.properties');
     Route::livewire('/vehicles', 'vehicles-index')->name('assets.vehicles');
     Route::livewire('/inventory', 'inventory-index')->name('assets.inventory');
+    Route::livewire('/listings', 'listings-index')->name('assets.listings');
     Route::livewire('/domains', 'domains-index')->name('assets.domains');
     Route::livewire('/meters', 'meter-readings-index')->name('assets.meters');
     Route::livewire('/vehicles/services', 'vehicle-services-index')->name('assets.vehicle_services');

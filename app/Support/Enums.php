@@ -447,6 +447,22 @@ class Enums
         ];
     }
 
+    /**
+     * Listing lifecycle state. draft → live → sold / expired / cancelled.
+     *
+     * @return array<string, string>
+     */
+    public static function listingStatuses(): array
+    {
+        return [
+            'draft' => __('Draft'),
+            'live' => __('Live'),
+            'sold' => __('Sold'),
+            'expired' => __('Expired'),
+            'cancelled' => __('Cancelled'),
+        ];
+    }
+
     /** How an asset left ownership — drives disposition fields on property/vehicle/inventory. */
     /**
      * @return array<string, string>

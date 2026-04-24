@@ -16,6 +16,7 @@ use App\Models\FoodEntry;
 use App\Models\Goal;
 use App\Models\InventoryItem;
 use App\Models\JournalEntry;
+use App\Models\Listing;
 use App\Models\MediaLogEntry;
 use App\Models\Meeting;
 use App\Models\MeterReading;
@@ -341,6 +342,7 @@ new class extends Component
                 'decision' => Decision::findOrFail($this->id)->delete(),
                 'goal' => Goal::findOrFail($this->id)->delete(),
                 'appointment' => Appointment::findOrFail($this->id)->delete(),
+                'listing' => Listing::findOrFail($this->id)->delete(),
                 'body_measurement' => BodyMeasurement::findOrFail($this->id)->delete(),
                 default => null,
             };
@@ -385,6 +387,7 @@ new class extends Component
         'vehicle_service_log' => ['parentId' => 'subentityParentId'],
         'task' => ['parentId' => 'subentityParentId'],
         'checklist_template' => ['asHabit' => 'asHabitMode'],
+        'listing' => ['parentId' => 'subentityParentId'],
     ];
 
     /**
@@ -468,6 +471,7 @@ new class extends Component
             'food_entry' => __('food entry'),
             'decision' => __('decision'),
             'goal' => __('goal'),
+            'listing' => __('listing'),
             'body_measurement' => __('body measurement'),
             'reminder' => __('reminder'),
             'appointment' => __('appointment'),

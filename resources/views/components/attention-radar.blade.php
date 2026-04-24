@@ -8,6 +8,7 @@ use App\Models\Domain;
 use App\Models\Goal;
 use App\Models\Integration;
 use App\Models\InventoryItem;
+use App\Models\Listing;
 use App\Models\Media;
 use App\Models\PetCheckup;
 use App\Models\PetLicense;
@@ -329,6 +330,21 @@ new class extends Component
     }
 
     /**
+     * Live listings whose expiry window is within 7 days (or past).
+     * Prompts the owner to either relist / delist / lower price
+     * before the platform auto-expires the posting.
+     */
+    #[Computed]
+    public function listingsExpiringSoon(): int
+    {
+        return Listing::query()
+            ->where('status', 'live')
+            ->whereNotNull('expires_on')
+            ->where('expires_on', '<=', now()->addDays(7)->toDateString())
+            ->count();
+    }
+
+    /**
      * Vehicle services whose next_due_on is within 30 days (or already
      * past). Restricted to the latest log per (vehicle, kind) pair so
      * a stale 2022 oil change with a 2023 due date doesn't keep firing
@@ -374,7 +390,8 @@ new class extends Component
             + $this->goalsBehindPace
             + $this->goalsStale
             + $this->integrationsNeedingReconnect
-            + $this->vehicleServicesDueSoon;
+            + $this->vehicleServicesDueSoon
+            + $this->listingsExpiringSoon;
     }
 };
 ?>
@@ -569,6 +586,15 @@ new class extends Component
                         {{ __('Vehicle services due ≤ 30d') }}
                     </a>
                     <span class="tabular-nums text-amber-400">{{ $this->vehicleServicesDueSoon }}</span>
+                </li>
+            @endif
+            @if ($this->listingsExpiringSoon)
+                <li class="flex items-baseline justify-between">
+                    <a href="{{ route('assets.listings', ['status' => 'live']) }}"
+                       class="text-neutral-300 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                        {{ __('Listings expiring ≤ 7d') }}
+                    </a>
+                    <span class="tabular-nums text-amber-400">{{ $this->listingsExpiringSoon }}</span>
                 </li>
             @endif
         </ul>
