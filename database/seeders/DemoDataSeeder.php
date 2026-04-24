@@ -56,6 +56,7 @@ use App\Models\User;
 use App\Models\Vehicle;
 use App\Models\VehicleServiceLog;
 use App\Support\CurrentHousehold;
+use App\Support\MediaPlaceholder;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Artisan;
 
@@ -634,6 +635,15 @@ class DemoDataSeeder extends Seeder
         $this->skipIf('Trial contract + gift card', Account::where('type', 'gift_card')->exists(), fn () => $this->seedContractsAndAccountsExtras());
         $this->skipIf('Bills inbox media', Media::whereNull('processed_at')->where('ocr_status', 'done')->exists(), fn () => $this->seedBillsInboxMedia());
         $this->closeOneSavingsGoal();
+
+        // Write placeholder bytes for any Media row whose underlying
+        // file isn't on disk. Keeps the library picker + thumbnails
+        // from 404'ing on seeded rows that point at paths like
+        // "seed/bills/pge-nov.pdf" with no actual file.
+        $written = MediaPlaceholder::repairAll();
+        if ($written > 0) {
+            $this->command->line("   · wrote {$written} placeholder media file(s)");
+        }
     }
 
     // ── Pets ───────────────────────────────────────────────────────────────
