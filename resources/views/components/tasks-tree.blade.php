@@ -623,7 +623,7 @@ class extends Component
                             </div>
                             <button type="button"
                                     x-data
-                                    x-on:click.stop="$dispatch('subentity-edit-open', { type: 'task', id: null, parentId: {{ $task->id }} })"
+                                    x-on:click.stop="$dispatch('inspector-open', { type: 'task', id: null, parentId: {{ $task->id }} })"
                                     aria-label="{{ __('Add subtask') }}"
                                     title="{{ __('Add subtask') }}"
                                     class="absolute right-12 top-2.5 rounded-md border border-neutral-800 bg-neutral-900/80 px-1.5 py-0.5 text-[10px] text-neutral-400 opacity-0 transition group-hover:opacity-100 hover:text-neutral-100 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">

@@ -132,15 +132,17 @@ new class extends Component
     }
 
     #[On('inspector-open')]
-    public function openInspector(string $type = '', ?int $id = null, ?int $mediaId = null, bool $asHabit = false): void
+    public function openInspector(string $type = '', ?int $id = null, ?int $mediaId = null, bool $asHabit = false, ?int $parentId = null): void
     {
         // Only the primary instance responds to the main open event —
         // the modal instance sits quiet on this channel and only wakes
-        // up on `subentity-edit-open`.
+        // up on `subentity-edit-open`. parentId threads through for
+        // "add subtask / add service" flows that originate outside of
+        // another inspector — i.e. directly from a list row.
         if ($this->asModal) {
             return;
         }
-        $this->doOpen($type, $id, $mediaId, null, $asHabit);
+        $this->doOpen($type, $id, $mediaId, $parentId, $asHabit);
     }
 
     /**
