@@ -13,6 +13,7 @@ use App\Http\Controllers\PostmarkInboundController;
 use App\Http\Controllers\SocialLoginController;
 use App\Http\Controllers\WebAuthn\WebAuthnLoginController;
 use App\Http\Controllers\WebAuthn\WebAuthnRegisterController;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
@@ -109,7 +110,16 @@ Route::middleware(['auth', 'preferences', 'household'])->group(function () {
     Route::livewire('/tasks', 'tasks-index')->name('calendar.tasks');
     Route::livewire('/meetings', 'meetings-index')->name('calendar.meetings');
     Route::livewire('/life/checklists', 'checklists-index')->name('life.checklists.index');
-    Route::livewire('/life/checklists/today', 'checklists-today')->name('life.checklists.today');
+    // Legacy dedicated today page — now absorbed into the hub's Today
+    // tab. Redirect preserves any ?date=… backfill the old URL carried.
+    Route::get('/life/checklists/today', function (Request $request) {
+        $params = ['tab' => 'today'];
+        if ($request->filled('date')) {
+            $params['date'] = (string) $request->query('date');
+        }
+
+        return redirect()->route('life.checklists.index', $params);
+    })->name('life.checklists.today');
     Route::livewire('/schedule', 'schedule-hub')->name('life.schedule');
     Route::livewire('/contacts', 'contacts-index')->name('relationships.contacts');
     Route::get('/contacts/export', ContactsExportController::class)->name('relationships.contacts.export');

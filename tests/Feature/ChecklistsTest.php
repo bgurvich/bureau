@@ -76,7 +76,7 @@ it('ticks an item lazily and creates a run for today', function () {
 
     expect(ChecklistRun::count())->toBe(0);
 
-    Livewire::test('checklists-today')
+    Livewire::test('checklists-index')->set('tab', 'today')
         ->call('toggleItem', $t->id, $i1->id);
 
     $run = ChecklistRun::where('checklist_template_id', $t->id)->firstOrFail();
@@ -84,7 +84,7 @@ it('ticks an item lazily and creates a run for today', function () {
         ->and($run->completed_at)->toBeNull();
 
     // Ticking the last active item flips completed_at.
-    Livewire::test('checklists-today')
+    Livewire::test('checklists-index')->set('tab', 'today')
         ->call('toggleItem', $t->id, $i2->id);
 
     $run->refresh();
@@ -99,11 +99,11 @@ it('clears completed_at when a ticked item is unticked', function () {
     ]);
     $i = $t->items()->create(['label' => 'Only step', 'active' => true, 'position' => 0]);
 
-    Livewire::test('checklists-today')->call('toggleItem', $t->id, $i->id);
+    Livewire::test('checklists-index')->set('tab', 'today')->call('toggleItem', $t->id, $i->id);
     $run = ChecklistRun::first();
     expect($run->completed_at)->not->toBeNull();
 
-    Livewire::test('checklists-today')->call('toggleItem', $t->id, $i->id);
+    Livewire::test('checklists-index')->set('tab', 'today')->call('toggleItem', $t->id, $i->id);
     $run->refresh();
     expect($run->completed_at)->toBeNull()
         ->and($run->tickedIds())->toBe([]);
@@ -116,7 +116,7 @@ it('markDone fills all active ids and sets completed_at', function () {
     ]);
     $ids = collect(['A', 'B', 'C'])->map(fn ($l, $p) => $t->items()->create(['label' => $l, 'active' => true, 'position' => $p])->id)->all();
 
-    Livewire::test('checklists-today')->call('markDone', $t->id);
+    Livewire::test('checklists-index')->set('tab', 'today')->call('markDone', $t->id);
 
     $run = ChecklistRun::first();
     expect($run->tickedIds())->toEqualCanonicalizing($ids)
@@ -131,7 +131,7 @@ it('markSkipped records an empty run with skipped_at set', function () {
     ]);
     $t->items()->create(['label' => 'X', 'active' => true, 'position' => 0]);
 
-    Livewire::test('checklists-today')->call('markSkipped', $t->id);
+    Livewire::test('checklists-index')->set('tab', 'today')->call('markSkipped', $t->id);
 
     $run = ChecklistRun::first();
     expect($run->tickedIds())->toBe([])
@@ -195,7 +195,11 @@ it('removes an item by its key without disturbing sibling labels', function () {
         ->and($result->get('checklist_items')['k3']['label'])->toBe('three');
 });
 
-it('renders the index and today pages without errors', function () {
+it('renders the hub index and redirects the legacy today route', function () {
     $this->get(route('life.checklists.index'))->assertOk();
-    $this->get(route('life.checklists.today'))->assertOk();
+    // Legacy /life/checklists/today now redirects into the hub's Today tab.
+    $this->get(route('life.checklists.today'))
+        ->assertRedirect(route('life.checklists.index', ['tab' => 'today']));
+    $this->get(route('life.checklists.today', ['date' => '2026-04-01']))
+        ->assertRedirect(route('life.checklists.index', ['tab' => 'today', 'date' => '2026-04-01']));
 });

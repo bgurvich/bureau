@@ -37,11 +37,19 @@ class extends Component
     #[Url(as: 'type')]
     public string $typeFilter = '';
 
+    /** ISO date viewed on the Today tab. Blank = today. Backfill past
+     *  days by picking their date here. */
+    #[Url(as: 'date')]
+    public string $date = '';
+
     private const HISTORY_DAYS = 60;
 
     public function mount(): void
     {
         $this->tab = HubTabMemory::resolve('checklists', $this->tab, 'today');
+        if ($this->date === '') {
+            $this->date = now()->toDateString();
+        }
     }
 
     public function setTab(string $tab): void
@@ -52,14 +60,37 @@ class extends Component
         }
     }
 
+    public function shiftDay(int $delta): void
+    {
+        $this->date = CarbonImmutable::parse($this->date)->addDays($delta)->toDateString();
+        $this->refresh();
+    }
+
+    public function jumpToToday(): void
+    {
+        $this->date = now()->toDateString();
+        $this->refresh();
+    }
+
+    public function activeDate(): CarbonImmutable
+    {
+        return CarbonImmutable::parse($this->date === '' ? now()->toDateString() : $this->date)->startOfDay();
+    }
+
+    public function isViewingToday(): bool
+    {
+        return $this->activeDate()->toDateString() === now()->toDateString();
+    }
+
     #[On('inspector-saved')]
     public function refresh(): void
     {
         unset(
             $this->templates,
-            $this->todayRuns,
+            $this->dateRuns,
             $this->streaks,
             $this->habits,
+            $this->habitsOnActiveDate,
             $this->history,
         );
     }
@@ -103,20 +134,36 @@ class extends Component
     }
 
     /**
-     * Today's run per template, keyed by template id. Used by both
-     * the Today cards and the All tab's per-row state chip.
+     * Runs for the active date, keyed by template id. Used by both the
+     * Today cards (ticking state) and the All tab's per-row state chip
+     * when viewing today.
      *
      * @return array<int, ChecklistRun>
      */
     #[Computed]
-    public function todayRuns(): array
+    public function dateRuns(): array
     {
-        $today = now()->toDateString();
+        $d = $this->activeDate()->toDateString();
 
-        return ChecklistRun::where('run_date', $today)
+        return ChecklistRun::where('run_date', $d)
             ->get()
             ->keyBy('checklist_template_id')
             ->all();
+    }
+
+    /**
+     * Habits scheduled on the currently-viewed date. Reads rrule via
+     * ChecklistScheduling so FREQ=WEEKLY;BYDAY= etc. exclude days the
+     * user doesn't want the habit to appear.
+     *
+     * @return Collection<int, ChecklistTemplate>
+     */
+    #[Computed]
+    public function habitsOnActiveDate(): Collection
+    {
+        return ChecklistScheduling::templatesScheduledOn($this->activeDate())
+            ->filter(fn ($t) => $t->isHabit())
+            ->values();
     }
 
     /**
@@ -129,7 +176,7 @@ class extends Component
     public function streaks(): array
     {
         $out = [];
-        $rows = $this->tab === 'today' ? $this->habits : $this->templates;
+        $rows = $this->tab === 'today' ? $this->habitsOnActiveDate : $this->templates;
         foreach ($rows as $t) {
             $out[$t->id] = ChecklistScheduling::streak($t);
         }
@@ -137,21 +184,23 @@ class extends Component
         return $out;
     }
 
-    /** One-click "I did it today" on the Today tab. For habits with
-     *  items this stamps all items done at once — useful when the
-     *  user wants to skip the granular ticking for a routine that went
-     *  exactly as planned. */
+    /** Mark-all-done for the active date. For habits with items this
+     *  stamps every active item ticked + sets completed_at — useful
+     *  when the user wants to skip granular ticking for a routine that
+     *  went exactly as planned. */
     public function toggleToday(int $templateId): void
     {
         $template = ChecklistTemplate::find($templateId);
         if (! $template || ! $template->isHabit()) {
             return;
         }
+        if (! $template->isScheduledOn($this->activeDate())) {
+            return;
+        }
 
-        $today = CarbonImmutable::today()->toDateString();
         $run = ChecklistRun::firstOrCreate([
             'checklist_template_id' => $templateId,
-            'run_date' => $today,
+            'run_date' => $this->activeDate()->toDateString(),
         ]);
 
         if ($run->completed_at !== null) {
@@ -167,7 +216,7 @@ class extends Component
     }
 
     /**
-     * Tick / untick a single item on a habit's today run. completed_at
+     * Tick / untick a single item on the active-date run. completed_at
      * auto-stamps when every active item is ticked, and clears when any
      * active item becomes unticked again.
      */
@@ -177,15 +226,17 @@ class extends Component
         if (! $template || ! $template->isHabit()) {
             return;
         }
+        if (! $template->isScheduledOn($this->activeDate())) {
+            return;
+        }
         $activeItemIds = $template->activeItemIds();
         if (! in_array($itemId, $activeItemIds, true)) {
             return;
         }
 
-        $today = CarbonImmutable::today()->toDateString();
         $run = ChecklistRun::firstOrCreate([
             'checklist_template_id' => $templateId,
-            'run_date' => $today,
+            'run_date' => $this->activeDate()->toDateString(),
         ]);
 
         $current = $run->tickedIds();
@@ -202,6 +253,62 @@ class extends Component
             $run->skipped_at = null;
         }
         $run->save();
+
+        $this->refresh();
+    }
+
+    /** Unconditional "mark complete" — always sets completed_at + all
+     *  items ticked, regardless of current state. Separate from
+     *  toggleToday (which flips) so external callers have a clean
+     *  set-action.
+     */
+    public function markDone(int $templateId): void
+    {
+        $template = ChecklistTemplate::find($templateId);
+        if (! $template || ! $template->isScheduledOn($this->activeDate())) {
+            return;
+        }
+        $run = ChecklistRun::firstOrCreate([
+            'checklist_template_id' => $templateId,
+            'run_date' => $this->activeDate()->toDateString(),
+        ]);
+        $run->ticked_item_ids = $template->activeItemIds();
+        $run->completed_at = now();
+        $run->skipped_at = null;
+        $run->save();
+
+        $this->refresh();
+    }
+
+    /** Flag the habit's active-date run as intentionally skipped.
+     *  Keeps the "didn't do it, on purpose" signal out of the streak-
+     *  breaking path — the history heat strip shows a neutral cell. */
+    public function markSkipped(int $templateId): void
+    {
+        $template = ChecklistTemplate::find($templateId);
+        if (! $template || ! $template->isScheduledOn($this->activeDate())) {
+            return;
+        }
+        $run = ChecklistRun::firstOrCreate([
+            'checklist_template_id' => $templateId,
+            'run_date' => $this->activeDate()->toDateString(),
+        ]);
+        $run->ticked_item_ids = [];
+        $run->completed_at = null;
+        $run->skipped_at = now();
+        $run->save();
+
+        $this->refresh();
+    }
+
+    /** Undo a done / skipped state by deleting the run row entirely.
+     *  Lets the user reset a row back to "pending" without leaving a
+     *  half-ticked corpse around. */
+    public function clearRun(int $templateId): void
+    {
+        ChecklistRun::where('checklist_template_id', $templateId)
+            ->where('run_date', $this->activeDate()->toDateString())
+            ->delete();
 
         $this->refresh();
     }
@@ -278,10 +385,6 @@ class extends Component
     <x-ui.page-header
         :title="__('Checklists')"
         :description="__('Habits, routines, and one-off lists (shopping, packing, onboarding) — all the same underlying template, grouped by how you use them.')">
-        <a href="{{ route('life.checklists.today') }}"
-           class="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-200 hover:border-neutral-600 hover:bg-neutral-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
-            {{ __('Today\'s rituals') }} →
-        </a>
         <button type="button"
                 wire:click="$dispatch('inspector-open', { type: 'checklist_template' })"
                 class="rounded-md bg-neutral-100 px-3 py-2 text-sm font-medium text-neutral-900 hover:bg-neutral-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
@@ -305,95 +408,154 @@ class extends Component
     </nav>
 
     @if ($tab === 'today')
-        @if ($this->habits->isEmpty())
+        {{-- Date nav — let the user backfill yesterday's run or
+             peek ahead at tomorrow's schedule. --}}
+        <div class="flex flex-wrap items-center gap-2 text-xs text-neutral-400">
+            <button type="button" wire:click="shiftDay(-1)"
+                    class="rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                ‹ {{ __('Prev') }}
+            </button>
+            <input type="date" wire:model.live="date"
+                   class="rounded-md border border-neutral-700 bg-neutral-950 px-2 py-1 text-xs tabular-nums text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+            <button type="button" wire:click="shiftDay(1)"
+                    class="rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                {{ __('Next') }} ›
+            </button>
+            @unless ($this->isViewingToday())
+                <button type="button" wire:click="jumpToToday"
+                        class="rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                    {{ __('Jump to today') }}
+                </button>
+            @endunless
+        </div>
+
+        @if ($this->habitsOnActiveDate->isEmpty())
             <x-ui.empty-state>
-                {{ __('No habits yet. Create one with any recurring cadence — daily, weekdays, weekly, custom.') }}
+                {{ $this->isViewingToday()
+                    ? __('No habits scheduled today. Create one with any recurring cadence — daily, weekdays, weekly, custom.')
+                    : __('No habits scheduled on :d.', ['d' => $this->activeDate()->toDateString()]) }}
             </x-ui.empty-state>
         @else
-            <ul class="grid grid-cols-1 gap-3 md:grid-cols-2">
-                @foreach ($this->habits as $habit)
-                    @php
-                        $run = $this->todayRuns[$habit->id] ?? null;
-                        $doneToday = $run !== null && $run->completed_at !== null;
-                        $scheduledToday = $habit->isScheduledOn(CarbonImmutable::today());
-                        $streak = $this->streaks[$habit->id] ?? 0;
-                        $tickedIds = $run ? $run->tickedIds() : [];
-                        $items = $habit->items->where('active', true)->values();
-                        $activeItemCount = $items->count();
-                        $tickedCount = count(array_intersect($items->pluck('id')->all(), $tickedIds));
-                    @endphp
-                    <li class="rounded-xl border border-neutral-800 bg-neutral-900/40 p-4">
-                        <div class="flex items-start gap-3">
-                            {{-- Big "all-done" toggle. Useful for single-item habits
-                                 (meditate 10 min) or for batch-marking a multi-item
-                                 routine when the user doesn't want to tick each item. --}}
-                            <button type="button"
-                                    wire:click="toggleToday({{ $habit->id }})"
-                                    aria-pressed="{{ $doneToday ? 'true' : 'false' }}"
-                                    aria-label="{{ $doneToday ? __('Mark :name as undone for today', ['name' => $habit->name]) : __('Mark :name as done for today', ['name' => $habit->name]) }}"
-                                    class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300
-                                           {{ $doneToday ? 'border-emerald-500 bg-emerald-500/20 text-emerald-400' : ($scheduledToday ? 'border-neutral-500 text-transparent hover:border-neutral-300' : 'border-neutral-800 text-transparent') }}">
-                                <svg class="h-5 w-5" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                                    <path d="M3 8l3.5 3.5L13 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                </svg>
-                            </button>
-                            <button type="button"
-                                    wire:click="$dispatch('inspector-open', { type: 'checklist_template', id: {{ $habit->id }} })"
-                                    class="min-w-0 flex-1 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
-                                <div class="truncate text-sm font-medium text-neutral-100">{{ $habit->name }}</div>
-                                @if ($habit->description)
-                                    <div class="mt-0.5 truncate text-[11px] text-neutral-500">{{ $habit->description }}</div>
-                                @endif
-                                <div class="mt-1 flex items-center gap-3 text-[11px] text-neutral-500">
-                                    @if ($streak > 0)
-                                        <span class="rounded bg-amber-950/40 px-1.5 py-0.5 font-mono text-amber-300"
-                                              title="{{ __(':n day streak', ['n' => $streak]) }}">
-                                            {{ __(':n d', ['n' => $streak]) }}
-                                        </span>
-                                    @endif
-                                    @if (! $scheduledToday)
-                                        <span>{{ __('not scheduled today') }}</span>
-                                    @elseif ($doneToday)
-                                        <span class="text-emerald-400">{{ __('done today') }}</span>
-                                    @elseif ($activeItemCount > 0)
-                                        <span class="tabular-nums">{{ $tickedCount }}/{{ $activeItemCount }}</span>
-                                    @else
-                                        <span>{{ __('pending today') }}</span>
-                                    @endif
-                                </div>
-                            </button>
-                        </div>
-
-                        {{-- Per-item checkboxes. Only render when the habit has more
-                             than one active item — single-item habits rely on the big
-                             toggle above. --}}
-                        @if ($activeItemCount > 1)
-                            <ul class="mt-3 space-y-1 border-t border-neutral-800/60 pt-2">
-                                @foreach ($items as $item)
-                                    @php
-                                        $ticked = in_array((int) $item->id, $tickedIds, true);
-                                    @endphp
-                                    <li>
-                                        <label class="flex items-start gap-2 rounded px-1 py-0.5 text-xs hover:bg-neutral-800/30">
-                                            <button type="button"
-                                                    wire:click="toggleItem({{ $habit->id }}, {{ $item->id }})"
-                                                    aria-pressed="{{ $ticked ? 'true' : 'false' }}"
-                                                    aria-label="{{ $ticked ? __('Untick :label', ['label' => $item->label]) : __('Tick :label', ['label' => $item->label]) }}"
-                                                    class="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300
-                                                           {{ $ticked ? 'border-emerald-500/60 bg-emerald-500/20 text-emerald-400' : 'border-neutral-600 text-transparent hover:border-neutral-400' }}">
-                                                <svg class="h-2.5 w-2.5" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-                                                    <path d="M2.5 6.2 5 8.7l4.5-5.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-                                                </svg>
+            @php
+                $buckets = ['morning', 'midday', 'evening', 'night', 'anytime'];
+                $bucketLabels = [
+                    'morning' => __('Morning'),
+                    'midday' => __('Midday'),
+                    'evening' => __('Evening'),
+                    'night' => __('Night'),
+                    'anytime' => __('Anytime'),
+                ];
+                $grouped = $this->habitsOnActiveDate->groupBy('time_of_day');
+            @endphp
+            @foreach ($buckets as $bucket)
+                @if (! $grouped->has($bucket))
+                    @continue
+                @endif
+                <section aria-labelledby="cl-bucket-{{ $bucket }}" class="space-y-2">
+                    <h3 id="cl-bucket-{{ $bucket }}" class="text-[10px] font-medium uppercase tracking-wider text-neutral-500">{{ $bucketLabels[$bucket] }}</h3>
+                    <ul class="grid grid-cols-1 gap-3 md:grid-cols-2">
+                        @foreach ($grouped[$bucket] as $habit)
+                            @php
+                                $run = $this->dateRuns[$habit->id] ?? null;
+                                $doneDay = $run !== null && $run->completed_at !== null;
+                                $skipped = $run !== null && $run->skipped_at !== null;
+                                $streak = $this->streaks[$habit->id] ?? 0;
+                                $tickedIds = $run ? $run->tickedIds() : [];
+                                $items = $habit->items->where('active', true)->values();
+                                $activeItemCount = $items->count();
+                                $tickedCount = count(array_intersect($items->pluck('id')->all(), $tickedIds));
+                            @endphp
+                            <li class="rounded-xl border border-neutral-800 bg-neutral-900/40 p-4 {{ $doneDay || $skipped ? 'opacity-80' : '' }}">
+                                <div class="flex items-start gap-3">
+                                    {{-- Big "all-done" toggle. Single-item habits rely on this
+                                         entirely; multi-item routines can still use it as a
+                                         "mark everything done" shortcut. --}}
+                                    <button type="button"
+                                            wire:click="toggleToday({{ $habit->id }})"
+                                            aria-pressed="{{ $doneDay ? 'true' : 'false' }}"
+                                            @disabled($skipped)
+                                            aria-label="{{ $doneDay ? __('Undo :name for this date', ['name' => $habit->name]) : __('Mark :name done', ['name' => $habit->name]) }}"
+                                            class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300
+                                                   {{ $doneDay ? 'border-emerald-500 bg-emerald-500/20 text-emerald-400' : 'border-neutral-500 text-transparent hover:border-neutral-300' }}
+                                                   {{ $skipped ? 'cursor-not-allowed opacity-50' : '' }}">
+                                        <svg class="h-5 w-5" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                                            <path d="M3 8l3.5 3.5L13 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                        </svg>
+                                    </button>
+                                    <button type="button"
+                                            wire:click="$dispatch('inspector-open', { type: 'checklist_template', id: {{ $habit->id }} })"
+                                            class="min-w-0 flex-1 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                                        <div class="truncate text-sm font-medium text-neutral-100">{{ $habit->name }}</div>
+                                        @if ($habit->description)
+                                            <div class="mt-0.5 truncate text-[11px] text-neutral-500">{{ $habit->description }}</div>
+                                        @endif
+                                        <div class="mt-1 flex items-center gap-3 text-[11px] text-neutral-500">
+                                            @if ($streak > 0)
+                                                <span class="rounded bg-amber-950/40 px-1.5 py-0.5 font-mono text-amber-300"
+                                                      title="{{ __(':n day streak', ['n' => $streak]) }}">
+                                                    {{ __(':n d', ['n' => $streak]) }}
+                                                </span>
+                                            @endif
+                                            @if ($skipped)
+                                                <span class="text-neutral-400">{{ __('skipped') }}</span>
+                                            @elseif ($doneDay)
+                                                <span class="text-emerald-400">{{ __('done') }}</span>
+                                            @elseif ($activeItemCount > 0)
+                                                <span class="tabular-nums">{{ $tickedCount }}/{{ $activeItemCount }}</span>
+                                            @else
+                                                <span>{{ __('pending') }}</span>
+                                            @endif
+                                        </div>
+                                    </button>
+                                    <div class="flex shrink-0 flex-col items-end gap-1 text-[11px]">
+                                        @if ($doneDay || $skipped)
+                                            <button type="button" wire:click="clearRun({{ $habit->id }})"
+                                                    class="text-neutral-500 hover:text-neutral-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                                                {{ __('undo') }}
                                             </button>
-                                            <span class="flex-1 {{ $ticked ? 'text-neutral-500 line-through' : 'text-neutral-200' }}">{{ $item->label }}</span>
-                                        </label>
-                                    </li>
-                                @endforeach
-                            </ul>
-                        @endif
-                    </li>
-                @endforeach
-            </ul>
+                                        @else
+                                            <button type="button" wire:click="markSkipped({{ $habit->id }})"
+                                                    class="rounded border border-neutral-700 px-2 py-0.5 text-neutral-400 hover:bg-neutral-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                                                {{ __('Skip') }}
+                                            </button>
+                                        @endif
+                                    </div>
+                                </div>
+
+                                {{-- Per-item checkboxes for multi-item habits. Disabled
+                                     when the day is marked skipped — a skip zeroes out
+                                     the run and ticking would undo that. --}}
+                                @if ($activeItemCount > 1)
+                                    <ul class="mt-3 space-y-1 border-t border-neutral-800/60 pt-2">
+                                        @foreach ($items as $item)
+                                            @php
+                                                $ticked = in_array((int) $item->id, $tickedIds, true);
+                                            @endphp
+                                            <li>
+                                                <label class="flex items-start gap-2 rounded px-1 py-0.5 text-xs hover:bg-neutral-800/30">
+                                                    <button type="button"
+                                                            wire:click="toggleItem({{ $habit->id }}, {{ $item->id }})"
+                                                            aria-pressed="{{ $ticked ? 'true' : 'false' }}"
+                                                            @disabled($skipped)
+                                                            aria-label="{{ $ticked ? __('Untick :label', ['label' => $item->label]) : __('Tick :label', ['label' => $item->label]) }}"
+                                                            class="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300
+                                                                   {{ $ticked ? 'border-emerald-500/60 bg-emerald-500/20 text-emerald-400' : 'border-neutral-600 text-transparent hover:border-neutral-400' }}
+                                                                   {{ $skipped ? 'cursor-not-allowed opacity-50' : '' }}">
+                                                        <svg class="h-2.5 w-2.5" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                                                            <path d="M2.5 6.2 5 8.7l4.5-5.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                                                        </svg>
+                                                    </button>
+                                                    <span class="flex-1 {{ $ticked ? 'text-neutral-500 line-through' : 'text-neutral-200' }}">{{ $item->label }}</span>
+                                                </label>
+                                            </li>
+                                        @endforeach
+                                    </ul>
+                                @endif
+                            </li>
+                        @endforeach
+                    </ul>
+                </section>
+            @endforeach
         @endif
     @elseif ($tab === 'all')
         <div class="flex flex-wrap items-center gap-2 text-sm">

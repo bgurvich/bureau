@@ -38,7 +38,6 @@ dataset('app_routes', [
     ['calendar.tasks'],
     ['calendar.meetings'],
     ['life.checklists.index'],
-    ['life.checklists.today'],
     ['relationships.contacts'],
     ['relationships.contracts'],
     ['relationships.insurance'],
