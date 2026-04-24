@@ -27,12 +27,12 @@ class extends Component
 
     public function mount(): void
     {
-        $this->tab = HubTabMemory::resolve('logs', $this->tab, 'journal');
+        $this->tab = HubTabMemory::resolve('logs', $this->tab, 'stream');
     }
 
     public function setTab(string $tab): void
     {
-        if (in_array($tab, ['journal', 'decisions', 'media_log', 'food', 'body', 'time'], true)) {
+        if (in_array($tab, ['stream', 'journal', 'decisions', 'media_log', 'food', 'body', 'time'], true)) {
             $this->tab = $tab;
             HubTabMemory::remember('logs', $tab);
         }
@@ -48,6 +48,7 @@ class extends Component
 
     @php
         $tabs = [
+            'stream' => __('Stream'),
             'journal' => __('Journal'),
             'decisions' => __('Decisions'),
             'media_log' => __('Reading / watching'),
@@ -75,6 +76,9 @@ class extends Component
          id="logs-panel-{{ $tab }}"
          aria-labelledby="logs-tab-{{ $tab }}">
         @switch($tab)
+            @case('journal')
+                <livewire:journal-index :key="'logs-journal'" />
+                @break
             @case('decisions')
                 <livewire:decisions-index :key="'logs-decisions'" />
                 @break
@@ -91,7 +95,7 @@ class extends Component
                 <livewire:time-entries-index :key="'logs-time'" />
                 @break
             @default
-                <livewire:journal-index :key="'logs-journal'" />
+                <livewire:logs-stream :key="'logs-stream'" />
         @endswitch
     </div>
 </div>
