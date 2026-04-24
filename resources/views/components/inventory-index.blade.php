@@ -137,6 +137,7 @@ class extends Component
         return InventoryItem::query()
             ->with([
                 'property:id,name',
+                'location.parent.parent.parent',
                 'purchasedFrom:id,display_name',
                 'media' => fn ($q) => $q->wherePivot('role', 'photo')->orderByPivot('position')->orderBy('media.created_at'),
             ])
@@ -501,9 +502,14 @@ Passport holder
                         <div class="grid w-full grid-cols-[minmax(0,1fr)_5.5rem_7rem_7rem_7rem_auto] items-center gap-2 text-sm">
                             <div class="min-w-0">
                                 <div class="truncate text-neutral-100">{{ $i->name }}</div>
-                                @if ($i->room || $i->container || $i->property)
+                                @php
+                                    $locPath = $i->location?->breadcrumb();
+                                    $legacyPath = collect([$i->room, $i->container])->filter()->implode(' / ');
+                                    $path = $locPath ?: $legacyPath;
+                                @endphp
+                                @if ($path || $i->property)
                                     <div class="truncate text-[11px] text-neutral-500">
-                                        {{ $i->property?->name ?? '—' }}@if($i->room) / {{ $i->room }}@endif@if($i->container) / {{ $i->container }}@endif
+                                        {{ $i->property?->name ?? '—' }}@if($path) / {{ $path }}@endif
                                     </div>
                                 @endif
                             </div>
@@ -574,8 +580,13 @@ Passport holder
                                     @if ($i->serial_number)
                                         <span class="tabular-nums">SN {{ $i->serial_number }}</span>
                                     @endif
-                                    @if ($i->property || $i->container)
-                                        <span>{{ $i->property?->name ?? '—' }}@if($i->room) / {{ $i->room }}@endif@if($i->container) / {{ $i->container }}@endif</span>
+                                    @php
+                                        $locPath = $i->location?->breadcrumb();
+                                        $legacyPath = collect([$i->room, $i->container])->filter()->implode(' / ');
+                                        $path = $locPath ?: $legacyPath;
+                                    @endphp
+                                    @if ($path || $i->property)
+                                        <span>{{ $i->property?->name ?? '—' }}@if($path) / {{ $path }}@endif</span>
                                     @endif
                                     @if ($i->purchased_on)
                                         <span>{{ __('Bought') }} {{ Formatting::date($i->purchased_on) }}</span>
