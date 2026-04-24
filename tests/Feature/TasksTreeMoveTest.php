@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Models\Goal;
 use App\Models\Project;
 use App\Models\Task;
 use Livewire\Livewire;
@@ -57,6 +58,37 @@ it('ignores a group key that does not resolve to a real project', function () {
     Livewire::test('tasks-tree')->call('moveToGroup', 'project:999999', [$t->id]);
 
     expect($t->fresh()->project_id)->toBe($p->id);
+});
+
+it('moveProjectToGoal reassigns goal_id', function () {
+    authedInHousehold();
+    $g1 = Goal::create(['title' => 'G1', 'mode' => 'direction', 'status' => 'active', 'category' => 'other']);
+    $g2 = Goal::create(['title' => 'G2', 'mode' => 'direction', 'status' => 'active', 'category' => 'other']);
+    $p = Project::create(['name' => 'Alpha', 'slug' => 'alpha', 'goal_id' => $g1->id]);
+
+    Livewire::test('tasks-tree')->call('moveProjectToGoal', $p->id, 'goal:'.$g2->id);
+
+    expect($p->fresh()->goal_id)->toBe($g2->id);
+});
+
+it('moveProjectToGoal accepts no-goal to clear goal_id', function () {
+    authedInHousehold();
+    $g = Goal::create(['title' => 'G1', 'mode' => 'direction', 'status' => 'active', 'category' => 'other']);
+    $p = Project::create(['name' => 'Alpha', 'slug' => 'alpha', 'goal_id' => $g->id]);
+
+    Livewire::test('tasks-tree')->call('moveProjectToGoal', $p->id, 'no-goal');
+
+    expect($p->fresh()->goal_id)->toBeNull();
+});
+
+it('moveProjectToGoal ignores a goal that doesn\'t exist', function () {
+    authedInHousehold();
+    $g = Goal::create(['title' => 'G1', 'mode' => 'direction', 'status' => 'active', 'category' => 'other']);
+    $p = Project::create(['name' => 'Alpha', 'slug' => 'alpha', 'goal_id' => $g->id]);
+
+    Livewire::test('tasks-tree')->call('moveProjectToGoal', $p->id, 'goal:999999');
+
+    expect($p->fresh()->goal_id)->toBe($g->id);
 });
 
 it('reorders within a project', function () {

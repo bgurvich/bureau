@@ -100,6 +100,27 @@ class extends Component
     }
 
     /**
+     * Reassign a project's goal via drag. goalKey is "goal:{id}" or
+     * "no-goal" (drops onto the Without-goal section). Invalid keys
+     * are ignored rather than silently clearing the goal.
+     */
+    public function moveProjectToGoal(int $projectId, string $goalKey): void
+    {
+        $goalId = null;
+        if (str_starts_with($goalKey, 'goal:')) {
+            $goalId = (int) substr($goalKey, 5);
+        } elseif ($goalKey !== 'no-goal') {
+            return;
+        }
+        if ($goalId !== null && ! Goal::where('id', $goalId)->exists()) {
+            return;
+        }
+
+        Project::where('id', $projectId)->update(['goal_id' => $goalId]);
+        unset($this->projects);
+    }
+
+    /**
      * Persist a drop: rewrite project_id + position for every task
      * in the target group to the sequence the DOM committed. Tasks
      * left behind in the source group keep their positions; gaps
@@ -380,8 +401,13 @@ class extends Component
         @php
             $goal = $goalBlock['goal'];
             $goalTotal = collect($goalBlock['projects'])->sum(fn ($b) => $b['rows']->count());
+            $goalKey = $goal ? 'goal:'.$goal->id : 'no-goal';
         @endphp
         <section class="space-y-3"
+                 x-data="goalDropTarget"
+                 data-tt-goal-key="{{ $goalKey }}"
+                 @dragover="onDragOver($event)"
+                 @drop="onDrop($event)"
                  @if ($goal) aria-labelledby="goal-{{ $goal->id }}-h" @endif>
             @if ($goal)
                 <header class="flex items-baseline justify-between">
@@ -402,10 +428,11 @@ class extends Component
 
             @if (count($goalBlock['projects']) === 0)
                 <div class="rounded-xl border border-dashed border-neutral-800 bg-neutral-900/20 px-4 py-3 text-xs text-neutral-500">
-                    {{ __('No projects under this goal yet.') }}
+                    {{ __('No projects under this goal yet. Drop a project here.') }}
                 </div>
             @endif
 
+            <div data-tt-project-list class="space-y-3">
             @foreach ($goalBlock['projects'] as $projBlock)
                 @php
                     $project = $projBlock['project'];
@@ -413,6 +440,7 @@ class extends Component
                     $rows = $projBlock['rows'];
                 @endphp
                 <section class="rounded-xl border border-neutral-800 bg-neutral-900/40"
+                         @if ($project) data-tt-project-id="{{ $project->id }}" @endif
                          aria-labelledby="group-{{ $groupKey }}-h"
                          x-data="taskTreeSortable"
                          data-tt-group-key="{{ $groupKey }}"
@@ -421,6 +449,21 @@ class extends Component
                          @dragend="onDragEnd()">
                     <header class="flex items-baseline justify-between border-b border-neutral-800/60 px-4 py-2">
                         <h3 id="group-{{ $groupKey }}-h" class="flex items-center gap-2 text-sm font-medium text-neutral-200">
+                            @if ($project)
+                                <button type="button"
+                                        x-data="projectDragHandle"
+                                        draggable="true"
+                                        @dragstart="onDragStart({{ $project->id }}, $event)"
+                                        @dragend="onDragEnd()"
+                                        aria-label="{{ __('Drag project') }}"
+                                        title="{{ __('Drag to move between goals') }}"
+                                        class="flex h-4 w-4 shrink-0 items-center justify-center text-neutral-500 hover:text-neutral-300 cursor-grab active:cursor-grabbing focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                                    <svg class="h-3 w-3" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
+                                        <circle cx="4" cy="2.5" r="1"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="9.5" r="1"/>
+                                        <circle cx="8" cy="2.5" r="1"/><circle cx="8" cy="6" r="1"/><circle cx="8" cy="9.5" r="1"/>
+                                    </svg>
+                                </button>
+                            @endif
                             @if ($project && $project->color)
                                 <span aria-hidden="true" class="h-2.5 w-2.5 rounded-full" style="background-color: {{ $project->color }}"></span>
                             @endif
@@ -530,6 +573,7 @@ class extends Component
                     @endif
                 </section>
             @endforeach
+            </div>
         </section>
     @endforeach
 

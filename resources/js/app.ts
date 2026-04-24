@@ -340,6 +340,13 @@ document.addEventListener('alpine:init', () => {
     let treeDragCommitted = false;
     let treeDragSnapshot: DragSnapshotItem[] = [];
 
+    // Project-between-goals drag uses its own state channel so task-drop
+    // handlers on project sections can short-circuit while a project is
+    // being dragged and not eat the drop event themselves.
+    let projDragId: string | null = null;
+    let projDragCommitted = false;
+    let projDragSnapshot: DragSnapshotItem[] = [];
+
     alpine.data('taskTreeSortable', (() => ({
         onDragStart(this: TaskTreeSortableData, taskId: number | string, evt: DragEvent): void {
             treeDragId = String(taskId);
@@ -359,7 +366,7 @@ document.addEventListener('alpine:init', () => {
             }
         },
         onDragOver(this: TaskTreeSortableData, evt: DragEvent): void {
-            if (!treeDragId) return;
+            if (!treeDragId || projDragId) return;
             evt.preventDefault();
             const dragEl = document.querySelector<HTMLElement>(
                 `[data-tt-task-id="${CSS.escape(treeDragId)}"]`,
@@ -384,7 +391,7 @@ document.addEventListener('alpine:init', () => {
             }
         },
         onDrop(this: TaskTreeSortableData, evt: DragEvent): void {
-            if (!treeDragId) return;
+            if (!treeDragId || projDragId) return;
             evt.preventDefault();
             treeDragCommitted = true;
             const groupKey = this.$el.dataset.ttGroupKey ?? '';
@@ -408,6 +415,82 @@ document.addEventListener('alpine:init', () => {
             treeDragId = null;
             treeDragCommitted = false;
             treeDragSnapshot = [];
+        },
+    })) as unknown as (...args: unknown[]) => Record<string, unknown>);
+
+    // Project-between-goals drag handles. The <button> inside a project
+    // header is draggable; the goal <section> is the drop target.
+    // Goals use `data-tt-goal-key` ("goal:N" or "no-goal").
+    type ProjectDragData = {
+        $el: HTMLElement;
+        $wire: Record<string, unknown>;
+        onDragStart(projectId: number | string, evt: DragEvent): void;
+        onDragEnd(): void;
+    };
+    type GoalDropData = {
+        $el: HTMLElement;
+        $wire: Record<string, unknown>;
+        onDragOver(evt: DragEvent): void;
+        onDrop(evt: DragEvent): void;
+    };
+
+    alpine.data('projectDragHandle', (() => ({
+        onDragStart(this: ProjectDragData, projectId: number | string, evt: DragEvent): void {
+            projDragId = String(projectId);
+            projDragCommitted = false;
+            projDragSnapshot = Array.from(
+                document.querySelectorAll<HTMLElement>('[data-tt-project-id]'),
+            ).map((el) => ({
+                el,
+                parent: el.parentNode as Node,
+                next: el.nextElementSibling,
+            }));
+            if (evt.dataTransfer) {
+                evt.dataTransfer.effectAllowed = 'move';
+                evt.dataTransfer.setData('text/plain', String(projectId));
+                const section = document.querySelector<HTMLElement>(
+                    `[data-tt-project-id="${CSS.escape(String(projectId))}"]`,
+                );
+                if (section) evt.dataTransfer.setDragImage(section, 20, 20);
+            }
+        },
+        onDragEnd(this: ProjectDragData): void {
+            if (!projDragCommitted && projDragSnapshot.length) {
+                for (const item of projDragSnapshot) {
+                    item.parent.insertBefore(item.el, item.next);
+                }
+            }
+            projDragId = null;
+            projDragCommitted = false;
+            projDragSnapshot = [];
+        },
+    })) as unknown as (...args: unknown[]) => Record<string, unknown>);
+
+    alpine.data('goalDropTarget', (() => ({
+        onDragOver(this: GoalDropData, evt: DragEvent): void {
+            if (!projDragId) return;
+            evt.preventDefault();
+            const section = document.querySelector<HTMLElement>(
+                `[data-tt-project-id="${CSS.escape(projDragId)}"]`,
+            );
+            if (section && this.$el instanceof HTMLElement && !this.$el.contains(section)) {
+                // Append inside this goal's section, after its header.
+                // Use a project-list anchor if present; otherwise fall back
+                // to appending to the goal section directly.
+                const anchor = this.$el.querySelector<HTMLElement>('[data-tt-project-list]') ?? this.$el;
+                anchor.appendChild(section);
+            }
+        },
+        onDrop(this: GoalDropData, evt: DragEvent): void {
+            if (!projDragId) return;
+            evt.preventDefault();
+            projDragCommitted = true;
+            const goalKey = this.$el.dataset.ttGoalKey ?? '';
+            const method = this.$wire['moveProjectToGoal'];
+            if (typeof method === 'function') {
+                (method as (...a: unknown[]) => unknown).call(this.$wire, Number(projDragId), goalKey);
+            }
+            projDragId = null;
         },
     })) as unknown as (...args: unknown[]) => Record<string, unknown>);
 
