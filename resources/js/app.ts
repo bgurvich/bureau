@@ -409,11 +409,19 @@ document.addEventListener('alpine:init', () => {
         onDrop(this: TaskTreeSortableData, evt: DragEvent): void {
             if (!treeDragId || projDragId) return;
             evt.preventDefault();
-            // Parent-drop takes priority: if the drop landed on a nest
-            // zone of some OTHER task, nest rather than re-position.
-            const parentZone = (evt.target as HTMLElement | null)?.closest<HTMLElement>(
-                '[data-tt-parent-drop-id]',
-            );
+            // Parent-drop takes priority: if the drop landed anywhere
+            // inside a nest strip (even near the edge), nest rather
+            // than re-position. composedPath gives a stable element
+            // chain so a momentary offset between target and the
+            // strip's bounding box doesn't miss the nest intent.
+            const path = (typeof evt.composedPath === 'function' ? evt.composedPath() : [evt.target]) as EventTarget[];
+            let parentZone: HTMLElement | null = null;
+            for (const node of path) {
+                if (node instanceof HTMLElement && node.dataset.ttParentDropId) {
+                    parentZone = node;
+                    break;
+                }
+            }
             if (parentZone) {
                 const parentId = Number(parentZone.getAttribute('data-tt-parent-drop-id'));
                 const childId = Number(treeDragId);

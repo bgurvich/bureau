@@ -414,16 +414,21 @@ class extends Component
 <div class="space-y-5">
     <span id="project-drag-hint" class="sr-only">{{ __('Drag this project header onto a goal section to move it.') }}</span>
     <style>
-        /* Expose every nest-here strip while a task drag is in flight —
-           :hover doesn't fire during HTML5 drag so the drop target is
-           invisible without this override. */
+        /* Every nest-here strip is visible while a task drag is in
+           flight — :hover is suppressed during HTML5 drag so we can't
+           rely on it. data-tt-is-active (set by the strip's own
+           dragenter/leave handlers) upgrades the strip to a clear
+           "drop here" state as the cursor moves across it. */
         body[data-tt-task-dragging] .tt-parent-drop {
-            opacity: 0.55;
-        }
-        body[data-tt-task-dragging] .tt-parent-drop:hover {
-            opacity: 1 !important;
-            background-color: rgb(12 74 110 / 0.4); /* sky-900/40 */
+            opacity: 0.65;
+            border-color: rgb(56 189 248 / 0.5); /* sky-400/50 */
             color: rgb(125 211 252); /* sky-300 */
+        }
+        .tt-parent-drop[data-tt-is-active] {
+            opacity: 1 !important;
+            background-color: rgb(14 165 233 / 0.3); /* sky-500/30 */
+            border-color: rgb(56 189 248); /* sky-400 */
+            color: rgb(186 230 253); /* sky-200 */
         }
     </style>
     <header class="flex items-baseline justify-between gap-4">
@@ -626,15 +631,23 @@ class extends Component
                             @endif
                         </button>
                         @if (! $isDone && $task->state !== 'dropped')
-                            {{-- Nest-here strip on the right edge. Visible on
-                                 hover *or* while any task drag is in flight
-                                 (browser suppresses :hover during HTML5 drag,
-                                 so we key off body[data-tt-task-dragging]). --}}
+                            {{-- Nest-here strip on the right edge. Binds its
+                                 OWN dragover/dragenter/dragleave/drop so the
+                                 target isn't dependent on section-level event
+                                 bubbling. data-tt-is-active drives the sky
+                                 tint during drag (since :hover is suppressed
+                                 while the browser holds an HTML5 drag). --}}
                             <div data-tt-parent-drop-id="{{ $task->id }}"
+                                 x-data="{ active: false }"
+                                 @dragenter.prevent="active = true"
+                                 @dragover.prevent="active = true"
+                                 @dragleave="active = false"
+                                 @drop="active = false"
+                                 :data-tt-is-active="active ? '1' : null"
                                  aria-hidden="true"
                                  title="{{ __('Drop another task here to nest as subtask') }}"
-                                 class="tt-parent-drop hidden md:flex absolute inset-y-0 right-0 w-10 flex-col items-center justify-center border-l border-dashed border-neutral-800 bg-neutral-900/20 text-neutral-600 opacity-0 transition group-hover:opacity-70 hover:!opacity-100 hover:bg-sky-900/30 hover:text-sky-300">
-                                <svg class="h-3 w-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                 class="tt-parent-drop hidden md:flex absolute inset-y-0 right-0 w-14 flex-col items-center justify-center border-l border-dashed border-neutral-700 bg-neutral-900/30 text-neutral-500 opacity-0 transition group-hover:opacity-70">
+                                <svg class="h-4 w-4" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                     <path d="M3 2v4a2 2 0 0 0 2 2h5"/><path d="m7 5 3 3-3 3"/>
                                 </svg>
                             </div>
@@ -643,7 +656,7 @@ class extends Component
                                     x-on:click.stop="$dispatch('inspector-open', { type: 'task', id: null, parentId: {{ $task->id }} })"
                                     aria-label="{{ __('Add subtask') }}"
                                     title="{{ __('Add subtask') }}"
-                                    class="absolute right-12 top-2.5 rounded-md border border-neutral-800 bg-neutral-900/80 px-1.5 py-0.5 text-[10px] text-neutral-400 opacity-0 transition group-hover:opacity-100 hover:text-neutral-100 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                                    class="absolute right-16 top-2.5 rounded-md border border-neutral-800 bg-neutral-900/80 px-1.5 py-0.5 text-[10px] text-neutral-400 opacity-0 transition group-hover:opacity-100 hover:text-neutral-100 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
                                 + {{ __('sub') }}
                             </button>
                         @endif
