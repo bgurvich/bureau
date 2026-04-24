@@ -34,17 +34,16 @@
             </select>
         </div>
     </div>
-    <div class="grid grid-cols-2 gap-3">
-        <div>
-            <label for="i-in-room" class="mb-1 block text-xs text-neutral-400">{{ __('Room') }}</label>
-            <input wire:model="inventory_room" id="i-in-room" type="text" placeholder="{{ __('Kitchen, garage, office…') }}"
-                   class="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
-        </div>
-        <div>
-            <label for="i-in-container" class="mb-1 block text-xs text-neutral-400">{{ __('Container') }}</label>
-            <input wire:model="inventory_container" id="i-in-container" type="text" placeholder="{{ __('Closet 1, travel bag…') }}"
-                   class="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
-        </div>
+    <div>
+        <label for="i-in-location" class="mb-1 block text-xs text-neutral-400">{{ __('Location') }}</label>
+        <x-ui.searchable-select
+            id="i-in-location"
+            model="inventory_location_id"
+            :options="['' => '— '.__('none').' —'] + $this->locationPickerOptions"
+            placeholder="{{ __('— pick or create —') }}"
+            allow-create
+            create-method="createLocation" />
+        <p class="mt-1 text-[11px] text-neutral-500">{{ __('Pick a nested location (House › Office › Desk) or type a new name to add one.') }}</p>
     </div>
     <div class="grid grid-cols-2 gap-3">
         <div>

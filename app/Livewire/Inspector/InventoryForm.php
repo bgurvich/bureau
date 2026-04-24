@@ -10,6 +10,7 @@ use App\Livewire\Inspector\Concerns\HasPhotos;
 use App\Livewire\Inspector\Concerns\HasTagList;
 use App\Livewire\Inspector\Concerns\WithCounterpartyPicker;
 use App\Models\InventoryItem;
+use App\Models\Location;
 use App\Models\Property;
 use App\Support\CurrentHousehold;
 use App\Support\Enums;
@@ -49,6 +50,8 @@ class InventoryForm extends Component
     public string $inventory_category = 'other';
 
     public ?int $inventory_property_id = null;
+
+    public ?int $inventory_location_id = null;
 
     public string $inventory_room = '';
 
@@ -111,6 +114,7 @@ class InventoryForm extends Component
             $this->inventory_quantity = (int) ($i->quantity ?? 1);
             $this->inventory_category = $i->category ?: 'other';
             $this->inventory_property_id = $i->location_property_id;
+            $this->inventory_location_id = $i->location_id;
             $this->inventory_room = (string) ($i->room ?? '');
             $this->inventory_container = (string) ($i->container ?? '');
             $this->inventory_brand = (string) ($i->brand ?? '');
@@ -154,6 +158,7 @@ class InventoryForm extends Component
             'inventory_quantity' => 'required|integer|min:1',
             'inventory_category' => ['nullable', Rule::in(array_keys(Enums::inventoryCategories()))],
             'inventory_property_id' => 'nullable|integer|exists:properties,id',
+            'inventory_location_id' => 'nullable|integer|exists:locations,id',
             'inventory_room' => 'nullable|string|max:100',
             'inventory_container' => 'nullable|string|max:100',
             'inventory_brand' => 'nullable|string|max:100',
@@ -185,6 +190,7 @@ class InventoryForm extends Component
             'quantity' => max(1, (int) $data['inventory_quantity']),
             'category' => $data['inventory_category'] ?: null,
             'location_property_id' => $data['inventory_property_id'] ?: null,
+            'location_id' => $data['inventory_location_id'] ?: null,
             'room' => $data['inventory_room'] ?: null,
             'container' => $data['inventory_container'] ?: null,
             'brand' => $data['inventory_brand'] ?: null,
@@ -233,6 +239,57 @@ class InventoryForm extends Component
         $list = Property::orderBy('name')->get(['id', 'name']);
 
         return $list;
+    }
+
+    /**
+     * Flat picker options built by walking each location's ancestor
+     * chain so selecting "Desk Drawer" reads as "House › Office ›
+     * Desk Drawer" in the dropdown. Labels collapse to just the name
+     * when the location has no parent, keeping root names readable.
+     *
+     * @return array<int, string>
+     */
+    #[Computed]
+    public function locationPickerOptions(): array
+    {
+        return Location::with('parent.parent.parent.parent') // 4 levels of eager-load — deeper paths fall back to a runtime query per breadcrumb call
+            ->orderBy('name')
+            ->get()
+            ->mapWithKeys(fn ($l) => [$l->id => $l->breadcrumb()])
+            ->all();
+    }
+
+    /**
+     * Inline creation hook from the location searchable-select — spawns
+     * a root-level Location by that name. Users can reparent it later
+     * from the Locations manager; inline create keeps the flow fast
+     * when adding inventory items in bulk.
+     */
+    public function createLocation(string $name, ?string $modelKey = null): void
+    {
+        $name = trim($name);
+        if ($name === '') {
+            return;
+        }
+
+        $location = Location::create([
+            'name' => $name,
+            'kind' => 'room',
+            'property_id' => $this->inventory_property_id,
+        ]);
+
+        $targetKey = $modelKey && property_exists($this, $modelKey)
+            ? $modelKey
+            : 'inventory_location_id';
+        $this->{$targetKey} = $location->id;
+        unset($this->locationPickerOptions);
+
+        $this->dispatch(
+            'ss-option-added',
+            model: $targetKey,
+            id: $location->id,
+            label: $location->breadcrumb(),
+        );
     }
 
     protected function adminOwnerClass(): ?string
