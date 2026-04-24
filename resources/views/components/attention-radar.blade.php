@@ -25,6 +25,7 @@ use App\Models\VehicleServiceLog;
 use App\Support\BudgetMonitor;
 use App\Support\ChecklistScheduling;
 use App\Support\CurrentHousehold;
+use App\Support\RadarSeverity;
 use App\Support\SpendingAnomalyDetector;
 use Livewire\Attributes\Computed;
 use Livewire\Component;
@@ -505,14 +506,43 @@ new class extends Component
 
         return $sum;
     }
+
+    /**
+     * Subset of total() constrained to tiles tagged severity=critical.
+     * Surfaced separately in the header so the user can see "3 of the
+     * 17 things are actually on fire" without counting rose tiles.
+     */
+    #[Computed]
+    public function criticalTotal(): int
+    {
+        $sum = 0;
+        foreach ($this->signalCounts as $kind => $count) {
+            if ($this->isSnoozed($kind)) {
+                continue;
+            }
+            if (RadarSeverity::isCritical($kind)) {
+                $sum += $count;
+            }
+        }
+
+        return $sum;
+    }
 };
 ?>
 
 <div class="rounded-xl border border-neutral-800 bg-neutral-900/50 p-5">
     <div class="mb-4 flex items-baseline justify-between">
-        <h3 class="text-xs font-medium uppercase tracking-wider text-neutral-500">Attention</h3>
-        <span class="text-xs tabular-nums {{ $this->total > 0 ? 'text-amber-400' : 'text-neutral-500' }}">
-            {{ $this->total }} {{ $this->total === 1 ? 'item' : 'items' }}
+        <h3 class="text-xs font-medium uppercase tracking-wider text-neutral-500">{{ __('Attention') }}</h3>
+        <span class="flex items-baseline gap-2 text-xs tabular-nums">
+            @if ($this->criticalTotal > 0)
+                <span class="text-rose-400" title="{{ __('Critical items need action now') }}">
+                    {{ $this->criticalTotal }} {{ __('critical') }}
+                </span>
+                <span class="text-neutral-600">·</span>
+            @endif
+            <span class="{{ $this->total > 0 ? 'text-amber-400' : 'text-neutral-500' }}">
+                {{ $this->total }} {{ $this->total === 1 ? __('item') : __('items') }}
+            </span>
         </span>
     </div>
 
@@ -552,6 +582,10 @@ new class extends Component
             ];
             $counts = $this->signalCounts;
             $snoozed = $this->snoozes;
+            // Reorder so critical tiles float to the top. Within each
+            // severity bucket we preserve the declared order, which
+            // carries the existing category grouping.
+            usort($tiles, fn ($a, $b) => \App\Support\RadarSeverity::rank($a['kind']) <=> \App\Support\RadarSeverity::rank($b['kind']));
         @endphp
         <ul class="space-y-2 text-sm">
             @foreach ($tiles as $t)
