@@ -413,6 +413,19 @@ class extends Component
 
 <div class="space-y-5">
     <span id="project-drag-hint" class="sr-only">{{ __('Drag this project header onto a goal section to move it.') }}</span>
+    <style>
+        /* Expose every nest-here strip while a task drag is in flight —
+           :hover doesn't fire during HTML5 drag so the drop target is
+           invisible without this override. */
+        body[data-tt-task-dragging] .tt-parent-drop {
+            opacity: 0.55;
+        }
+        body[data-tt-task-dragging] .tt-parent-drop:hover {
+            opacity: 1 !important;
+            background-color: rgb(12 74 110 / 0.4); /* sky-900/40 */
+            color: rgb(125 211 252); /* sky-300 */
+        }
+    </style>
     <header class="flex items-baseline justify-between gap-4">
         <div>
             <h2 class="text-base font-semibold text-neutral-100">{{ __('Tasks tree') }}</h2>
@@ -612,10 +625,14 @@ class extends Component
                             @endif
                         </button>
                         @if (! $isDone && $task->state !== 'dropped')
+                            {{-- Nest-here strip on the right edge. Visible on
+                                 hover *or* while any task drag is in flight
+                                 (browser suppresses :hover during HTML5 drag,
+                                 so we key off body[data-tt-task-dragging]). --}}
                             <div data-tt-parent-drop-id="{{ $task->id }}"
                                  aria-hidden="true"
                                  title="{{ __('Drop another task here to nest as subtask') }}"
-                                 class="hidden md:flex absolute inset-y-0 right-0 w-10 flex-col items-center justify-center border-l border-dashed border-neutral-800 bg-neutral-900/20 text-neutral-600 opacity-0 transition group-hover:opacity-70 hover:!opacity-100 hover:bg-sky-900/30 hover:text-sky-300">
+                                 class="tt-parent-drop hidden md:flex absolute inset-y-0 right-0 w-10 flex-col items-center justify-center border-l border-dashed border-neutral-800 bg-neutral-900/20 text-neutral-600 opacity-0 transition group-hover:opacity-70 hover:!opacity-100 hover:bg-sky-900/30 hover:text-sky-300">
                                 <svg class="h-3 w-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                     <path d="M3 2v4a2 2 0 0 0 2 2h5"/><path d="m7 5 3 3-3 3"/>
                                 </svg>

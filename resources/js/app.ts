@@ -360,6 +360,11 @@ document.addEventListener('alpine:init', () => {
                 parent: el.parentNode as Node,
                 next: el.nextElementSibling,
             }));
+            // Signal to CSS that a task drag is in flight so the
+            // "nest here" strips on every row become visible — we
+            // can't rely on :hover because the browser suppresses
+            // hover events while a drag is active.
+            document.body.dataset.ttTaskDragging = '1';
             if (evt.dataTransfer) {
                 evt.dataTransfer.effectAllowed = 'move';
                 evt.dataTransfer.setData('text/plain', String(taskId));
@@ -444,6 +449,7 @@ document.addEventListener('alpine:init', () => {
             treeDragId = null;
             treeDragCommitted = false;
             treeDragSnapshot = [];
+            delete document.body.dataset.ttTaskDragging;
         },
     })) as unknown as (...args: unknown[]) => Record<string, unknown>);
 
