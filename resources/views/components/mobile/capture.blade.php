@@ -73,6 +73,22 @@ class extends Component
                 <span aria-hidden="true" class="text-neutral-500">›</span>
             </a>
         </li>
+        <li>
+            <a href="{{ route('mobile.tasks.bulk') }}"
+               class="{{ $tileClass }}">
+                <span class="{{ $iconBox }}">
+                    <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M9 11l3 3L22 4"/>
+                        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+                    </svg>
+                </span>
+                <span class="flex-1">
+                    <span class="block text-sm font-medium text-neutral-100">{{ __('Bulk tasks') }}</span>
+                    <span class="block text-xs text-neutral-500">{{ __('Dump a list, one line per task.') }}</span>
+                </span>
+                <span aria-hidden="true" class="text-neutral-500">›</span>
+            </a>
+        </li>
     </ul>
 
     {{-- Life-event capture parity with desktop quick-add. Each button

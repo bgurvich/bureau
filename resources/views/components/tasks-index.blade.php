@@ -1,13 +1,10 @@
 <?php
 
-use App\Models\Contact;
-use App\Models\Tag;
 use App\Models\Task;
 use App\Support\Formatting;
-use App\Support\TaskLineParser;
+use App\Support\TaskBulkCreator;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Collection;
-use Illuminate\Support\Str;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\On;
@@ -45,67 +42,16 @@ class extends Component
         }
     }
 
-    /**
-     * Parse the textarea, create one task per non-empty line, and link
-     * up tags + @contact matches found inline. Unmatched @patterns are
-     * reported back so the user sees which contacts weren't found.
-     */
     public function bulkSave(): void
     {
-        $rows = TaskLineParser::parseBlock($this->bulkInput);
-        if ($rows === []) {
+        $result = TaskBulkCreator::run($this->bulkInput);
+        if ($result['created'] === 0) {
             return;
         }
 
-        $created = 0;
-        $unmatchedContacts = [];
-
-        foreach ($rows as $row) {
-            $task = Task::create([
-                'title' => $row['title'],
-                'due_at' => $row['due_at'],
-                'state' => 'open',
-                'priority' => $row['priority'] ?? 3,
-            ]);
-
-            if ($row['tags'] !== []) {
-                $ids = [];
-                foreach ($row['tags'] as $name) {
-                    $slug = Str::slug($name);
-                    if ($slug === '') {
-                        continue;
-                    }
-                    $tag = Tag::firstOrCreate(['slug' => $slug], ['name' => $name]);
-                    $ids[] = $tag->id;
-                }
-                if ($ids !== []) {
-                    $task->tags()->syncWithoutDetaching($ids);
-                }
-            }
-
-            $refs = [];
-            foreach ($row['contact_patterns'] as $pattern) {
-                $hit = Contact::query()
-                    ->where('display_name', 'like', '%'.$pattern.'%')
-                    ->orderByRaw('LENGTH(display_name)')
-                    ->first();
-                if ($hit === null) {
-                    $unmatchedContacts[] = '@'.$pattern;
-
-                    continue;
-                }
-                $refs[] = ['type' => Contact::class, 'id' => $hit->id];
-            }
-            if ($refs !== []) {
-                $task->syncSubjects($refs);
-            }
-
-            $created++;
-        }
-
-        $notes = [__('Added :n task(s).', ['n' => $created])];
-        if ($unmatchedContacts !== []) {
-            $notes[] = __('Unmatched contacts: :list', ['list' => implode(', ', array_unique($unmatchedContacts))]);
+        $notes = [__('Added :n task(s).', ['n' => $result['created']])];
+        if ($result['unmatched_contacts'] !== []) {
+            $notes[] = __('Unmatched contacts: :list', ['list' => implode(', ', $result['unmatched_contacts'])]);
         }
         $this->bulkNotes = $notes;
         $this->bulkInput = '';
