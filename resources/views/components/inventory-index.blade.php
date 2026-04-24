@@ -92,6 +92,26 @@ class extends Component
         $room = trim($this->bulkRoom) ?: null;
         $container = trim($this->bulkContainer) ?: null;
 
+        // Map the bulk-add room + container strings onto the structured
+        // locations tree so new items show up alongside everything else
+        // in the Assets > Locations browser. Room becomes a room-kind
+        // Location under the property; container nests one level deeper.
+        $locationId = null;
+        if ($room !== null) {
+            $roomLoc = \App\Models\Location::firstOrCreate(
+                ['name' => $room, 'parent_id' => null, 'property_id' => $property],
+                ['kind' => 'room'],
+            );
+            $locationId = $roomLoc->id;
+            if ($container !== null) {
+                $containerLoc = \App\Models\Location::firstOrCreate(
+                    ['name' => $container, 'parent_id' => $roomLoc->id, 'property_id' => $property],
+                    ['kind' => 'container'],
+                );
+                $locationId = $containerLoc->id;
+            }
+        }
+
         $ownerId = auth()->id();
         foreach ($names as $name) {
             InventoryItem::create([
@@ -99,6 +119,7 @@ class extends Component
                 'quantity' => 1,
                 'category' => 'other',
                 'location_property_id' => $property,
+                'location_id' => $locationId,
                 'room' => $room,
                 'container' => $container,
                 'owner_user_id' => $ownerId,
