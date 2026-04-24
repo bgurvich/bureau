@@ -107,6 +107,7 @@ Route::middleware(['auth', 'preferences', 'household'])->group(function () {
     Route::livewire('/bookkeeper', 'bookkeeper')->name('bookkeeper');
     Route::post('/bookkeeper/export', BookkeeperExportController::class)->name('bookkeeper.export');
     Route::livewire('/calendar', 'calendar-index')->name('calendar.index');
+    Route::livewire('/productivity', 'productivity-hub')->name('productivity.index');
     Route::livewire('/tasks', 'tasks-index')->name('calendar.tasks');
     Route::livewire('/tasks/tree', 'tasks-tree')->name('calendar.tasks.tree');
     Route::livewire('/meetings', 'meetings-index')->name('calendar.meetings');

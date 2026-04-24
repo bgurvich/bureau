@@ -19,7 +19,7 @@ class extends Component
 
     public function setTab(string $tab): void
     {
-        if (in_array($tab, ['calendar', 'tasks', 'meetings', 'checklists'], true)) {
+        if (in_array($tab, ['calendar', 'meetings'], true)) {
             $this->tab = $tab;
             HubTabMemory::remember('schedule', $tab);
         }
@@ -30,15 +30,13 @@ class extends Component
 <div class="space-y-5">
     <x-ui.page-header
         :title="__('Schedule')"
-        :description="__('Calendar, tasks, meetings, and recurring rituals in one place. Each tab keeps its own filters.')">
+        :description="__('Calendar + meetings. Tasks and checklists moved to their own hubs.')">
     </x-ui.page-header>
 
     @php
         $tabs = [
             'calendar' => __('Calendar'),
-            'tasks' => __('Tasks'),
             'meetings' => __('Meetings'),
-            'checklists' => __('Checklists'),
         ];
     @endphp
 
@@ -60,14 +58,8 @@ class extends Component
          id="schedule-panel-{{ $tab }}"
          aria-labelledby="schedule-tab-{{ $tab }}">
         @switch($tab)
-            @case('tasks')
-                <livewire:tasks-index :key="'schedule-tasks'" />
-                @break
             @case('meetings')
                 <livewire:meetings-index :key="'schedule-meetings'" />
-                @break
-            @case('checklists')
-                <livewire:checklists-index :key="'schedule-checklists'" />
                 @break
             @default
                 <livewire:calendar-index :key="'schedule-calendar'" />

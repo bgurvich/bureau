@@ -10,21 +10,15 @@ it('renders the schedule hub with the Calendar tab by default', function () {
     Livewire::test('schedule-hub')
         ->assertSet('tab', 'calendar')
         ->assertSee(__('Calendar'))
-        ->assertSee(__('Tasks'))
-        ->assertSee(__('Meetings'))
-        ->assertSee(__('Checklists'));
+        ->assertSee(__('Meetings'));
 });
 
 it('switches between schedule tabs', function () {
     authedInHousehold();
 
     Livewire::test('schedule-hub')
-        ->call('setTab', 'tasks')
-        ->assertSet('tab', 'tasks')
         ->call('setTab', 'meetings')
         ->assertSet('tab', 'meetings')
-        ->call('setTab', 'checklists')
-        ->assertSet('tab', 'checklists')
         ->call('setTab', 'calendar')
         ->assertSet('tab', 'calendar');
 });

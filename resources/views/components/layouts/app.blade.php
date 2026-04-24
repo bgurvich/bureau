@@ -62,10 +62,9 @@
                             ],
                             __('Life') => [
                                 [__('Schedule'), 'life.schedule', 'calendar'],
-                                [__('Logs'), 'life.logs', 'book'],
-                                [__('Goals'), 'life.goals', 'pie'],
+                                [__('Productivity'), 'productivity.index', 'pie'],
                                 [__('Checklists'), 'life.checklists.index', 'check-square'],
-                                [__('Projects'), 'time.projects', 'folder'],
+                                [__('Logs'), 'life.logs', 'book'],
                                 [__('Contacts'), 'relationships.contacts', 'user'],
                                 [__('Assets'), 'assets.index', 'box'],
                                 [__('Records'), 'records.index', 'file-text'],
