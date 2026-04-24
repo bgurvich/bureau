@@ -22,11 +22,11 @@ it('creates one task per non-empty line with tags + dates', function () {
 
     expect(Task::count())->toBe(2);
 
-    $first = Task::where('title', 'Pick up dry cleaning')->firstOrFail();
+    $first = Task::where('title', 'Pick up dry cleaning #errands')->firstOrFail();
     expect($first->due_at?->toDateTimeString())->toBe('2026-05-03 09:00:00');
     expect($first->tags->pluck('name')->all())->toBe(['errands']);
 
-    $second = Task::where('title', 'Book dentist')->firstOrFail();
+    $second = Task::where('title', 'Book dentist #health')->firstOrFail();
     expect($second->due_at?->toDateTimeString())->toBe('2026-06-15 09:00:00');
     expect($second->tags->pluck('name')->all())->toBe(['health']);
 
@@ -42,7 +42,7 @@ it('links @contact matches via subjects and reports unmatched ones', function ()
         ->set('bulkInput', "Call @alice about taxes\nEmail @missingperson")
         ->call('bulkSave');
 
-    $linked = Task::where('title', 'Call about taxes')->firstOrFail();
+    $linked = Task::where('title', 'Call @alice about taxes')->firstOrFail();
     $subjects = $linked->subjects();
     expect($subjects)->toHaveCount(1);
     expect($subjects->first()->display_name)->toBe('Alice Johnson');

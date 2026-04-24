@@ -68,10 +68,10 @@
               @if ($autofocus) x-init="$nextTick(() => $el.focus())" @endif
               x-on:keydown.ctrl.enter.prevent="$wire.{{ $submitMethod }}()"
               x-on:keydown.meta.enter.prevent="$wire.{{ $submitMethod }}()"
-              placeholder="{{ __("Pick up dry cleaning #errands by 5/3\nCall @alice about taxes #admin P2\nBook dentist by 6/15") }}"
+              placeholder="{{ __("buy milk tomorrow #errands\ncall @alice about taxes #admin P2 by 5/3\nreview PR in 3 days") }}"
               class="block w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 font-mono text-sm text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300"></textarea>
     <p class="text-[11px] text-neutral-500">
-        {{ __('One task per line. Tokens: #tag, @contact, P1–P5, by M/D. Ctrl/⌘+Enter submits.') }}
+        {{ __('One task per line. #tag, @contact, P1–P5, by M/D, today/tomorrow/next week/in N days, or a weekday name. Ctrl/⌘+Enter submits.') }}
     </p>
     <div class="flex items-center justify-between gap-3">
         <div class="flex flex-wrap items-baseline gap-3">

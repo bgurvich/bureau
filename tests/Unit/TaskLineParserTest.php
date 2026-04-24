@@ -10,21 +10,21 @@ it('returns null for blank and whitespace lines', function () {
     expect(TaskLineParser::parseLine('   '))->toBeNull();
 });
 
-it('extracts a single hashtag and leaves the title clean', function () {
+it('extracts a single hashtag and keeps it visible in the title', function () {
     $r = TaskLineParser::parseLine('Buy milk #groceries');
-    expect($r['title'])->toBe('Buy milk');
+    expect($r['title'])->toBe('Buy milk #groceries');
     expect($r['tags'])->toBe(['groceries']);
 });
 
 it('extracts multiple hashtags and dedupes', function () {
     $r = TaskLineParser::parseLine('Tidy garage #home #home #weekend');
-    expect($r['title'])->toBe('Tidy garage');
+    expect($r['title'])->toBe('Tidy garage #home #home #weekend');
     expect($r['tags'])->toBe(['home', 'weekend']);
 });
 
-it('extracts @contact patterns', function () {
+it('extracts @contact patterns and keeps them in the title', function () {
     $r = TaskLineParser::parseLine('Call @alice about the invoice @bob');
-    expect($r['title'])->toBe('Call about the invoice');
+    expect($r['title'])->toBe('Call @alice about the invoice @bob');
     expect($r['contact_patterns'])->toBe(['alice', 'bob']);
 });
 
@@ -40,7 +40,7 @@ it('does not treat bare M/D fragments as dates (phone-like numbers stay in title
     expect($r['due_at'])->toBeNull();
 });
 
-it('extracts "by M/D" and coerces to current year at 09:00', function () {
+it('extracts "by M/D" and strips it from the title', function () {
     CarbonImmutable::setTestNow('2026-04-23 10:00:00');
     $r = TaskLineParser::parseLine('Book dentist by 6/15');
     expect($r['title'])->toBe('Book dentist');
@@ -78,10 +78,80 @@ it('ignores invalid by M/D (Feb 30)', function () {
     expect($r['title'])->toBe('Note by 2/30 edge case');
 });
 
-it('handles all token types on one line', function () {
+it('parses "today" as today at 9am', function () {
+    CarbonImmutable::setTestNow('2026-04-23 15:00:00');
+    $r = TaskLineParser::parseLine('Ship hotfix today');
+    expect($r['title'])->toBe('Ship hotfix');
+    expect($r['due_at'])->toBe('2026-04-23 09:00:00');
+});
+
+it('parses "tomorrow"', function () {
+    CarbonImmutable::setTestNow('2026-04-23 15:00:00');
+    $r = TaskLineParser::parseLine('buy milk tomorrow #errands');
+    expect($r['title'])->toBe('buy milk #errands');
+    expect($r['due_at'])->toBe('2026-04-24 09:00:00');
+});
+
+it('parses "yesterday" for backdating', function () {
+    CarbonImmutable::setTestNow('2026-04-23 15:00:00');
+    $r = TaskLineParser::parseLine('Note fridge broke yesterday');
+    expect($r['due_at'])->toBe('2026-04-22 09:00:00');
+});
+
+it('parses "in N days"', function () {
+    CarbonImmutable::setTestNow('2026-04-23 15:00:00');
+    $r = TaskLineParser::parseLine('Follow up in 3 days');
+    expect($r['title'])->toBe('Follow up');
+    expect($r['due_at'])->toBe('2026-04-26 09:00:00');
+});
+
+it('parses "in N weeks"', function () {
+    CarbonImmutable::setTestNow('2026-04-23 15:00:00');
+    $r = TaskLineParser::parseLine('Retro in 2 weeks');
+    expect($r['due_at'])->toBe('2026-05-07 09:00:00');
+});
+
+it('parses "next week" as the upcoming Monday', function () {
+    CarbonImmutable::setTestNow('2026-04-23 15:00:00'); // a Thursday
+    $r = TaskLineParser::parseLine('Kick off sprint next week');
+    expect($r['due_at'])->toBe('2026-04-27 09:00:00'); // Monday
+});
+
+it('parses "this weekend" as the coming Saturday', function () {
+    CarbonImmutable::setTestNow('2026-04-23 15:00:00'); // Thursday
+    $r = TaskLineParser::parseLine('Clean garage this weekend');
+    expect($r['due_at'])->toBe('2026-04-25 09:00:00'); // Saturday
+});
+
+it('parses a bare weekday as the next occurrence', function () {
+    CarbonImmutable::setTestNow('2026-04-23 15:00:00'); // Thursday
+    $r = TaskLineParser::parseLine('Call mom Saturday');
+    expect($r['due_at'])->toBe('2026-04-25 09:00:00');
+});
+
+it('bare weekday on the same weekday rolls to next week', function () {
+    CarbonImmutable::setTestNow('2026-04-23 15:00:00'); // Thursday
+    $r = TaskLineParser::parseLine('Call mom Thursday');
+    expect($r['due_at'])->toBe('2026-04-30 09:00:00'); // next Thu
+});
+
+it('is case-insensitive on NL dates', function () {
+    CarbonImmutable::setTestNow('2026-04-23 15:00:00');
+    $r = TaskLineParser::parseLine('buy milk TOMORROW');
+    expect($r['due_at'])->toBe('2026-04-24 09:00:00');
+});
+
+it('explicit by M/D wins over a subsequent NL date', function () {
+    CarbonImmutable::setTestNow('2026-04-23 15:00:00');
+    $r = TaskLineParser::parseLine('Ship by 5/1 tomorrow');
+    // by M/D runs first; tomorrow is then ignored because dueAt is set.
+    expect($r['due_at'])->toBe('2026-05-01 09:00:00');
+});
+
+it('handles all token types on one line, title keeps @ and #', function () {
     CarbonImmutable::setTestNow('2026-04-23 10:00:00');
     $r = TaskLineParser::parseLine('Call @alice about taxes #admin P2 by 5/3');
-    expect($r['title'])->toBe('Call about taxes');
+    expect($r['title'])->toBe('Call @alice about taxes #admin');
     expect($r['tags'])->toBe(['admin']);
     expect($r['contact_patterns'])->toBe(['alice']);
     expect($r['priority'])->toBe(2);
@@ -112,7 +182,7 @@ it('parseBlock drops empty lines and returns one row per kept line', function ()
     $text = "First #foo\n\nSecond @bob\n  \nThird";
     $rows = TaskLineParser::parseBlock($text);
     expect($rows)->toHaveCount(3);
-    expect($rows[0]['title'])->toBe('First');
-    expect($rows[1]['title'])->toBe('Second');
+    expect($rows[0]['title'])->toBe('First #foo');
+    expect($rows[1]['title'])->toBe('Second @bob');
     expect($rows[2]['title'])->toBe('Third');
 });
