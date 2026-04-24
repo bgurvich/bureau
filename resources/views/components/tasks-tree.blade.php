@@ -479,19 +479,20 @@ class extends Component
                  @drop="onDrop($event)"
                  @if ($goal) aria-labelledby="goal-{{ $goal->id }}-h" @endif>
             @if ($goal)
-                <header class="flex items-baseline justify-between">
-                    <h2 id="goal-{{ $goal->id }}-h" class="text-xs font-medium uppercase tracking-wider text-neutral-400">
+                <header class="flex items-baseline justify-between gap-3 border-b border-neutral-800 pb-1.5">
+                    <h2 id="goal-{{ $goal->id }}-h" class="flex items-baseline gap-2 text-base font-semibold text-neutral-50">
+                        <span aria-hidden="true" class="text-amber-400">◈</span>
                         <button type="button"
                                 wire:click="$dispatch('inspector-open', { type: 'goal', id: {{ $goal->id }} })"
-                                class="hover:text-neutral-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                                class="hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
                             {{ $goal->title }}
                         </button>
                     </h2>
-                    <span class="text-[10px] text-neutral-500 tabular-nums">{{ __(':n open', ['n' => $goalTotal]) }}</span>
+                    <span class="shrink-0 text-[11px] text-neutral-500 tabular-nums">{{ __(':n open', ['n' => $goalTotal]) }}</span>
                 </header>
             @else
-                <header>
-                    <h2 class="text-xs font-medium uppercase tracking-wider text-neutral-500">{{ __('Without goal') }}</h2>
+                <header class="border-b border-neutral-800 pb-1.5">
+                    <h2 class="text-base font-semibold text-neutral-400">{{ __('Without goal') }}</h2>
                 </header>
             @endif
 
