@@ -14,6 +14,8 @@ class extends Component
     #[Url(as: 'q')]
     public string $search = '';
 
+    public ?string $pruneNotice = null;
+
     /**
      * Tags ordered by total taggables count descending.
      *
@@ -33,6 +35,36 @@ class extends Component
             ->limit(300)
             ->get();
     }
+
+    #[Computed]
+    public function orphanCount(): int
+    {
+        return Tag::query()
+            ->leftJoin('taggables', 'taggables.tag_id', '=', 'tags.id')
+            ->whereNull('taggables.tag_id')
+            ->count();
+    }
+
+    /**
+     * Drops every tag with zero taggable attachments. Household scope
+     * applies via the BelongsToHousehold global on Tag, so another
+     * household's orphans are untouched. Returns the deleted count
+     * as a status note so the user knows it worked.
+     */
+    public function pruneOrphans(): void
+    {
+        $orphanIds = Tag::query()
+            ->leftJoin('taggables', 'taggables.tag_id', '=', 'tags.id')
+            ->whereNull('taggables.tag_id')
+            ->pluck('tags.id')
+            ->all();
+        $count = count($orphanIds);
+        if ($count > 0) {
+            Tag::whereIn('id', $orphanIds)->delete();
+        }
+        $this->pruneNotice = __(':n orphan tag(s) removed.', ['n' => $count]);
+        unset($this->tags, $this->orphanCount);
+    }
 };
 ?>
 
@@ -44,13 +76,27 @@ class extends Component
                 {{ __('Every tag across every domain. Click one to see everything touching that tag.') }}
             </p>
         </div>
-        <div>
+        <div class="flex items-center gap-2">
             <label for="tg-q" class="sr-only">{{ __('Search tags') }}</label>
             <input wire:model.live.debounce.200ms="search" id="tg-q" type="text"
                    placeholder="{{ __('Filter tags…') }}"
                    class="w-52 rounded-md border border-neutral-700 bg-neutral-950 px-3 py-1.5 text-sm text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+            @if ($this->orphanCount > 0)
+                <button type="button"
+                        wire:click="pruneOrphans"
+                        wire:confirm="{{ __('Delete :n orphaned tag(s)?', ['n' => $this->orphanCount]) }}"
+                        class="rounded-md border border-rose-900/40 bg-rose-900/10 px-3 py-1.5 text-xs text-rose-300 hover:border-rose-700 hover:bg-rose-900/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                    {{ __('Prune :n orphan(s)', ['n' => $this->orphanCount]) }}
+                </button>
+            @endif
         </div>
     </header>
+
+    @if ($pruneNotice)
+        <div role="status" class="rounded-md border border-emerald-800/40 bg-emerald-900/20 px-4 py-2 text-sm text-emerald-200">
+            {{ $pruneNotice }}
+        </div>
+    @endif
 
     @if ($this->tags->isEmpty())
         <div class="rounded-xl border border-dashed border-neutral-800 bg-neutral-900/40 p-10 text-center text-sm text-neutral-500">
