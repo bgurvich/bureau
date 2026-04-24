@@ -102,6 +102,41 @@ it('filters by property and kind via ?property / ?kind query params', function (
     expect($c->get('readings')->count())->toBe(1);
 });
 
+it('series summaries surface daily consumption rates + trend per (property, kind)', function () {
+    authedInHousehold();
+    $home = Property::create(['kind' => 'home', 'name' => 'Main']);
+    // 3 readings 30 days apart, values 100 → 200 → 350.
+    // Rate 1: (200-100)/30 ≈ 3.33 /day
+    // Rate 2: (350-200)/30 = 5.00 /day  — latest, should flag trend=up.
+    MeterReading::create(['property_id' => $home->id, 'kind' => 'electric', 'read_on' => '2026-01-01', 'value' => 100, 'unit' => 'kWh']);
+    MeterReading::create(['property_id' => $home->id, 'kind' => 'electric', 'read_on' => '2026-01-31', 'value' => 200, 'unit' => 'kWh']);
+    MeterReading::create(['property_id' => $home->id, 'kind' => 'electric', 'read_on' => '2026-03-02', 'value' => 350, 'unit' => 'kWh']);
+
+    $c = Livewire::test('meter-readings-index');
+    $summaries = $c->get('seriesSummaries');
+
+    expect($summaries)->toHaveCount(1);
+    expect($summaries[0]['kind'])->toBe('electric')
+        ->and($summaries[0]['rates'])->toHaveCount(2)
+        ->and($summaries[0]['latest_rate'])->toEqualWithDelta(5.0, 0.01)
+        ->and($summaries[0]['trend'])->toBe('up');
+});
+
+it('series summaries skip series with just one reading', function () {
+    authedInHousehold();
+    $home = Property::create(['kind' => 'home', 'name' => 'Main']);
+    MeterReading::create(['property_id' => $home->id, 'kind' => 'water', 'read_on' => '2026-01-01', 'value' => 500, 'unit' => 'gal']);
+
+    expect(Livewire::test('meter-readings-index')->get('seriesSummaries'))->toBe([]);
+});
+
+it('sparklinePath returns null when there aren\'t enough points', function () {
+    $c = Livewire::test('meter-readings-index');
+    expect($c->instance()->sparklinePath([]))->toBeNull()
+        ->and($c->instance()->sparklinePath([1.0]))->toBeNull()
+        ->and($c->instance()->sparklinePath([1.0, 2.0]))->toStartWith('M');
+});
+
 it('Assets hub renders the Meter readings tab panel', function () {
     authedInHousehold();
     $property = Property::create(['kind' => 'home', 'name' => 'Main house']);

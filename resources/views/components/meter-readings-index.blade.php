@@ -22,7 +22,36 @@ class extends Component
     #[On('inspector-saved')]
     public function refresh(): void
     {
-        unset($this->readings);
+        unset($this->readings, $this->deltas, $this->seriesSummaries);
+    }
+
+    /**
+     * SVG sparkline path from a list of floats. Returns null when
+     * there aren't enough points to draw. Kept on the component so
+     * top-level closures (which Volt can't compile cleanly after the
+     * class block) don't appear in the view.
+     *
+     * @param  array<int, float>  $values
+     */
+    public function sparklinePath(array $values): ?string
+    {
+        if (count($values) < 2) {
+            return null;
+        }
+        $w = 200;
+        $h = 32;
+        $min = min($values);
+        $max = max($values);
+        $range = $max - $min ?: 1.0;
+        $stepX = $w / (count($values) - 1);
+        $points = [];
+        foreach ($values as $i => $v) {
+            $x = round($i * $stepX, 2);
+            $y = round($h - (($v - $min) / $range) * $h, 2);
+            $points[] = $x.','.$y;
+        }
+
+        return 'M'.implode(' L', $points);
     }
 
     /** @return Collection<int, MeterReading> */
@@ -86,6 +115,71 @@ class extends Component
 
         return $list;
     }
+
+    /**
+     * Per-series summary: latest daily consumption rate + sparkline
+     * values + trend vs the rolling 3-reading average. Used by the
+     * summary-card row above the list.
+     *
+     * Only surfaces series with ≥ 2 readings (sparkline needs at least
+     * two points; delta needs a prior).
+     *
+     * @return array<int, array{
+     *   key: string, kind: string, kind_label: string, property_name: string,
+     *   unit: string, rates: array<int, float>, latest_rate: float,
+     *   trend: string
+     * }>
+     */
+    #[Computed]
+    public function seriesSummaries(): array
+    {
+        $buckets = $this->readings->groupBy(fn (MeterReading $r) => $r->property_id.'|'.$r->kind);
+        $out = [];
+        foreach ($buckets as $key => $series) {
+            // Walk ascending — the outer query was desc, reverse.
+            $series = $series->reverse()->values();
+            if ($series->count() < 2) {
+                continue;
+            }
+
+            $rates = [];
+            $prior = null;
+            foreach ($series as $r) {
+                if ($prior !== null) {
+                    $days = max(1.0, (float) $prior->read_on->diffInDays($r->read_on, absolute: true));
+                    $rates[] = ((float) $r->value - (float) $prior->value) / $days;
+                }
+                $prior = $r;
+            }
+
+            $first = $series->first();
+            $latest = $series->last();
+            $latestRate = (float) end($rates);
+
+            // Trend: compare latest rate vs the average of the prior
+            // 3 rates (if we have them). ±10% dead zone = flat.
+            $history = array_slice($rates, 0, max(0, count($rates) - 1));
+            $tail = array_slice($history, -3);
+            $avg = $tail !== [] ? array_sum($tail) / count($tail) : 0.0;
+            $trend = 'flat';
+            if ($avg > 0 && abs($latestRate - $avg) / $avg > 0.10) {
+                $trend = $latestRate > $avg ? 'up' : 'down';
+            }
+
+            $out[] = [
+                'key' => (string) $key,
+                'kind' => (string) $first->kind,
+                'kind_label' => (string) (\App\Support\Enums::meterReadingKinds()[$first->kind] ?? $first->kind),
+                'property_name' => (string) ($first->property?->name ?? __('(no property)')),
+                'unit' => (string) ($latest->unit ?? ''),
+                'rates' => array_map(fn ($v) => (float) $v, $rates),
+                'latest_rate' => $latestRate,
+                'trend' => $trend,
+            ];
+        }
+
+        return $out;
+    }
 };
 ?>
 
@@ -124,6 +218,52 @@ class extends Component
             {{ __('No readings logged yet.') }}
         </div>
     @else
+        @if ($this->seriesSummaries !== [])
+            <div class="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+                @foreach ($this->seriesSummaries as $series)
+                    @php
+                        $trendColor = match ($series['trend']) {
+                            'up' => 'text-amber-400',
+                            'down' => 'text-emerald-400',
+                            default => 'text-neutral-500',
+                        };
+                        $strokeClass = match ($series['trend']) {
+                            'up' => 'stroke-amber-400',
+                            'down' => 'stroke-emerald-400',
+                            default => 'stroke-neutral-500',
+                        };
+                        $trendLabel = match ($series['trend']) {
+                            'up' => __('trending up'),
+                            'down' => __('trending down'),
+                            default => __('flat'),
+                        };
+                        $path = $this->sparklinePath($series['rates']);
+                        $rateFmt = rtrim(rtrim(number_format($series['latest_rate'], 3, '.', ''), '0'), '.');
+                    @endphp
+                    <div class="rounded-xl border border-neutral-800 bg-neutral-900/40 p-4">
+                        <div class="flex items-baseline justify-between gap-2">
+                            <div class="min-w-0">
+                                <h3 class="text-xs font-medium uppercase tracking-wider text-neutral-500">{{ $series['kind_label'] }}</h3>
+                                <p class="truncate text-[11px] text-neutral-500">{{ $series['property_name'] }}</p>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-sm tabular-nums text-neutral-100">
+                                    {{ $rateFmt }}
+                                    <span class="text-[10px] text-neutral-500">{{ $series['unit'] }}/day</span>
+                                </div>
+                                <div class="text-[10px] {{ $trendColor }}">{{ $trendLabel }}</div>
+                            </div>
+                        </div>
+                        @if ($path)
+                            <svg viewBox="0 0 200 32" class="mt-2 h-8 w-full overflow-visible" aria-label="{{ __(':kind consumption sparkline', ['kind' => $series['kind_label']]) }}">
+                                <path d="{{ $path }}" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="{{ $strokeClass }}"/>
+                            </svg>
+                        @endif
+                    </div>
+                @endforeach
+            </div>
+        @endif
+
         <ul class="divide-y divide-neutral-800 rounded-xl border border-neutral-800 bg-neutral-900/40">
             @foreach ($this->readings as $r)
                 @php
