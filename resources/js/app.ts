@@ -88,6 +88,7 @@ function extractTheme(payload: unknown): ThemePref {
 
 // Keyboard shortcuts for the Inspector.
 //   .             — Inspector type picker
+//   ,             — Bulk-add tasks modal
 //   t n c x b a d m p h v i s o r e g u l f j — direct-to-type
 //     (task, note, contact, transaction, bill, account, document, meeting,
 //      project [=P? no, physical_mail], property [H=home], vehicle, inventory,
@@ -131,6 +132,7 @@ const TYPE_SHORTCUTS: Record<string, string> = {
 const GLOBAL_SHORTCUTS: Record<string, () => void> = {
     '\\': handleTimerShortcut,
     '.': () => window.Livewire?.dispatch('inspector-open'),
+    ',': () => window.Livewire?.dispatch('tasks-bulk-open'),
     "'": () => window.dispatchEvent(new CustomEvent('alerts-open')),
 };
 
