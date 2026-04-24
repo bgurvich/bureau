@@ -55,6 +55,7 @@ new class extends Component
 <div x-data="{ open: @entangle('open').live }"
      x-cloak
      x-show="open"
+     x-effect="if (open) $nextTick(() => document.getElementById('tbm-text')?.focus())"
      @keydown.escape.window="$wire.close()"
      role="dialog"
      aria-modal="true"
