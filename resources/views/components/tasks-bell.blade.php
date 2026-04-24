@@ -160,11 +160,16 @@ new class extends Component
             @endif
         </div>
 
-        <footer class="border-t border-neutral-800 bg-neutral-950/50 px-4 py-2 text-[11px]">
-            <a href="{{ route('calendar.tasks') }}"
+        <footer class="flex items-center justify-between gap-2 border-t border-neutral-800 bg-neutral-950/50 px-4 py-2 text-[11px]">
+            <a href="{{ route('productivity.index', ['tab' => 'tasks']) }}"
                @click="open = false"
                class="text-neutral-400 hover:text-neutral-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
-                {{ __('Open tasks page →') }}
+                {{ __('Open task list →') }}
+            </a>
+            <a href="{{ route('productivity.index', ['tab' => 'tree']) }}"
+               @click="open = false"
+               class="text-neutral-400 hover:text-neutral-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                {{ __('Open task tree →') }}
             </a>
         </footer>
     </div>
