@@ -64,27 +64,29 @@ class PerfTestSeeder extends Seeder
             return;
         }
 
-        // Fast idempotency: bail early if the volume targets are already
-        // met. Caller can truncate if they want to regenerate.
-        $current = Transaction::count();
-        if ($current >= 2_000) {
-            $this->command->info("PerfTestSeeder: already at volume ({$current} transactions) — skipping.");
+        $this->command->info('PerfTestSeeder: generating volume…');
+
+        // Per-table idempotency so a partial run can be resumed: each
+        // seeder bails early if its target is already reached instead
+        // of all-or-nothing.
+        $this->skipIfAtVolume('transactions', Transaction::count(), self::TRANSACTIONS_TARGET, fn () => $this->seedTransactions($household, $user));
+        $this->skipIfAtVolume('tasks', Task::count(), self::TASKS_TARGET, fn () => $this->seedTasks($household, $user));
+        $this->skipIfAtVolume('time_entries', TimeEntry::count(), self::TIME_ENTRIES_TARGET, fn () => $this->seedTimeEntries($household, $user));
+        $this->skipIfAtVolume('journal_entries', JournalEntry::count(), self::JOURNAL_ENTRIES_TARGET, fn () => $this->seedJournalEntries($household, $user));
+
+        $this->command->info('PerfTestSeeder: done.');
+    }
+
+    private function skipIfAtVolume(string $label, int $current, int $target, callable $run): void
+    {
+        if ($current >= $target) {
+            $this->command->line("   · {$label} already at volume ({$current}) — skipping");
 
             return;
         }
-
-        $this->command->info('PerfTestSeeder: generating volume…');
-
-        $this->seedTransactions($household, $user);
-        $this->seedTasks($household, $user);
-        $this->seedTimeEntries($household, $user);
-        $this->seedJournalEntries($household, $user);
-
-        $this->command->info('PerfTestSeeder: done.');
-        $this->command->line('   · transactions: '.Transaction::count());
-        $this->command->line('   · tasks: '.Task::count());
-        $this->command->line('   · time entries: '.TimeEntry::count());
-        $this->command->line('   · journal entries: '.JournalEntry::count());
+        $run();
+        $new = DB::table($label)->count();
+        $this->command->line("   · {$label}: {$current} → {$new}");
     }
 
     protected function seedTransactions(Household $household, User $user): void
@@ -100,7 +102,7 @@ class PerfTestSeeder extends Seeder
         }
 
         $start = CarbonImmutable::now()->subYears(3);
-        $days = CarbonImmutable::now()->diffInDays($start);
+        $days = (int) abs(CarbonImmutable::now()->diffInDays($start));
 
         $rows = [];
         for ($i = 0; $i < self::TRANSACTIONS_TARGET; $i++) {
@@ -133,7 +135,7 @@ class PerfTestSeeder extends Seeder
     protected function seedTasks(Household $household, User $user): void
     {
         $start = CarbonImmutable::now()->subYears(2);
-        $days = CarbonImmutable::now()->diffInDays($start);
+        $days = (int) abs(CarbonImmutable::now()->diffInDays($start));
 
         $rows = [];
         for ($i = 0; $i < self::TASKS_TARGET; $i++) {
@@ -167,17 +169,19 @@ class PerfTestSeeder extends Seeder
     protected function seedTimeEntries(Household $household, User $user): void
     {
         $start = CarbonImmutable::now()->subYears(2);
-        $days = CarbonImmutable::now()->diffInDays($start);
+        $days = (int) abs(CarbonImmutable::now()->diffInDays($start));
 
         $rows = [];
         for ($i = 0; $i < self::TIME_ENTRIES_TARGET; $i++) {
             $day = $start->addDays(random_int(0, (int) $days));
             $startedAt = $day->setTime(random_int(8, 18), 0);
             $seconds = random_int(15 * 60, 4 * 3600);
+            $endedAt = $startedAt->addSeconds($seconds);
             $rows[] = [
                 'household_id' => $household->id,
                 'user_id' => $user->id,
                 'started_at' => $startedAt->toDateTimeString(),
+                'ended_at' => $endedAt->toDateTimeString(),
                 'activity_date' => $day->toDateString(),
                 'duration_seconds' => $seconds,
                 'description' => 'Perf time entry #'.$i,
@@ -198,7 +202,7 @@ class PerfTestSeeder extends Seeder
     protected function seedJournalEntries(Household $household, User $user): void
     {
         $start = CarbonImmutable::now()->subYears(2);
-        $days = CarbonImmutable::now()->diffInDays($start);
+        $days = (int) abs(CarbonImmutable::now()->diffInDays($start));
 
         $moods = ['calm', 'focused', 'tired', 'happy', 'anxious', 'grateful'];
         $rows = [];
