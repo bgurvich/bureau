@@ -65,16 +65,12 @@ new class extends Component
         :aria-expanded="open.toString()"
         aria-haspopup="menu"
         aria-label="{{ __('Open user menu') }}"
-        class="flex items-center gap-2 rounded-md border border-neutral-800 bg-neutral-900 px-2 py-1.5 text-sm text-neutral-200 hover:border-neutral-700 hover:bg-neutral-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300"
+        class="flex h-9 w-9 items-center justify-center rounded-full text-neutral-400 hover:text-neutral-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300"
     >
         <span aria-hidden="true"
-              class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-neutral-700 text-[10px] font-semibold tracking-wider text-neutral-100">
+              class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-neutral-800 text-[11px] font-semibold tracking-wider text-neutral-200">
             {{ $user?->initials() }}
         </span>
-        <span class="max-w-[120px] truncate text-xs">{{ $user?->name }}</span>
-        <svg aria-hidden="true" class="h-3 w-3 text-neutral-500" viewBox="0 0 12 12" fill="none">
-            <path d="M3 4.5 6 7.5 9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
     </button>
 
     <div
