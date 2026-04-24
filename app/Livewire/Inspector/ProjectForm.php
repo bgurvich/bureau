@@ -9,10 +9,12 @@ use App\Livewire\Inspector\Concerns\HasAdminPanel;
 use App\Livewire\Inspector\Concerns\HasSubjectRefs;
 use App\Livewire\Inspector\Concerns\HasTagList;
 use App\Livewire\Inspector\Concerns\WithCounterpartyPicker;
+use App\Models\Goal;
 use App\Models\Project;
 use App\Support\CurrentHousehold;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Str;
+use Livewire\Attributes\Computed;
 use Livewire\Attributes\On;
 use Livewire\Component;
 
@@ -51,6 +53,8 @@ class ProjectForm extends Component
 
     public bool $project_archived = false;
 
+    public ?int $project_goal_id = null;
+
     public string $notes = '';
 
     public function mount(?int $id = null): void
@@ -66,6 +70,7 @@ class ProjectForm extends Component
             $this->project_hourly_rate_currency = $p->hourly_rate_currency ?: 'USD';
             $this->project_client_id = $p->client_contact_id;
             $this->project_archived = (bool) $p->archived;
+            $this->project_goal_id = $p->goal_id;
             $this->notes = (string) ($p->notes ?? '');
             $this->subject_refs = $this->subjectRefsFrom($p);
             $this->loadAdminMeta();
@@ -88,6 +93,7 @@ class ProjectForm extends Component
             'project_hourly_rate_currency' => 'nullable|string|size:3',
             'project_client_id' => 'nullable|integer|exists:contacts,id',
             'project_archived' => 'boolean',
+            'project_goal_id' => 'nullable|integer|exists:goals,id',
             'notes' => 'nullable|string|max:5000',
         ]);
 
@@ -102,6 +108,7 @@ class ProjectForm extends Component
             'hourly_rate_currency' => $data['project_hourly_rate_currency'] ?: null,
             'client_contact_id' => $data['project_client_id'] ?: null,
             'archived' => (bool) $data['project_archived'],
+            'goal_id' => $data['project_goal_id'] ?: null,
             'notes' => $data['notes'] ?: null,
         ];
 
@@ -120,6 +127,17 @@ class ProjectForm extends Component
         $this->persistTagList();
 
         $this->finalizeSave();
+    }
+
+    /** @return array<int, string> */
+    #[Computed]
+    public function goalPickerOptions(): array
+    {
+        return Goal::query()
+            ->where('status', 'active')
+            ->orderBy('title')
+            ->pluck('title', 'id')
+            ->all();
     }
 
     protected function adminOwnerClass(): ?string

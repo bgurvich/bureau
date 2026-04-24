@@ -40,6 +40,12 @@ class Project extends Model
         return $this->belongsTo(User::class);
     }
 
+    /** @return BelongsTo<Goal, $this> */
+    public function goal(): BelongsTo
+    {
+        return $this->belongsTo(Goal::class);
+    }
+
     /** @return BelongsTo<Contact, $this> */
     public function client(): BelongsTo
     {

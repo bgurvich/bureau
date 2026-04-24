@@ -14,6 +14,16 @@
         </div>
     </div>
     <div>
+        <label for="i-p-goal" class="mb-1 block text-xs text-neutral-400">{{ __('Goal') }}</label>
+        <x-ui.searchable-select
+            id="i-p-goal"
+            model="project_goal_id"
+            :options="['' => '— '.__('none').' —'] + $this->goalPickerOptions"
+            placeholder="{{ __('— none —') }}"
+            edit-inspector-type="goal" />
+        @error('project_goal_id')<div role="alert" class="mt-1 text-xs text-rose-400">{{ $message }}</div>@enderror
+    </div>
+    <div>
         <label for="i-p-client" class="mb-1 block text-xs text-neutral-400">{{ __('Client') }}</label>
         <x-ui.searchable-select
             id="i-p-client"

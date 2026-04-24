@@ -1,11 +1,11 @@
 <?php
 
+use App\Models\Goal;
 use App\Models\Project;
 use App\Models\Task;
 use App\Support\Formatting;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Collection;
-use Illuminate\Support\Collection as BaseCollection;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\On;
@@ -93,7 +93,17 @@ class extends Component
         return Project::query()
             ->where('archived', false)
             ->orderBy('name')
-            ->get(['id', 'name', 'color']);
+            ->get(['id', 'name', 'color', 'goal_id']);
+    }
+
+    /** @return Collection<int, Goal> */
+    #[Computed]
+    public function goals(): Collection
+    {
+        return Goal::query()
+            ->where('status', 'active')
+            ->orderBy('title')
+            ->get(['id', 'title']);
     }
 
     /** @return Collection<int, Task> */
@@ -111,6 +121,9 @@ class extends Component
     }
 
     /**
+     * Per-project task rows. Internal — exposed for tests and reused
+     * by groupedTree().
+     *
      * @return array<string, \Illuminate\Support\Collection<int, array{task: Task, depth: int}>>
      *   Key: "project:{id}" or "unassigned".
      */
@@ -160,6 +173,71 @@ class extends Component
 
         return $groups;
     }
+
+    /**
+     * Two-level grouping: Goals contain Projects, Projects contain the
+     * task rows produced by groupedTree(). Goals without a project and
+     * projects without a goal live in "unassigned" buckets that only
+     * render when they have content.
+     *
+     * @return array<int, array{
+     *     goal: ?Goal,
+     *     projects: array<int, array{project: ?Project, key: string, rows: \Illuminate\Support\Collection<int, array{task: Task, depth: int}>}>
+     * }>
+     */
+    #[Computed]
+    public function goalGroupedTree(): array
+    {
+        $projectRows = $this->groupedTree;
+        $projectsByGoal = [];
+        foreach ($this->projects as $p) {
+            $projectsByGoal[$p->goal_id ?? 0][] = $p;
+        }
+
+        $out = [];
+        foreach ($this->goals as $g) {
+            $buckets = $projectsByGoal[$g->id] ?? [];
+            if ($buckets === []) {
+                continue; // empty goals don't render in the tree
+            }
+            $out[] = [
+                'goal' => $g,
+                'projects' => array_map(fn ($p) => [
+                    'project' => $p,
+                    'key' => 'project:'.$p->id,
+                    'rows' => $projectRows['project:'.$p->id] ?? collect(),
+                ], $buckets),
+            ];
+        }
+
+        // Projects without a goal_id
+        $orphanProjects = $projectsByGoal[0] ?? [];
+        if ($orphanProjects !== []) {
+            $out[] = [
+                'goal' => null,
+                'projects' => array_map(fn ($p) => [
+                    'project' => $p,
+                    'key' => 'project:'.$p->id,
+                    'rows' => $projectRows['project:'.$p->id] ?? collect(),
+                ], $orphanProjects),
+            ];
+        }
+
+        // Unassigned-to-project bucket gets its own tail row so tasks
+        // with no project appear at the bottom regardless of goals.
+        if ($projectRows['unassigned']->isNotEmpty()) {
+            $out[] = [
+                'goal' => null,
+                'projects' => [[
+                    'project' => null,
+                    'key' => 'unassigned',
+                    'rows' => $projectRows['unassigned'],
+                ]],
+            ];
+        }
+
+        return $out;
+    }
 };
 ?>
 
@@ -191,40 +269,66 @@ class extends Component
         </div>
     </header>
 
-    @foreach ($this->groupedTree as $groupKey => $rows)
+    @foreach ($this->goalGroupedTree as $goalBlock)
         @php
-            $isUnassigned = $groupKey === 'unassigned';
-            $project = $isUnassigned ? null : $this->projects->firstWhere('id', (int) str_replace('project:', '', $groupKey));
-            // Hide empty projects to keep the page dense; always show
-            // Unassigned if it has rows even when zero projects exist.
-            if ($rows->isEmpty()) {
+            $goal = $goalBlock['goal'];
+            $goalTotal = collect($goalBlock['projects'])->sum(fn ($b) => $b['rows']->count());
+            if ($goalTotal === 0) {
                 continue;
             }
         @endphp
-        <section class="rounded-xl border border-neutral-800 bg-neutral-900/40"
-                 aria-labelledby="group-{{ $groupKey }}-h"
-                 x-data="taskTreeSortable"
-                 data-tt-group-key="{{ $groupKey }}"
-                 @dragover="onDragOver($event)"
-                 @drop="onDrop($event)"
-                 @dragend="onDragEnd()">
-            <header class="flex items-baseline justify-between border-b border-neutral-800/60 px-4 py-2">
-                <h3 id="group-{{ $groupKey }}-h" class="flex items-center gap-2 text-sm font-medium text-neutral-200">
-                    @if ($project && $project->color)
-                        <span aria-hidden="true" class="h-2.5 w-2.5 rounded-full" style="background-color: {{ $project->color }}"></span>
-                    @endif
-                    @if ($project)
+        <section class="space-y-3"
+                 @if ($goal) aria-labelledby="goal-{{ $goal->id }}-h" @endif>
+            @if ($goal)
+                <header class="flex items-baseline justify-between">
+                    <h2 id="goal-{{ $goal->id }}-h" class="text-xs font-medium uppercase tracking-wider text-neutral-400">
                         <button type="button"
-                                wire:click="$dispatch('inspector-open', { type: 'project', id: {{ $project->id }} })"
-                                class="hover:text-neutral-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
-                            {{ $project->name }}
+                                wire:click="$dispatch('inspector-open', { type: 'goal', id: {{ $goal->id }} })"
+                                class="hover:text-neutral-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                            {{ $goal->title }}
                         </button>
-                    @else
-                        <span class="text-neutral-400">{{ __('Unassigned') }}</span>
-                    @endif
-                </h3>
-                <span class="text-[11px] text-neutral-500 tabular-nums">{{ __(':n open', ['n' => $rows->count()]) }}</span>
-            </header>
+                    </h2>
+                    <span class="text-[10px] text-neutral-500 tabular-nums">{{ __(':n open', ['n' => $goalTotal]) }}</span>
+                </header>
+            @else
+                <header>
+                    <h2 class="text-xs font-medium uppercase tracking-wider text-neutral-500">{{ __('Without goal') }}</h2>
+                </header>
+            @endif
+
+            @foreach ($goalBlock['projects'] as $projBlock)
+                @php
+                    $project = $projBlock['project'];
+                    $groupKey = $projBlock['key'];
+                    $rows = $projBlock['rows'];
+                    if ($rows->isEmpty()) {
+                        continue;
+                    }
+                @endphp
+                <section class="rounded-xl border border-neutral-800 bg-neutral-900/40"
+                         aria-labelledby="group-{{ $groupKey }}-h"
+                         x-data="taskTreeSortable"
+                         data-tt-group-key="{{ $groupKey }}"
+                         @dragover="onDragOver($event)"
+                         @drop="onDrop($event)"
+                         @dragend="onDragEnd()">
+                    <header class="flex items-baseline justify-between border-b border-neutral-800/60 px-4 py-2">
+                        <h3 id="group-{{ $groupKey }}-h" class="flex items-center gap-2 text-sm font-medium text-neutral-200">
+                            @if ($project && $project->color)
+                                <span aria-hidden="true" class="h-2.5 w-2.5 rounded-full" style="background-color: {{ $project->color }}"></span>
+                            @endif
+                            @if ($project)
+                                <button type="button"
+                                        wire:click="$dispatch('inspector-open', { type: 'project', id: {{ $project->id }} })"
+                                        class="hover:text-neutral-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                                    {{ $project->name }}
+                                </button>
+                            @else
+                                <span class="text-neutral-400">{{ __('Unassigned') }}</span>
+                            @endif
+                        </h3>
+                        <span class="text-[11px] text-neutral-500 tabular-nums">{{ __(':n open', ['n' => $rows->count()]) }}</span>
+                    </header>
             <ul class="divide-y divide-neutral-800/60">
                 @foreach ($rows as $node)
                     @php
@@ -311,6 +415,8 @@ class extends Component
                     </li>
                 @endforeach
             </ul>
+                </section>
+            @endforeach
         </section>
     @endforeach
 

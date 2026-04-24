@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Models\Goal;
 use App\Models\Project;
 use App\Models\Task;
 use Livewire\Livewire;
@@ -64,6 +65,37 @@ it('toggle() flips state and refreshes the tree', function () {
     Livewire::test('tasks-tree')->call('toggle', $t->id);
 
     expect($t->fresh()->state)->toBe('done');
+});
+
+it('goalGroupedTree nests projects under their goal', function () {
+    authedInHousehold();
+    $goal = Goal::create(['title' => 'Ship v1', 'mode' => 'target', 'status' => 'active', 'category' => 'work']);
+    $projA = Project::create(['name' => 'Alpha', 'slug' => 'alpha', 'goal_id' => $goal->id]);
+    $projB = Project::create(['name' => 'Beta', 'slug' => 'beta']);
+    Task::create(['title' => 'A1', 'state' => 'open', 'project_id' => $projA->id]);
+    Task::create(['title' => 'B1', 'state' => 'open', 'project_id' => $projB->id]);
+
+    $tree = Livewire::test('tasks-tree')->get('goalGroupedTree');
+
+    $goalBlock = collect($tree)->first(fn ($b) => $b['goal']?->id === $goal->id);
+    expect($goalBlock)->not->toBeNull();
+    expect(collect($goalBlock['projects'])->pluck('project.id')->all())->toBe([$projA->id]);
+
+    $orphanBlock = collect($tree)->first(fn ($b) => $b['goal'] === null);
+    expect($orphanBlock)->not->toBeNull();
+});
+
+it('project inspector saves goal_id', function () {
+    authedInHousehold();
+    $goal = Goal::create(['title' => 'Ship v1', 'mode' => 'target', 'status' => 'active', 'category' => 'work']);
+
+    Livewire::test('inspector.project-form')
+        ->set('project_name', 'Alpha')
+        ->set('project_goal_id', $goal->id)
+        ->call('save');
+
+    $project = Project::where('name', 'Alpha')->firstOrFail();
+    expect($project->goal_id)->toBe($goal->id);
 });
 
 it('task inspector saves project_id', function () {
