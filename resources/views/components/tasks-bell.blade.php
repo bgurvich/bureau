@@ -30,10 +30,11 @@ new class extends Component
     public function topTasks(): Collection
     {
         return Task::where('state', 'open')
+            ->with('project:id,name')
             ->orderBy('priority')
             ->orderByRaw('due_at IS NULL, due_at')
             ->limit(10)
-            ->get(['id', 'title', 'priority', 'due_at']);
+            ->get(['id', 'title', 'priority', 'due_at', 'project_id']);
     }
 
     #[Computed]
@@ -143,7 +144,12 @@ new class extends Component
                                     wire:click="$dispatch('inspector-open', { type: 'task', id: {{ $t->id }} })"
                                     class="flex w-full items-baseline gap-2 px-4 py-1.5 text-left text-sm hover:bg-neutral-800 focus:bg-neutral-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
                                 <span class="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider {{ $prioBg }}">P{{ $t->priority }}</span>
-                                <span class="flex-1 truncate text-neutral-200">{{ $t->title }}</span>
+                                <span class="flex-1 min-w-0">
+                                    <span class="block truncate text-neutral-200">{{ $t->title }}</span>
+                                    @if ($t->project)
+                                        <span class="block truncate text-[11px] text-neutral-500">{{ $t->project->name }}</span>
+                                    @endif
+                                </span>
                                 @if ($dueAt)
                                     <span class="shrink-0 text-[11px] tabular-nums {{ $dueColor }}">{{ Formatting::date($dueAt) }}</span>
                                 @endif

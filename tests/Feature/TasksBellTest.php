@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Models\Project;
 use App\Models\Task;
 use Carbon\CarbonImmutable;
 use Livewire\Livewire;
@@ -37,6 +38,16 @@ it('counts tasks due today or overdue in the acute badge', function () {
     $c = Livewire::test('tasks-bell');
     expect($c->get('acuteCount'))->toBe(2);
     expect($c->get('openCount'))->toBe(4);
+});
+
+it('eager-loads each task\'s project for the row subtitle', function () {
+    authedInHousehold();
+    $p = Project::create(['name' => 'Alpha', 'slug' => 'alpha']);
+    $t = Task::create(['title' => 'Pick a frontend framework', 'state' => 'open', 'project_id' => $p->id]);
+
+    $rows = Livewire::test('tasks-bell')->get('topTasks');
+    $row = $rows->firstWhere('id', $t->id);
+    expect($row->project?->name)->toBe('Alpha');
 });
 
 it('caps the list at 10 rows', function () {
