@@ -2,12 +2,13 @@
 
 use Livewire\Livewire;
 
-it('logs hub renders with the Journal tab by default', function () {
+it('logs hub renders with the Stream tab by default', function () {
     authedInHousehold();
 
     Livewire::test('logs-hub')
-        ->assertSet('tab', 'journal')
+        ->assertSet('tab', 'stream')
         ->assertSee('Logs')
+        ->assertSee('Stream')
         ->assertSee('Journal')
         ->assertSee('Decisions')
         ->assertSee('Reading / watching')
@@ -33,7 +34,7 @@ it('logs hub rejects unknown tab values', function () {
 
     Livewire::test('logs-hub')
         ->call('setTab', 'not-a-real-tab')
-        ->assertSet('tab', 'journal');
+        ->assertSet('tab', 'stream');
 });
 
 it('logs hub renders against /logs route for an authed user', function () {

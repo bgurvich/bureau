@@ -14,6 +14,7 @@ use App\Models\PetCheckup;
 use App\Models\PetLicense;
 use App\Models\PetPreventiveCare;
 use App\Models\PetVaccination;
+use App\Models\RadarSnooze;
 use App\Models\RecurringProjection;
 use App\Models\Reminder;
 use App\Models\SavingsGoal;
@@ -23,12 +24,115 @@ use App\Models\Transaction;
 use App\Models\VehicleServiceLog;
 use App\Support\BudgetMonitor;
 use App\Support\ChecklistScheduling;
+use App\Support\CurrentHousehold;
 use App\Support\SpendingAnomalyDetector;
 use Livewire\Attributes\Computed;
 use Livewire\Component;
 
 new class extends Component
 {
+    /**
+     * Map of signal_kind (string) → count contributed to total(). The
+     * radar tiles all feed this map in the same render pass so snooze
+     * filtering + the grand total pull from a single source of truth
+     * instead of iterating 25+ computed getters twice.
+     *
+     * @return array<string, int>
+     */
+    #[Computed]
+    public function signalCounts(): array
+    {
+        return [
+            'overdue_tasks' => $this->overdueTasks,
+            'unreconciled' => $this->unreconciled,
+            'overdue_bills' => $this->overdueBills,
+            'pending_reminders' => $this->pendingReminders,
+            'trials_ending_soon' => $this->trialsEndingSoon,
+            'autorenewing_contracts_ending_soon' => $this->autorenewingContractsEndingSoon,
+            'gift_cards_expiring_soon' => $this->giftCardsExpiringSoon,
+            'domains_expiring_soon' => $this->domainsExpiringSoon,
+            'tax_payments_due_soon' => $this->taxPaymentsDueSoon,
+            'bills_inbox' => $this->billsInbox,
+            'unprocessed_inventory' => $this->unprocessedInventory,
+            'budget_envelopes_at_risk' => $this->budgetEnvelopesAtRisk,
+            'spending_anomalies' => $this->spendingAnomalies,
+            'savings_goals_ready_to_close' => $this->savingsGoalsReadyToClose,
+            'unfinished_morning_rituals' => $this->unfinishedMorningRituals,
+            'unfinished_evening_rituals' => $this->unfinishedEveningRituals,
+            'expiring_pet_vaccinations' => $this->expiringPetVaccinations,
+            'overdue_pet_checkups' => $this->overduePetCheckups,
+            'expiring_pet_licenses' => $this->expiringPetLicenses,
+            'decision_follow_ups_due' => $this->decisionFollowUpsDue,
+            'goals_behind_pace' => $this->goalsBehindPace,
+            'goals_stale' => $this->goalsStale,
+            'integrations_needing_reconnect' => $this->integrationsNeedingReconnect,
+            'vehicle_services_due_soon' => $this->vehicleServicesDueSoon,
+            'listings_expiring_soon' => $this->listingsExpiringSoon,
+            'pet_preventive_care_due_soon' => $this->petPreventiveCareDueSoon,
+        ];
+    }
+
+    /**
+     * Kinds the current user has snoozed and which are still in effect.
+     * Tiles for these render with a muted "snoozed" affordance instead
+     * of their normal row, and they don't contribute to total().
+     *
+     * @return array<string, \Carbon\Carbon>  kind => snoozed_until
+     */
+    #[Computed]
+    public function snoozes(): array
+    {
+        $userId = auth()->id();
+        $householdId = CurrentHousehold::id();
+        if ($userId === null || $householdId === null) {
+            return [];
+        }
+
+        return RadarSnooze::query()
+            ->where('user_id', $userId)
+            ->where('household_id', $householdId)
+            ->where('snoozed_until', '>', now())
+            ->get(['signal_kind', 'snoozed_until'])
+            ->mapWithKeys(fn ($r) => [(string) $r->signal_kind => $r->snoozed_until])
+            ->all();
+    }
+
+    public function isSnoozed(string $kind): bool
+    {
+        return array_key_exists($kind, $this->snoozes);
+    }
+
+    public function snoozeSignal(string $kind, int $days): void
+    {
+        $days = max(1, min(90, $days));
+        $userId = auth()->id();
+        $householdId = CurrentHousehold::id();
+        if ($userId === null || $householdId === null) {
+            return;
+        }
+
+        RadarSnooze::updateOrCreate(
+            ['user_id' => $userId, 'household_id' => $householdId, 'signal_kind' => $kind],
+            ['snoozed_until' => now()->addDays($days)],
+        );
+        unset($this->snoozes, $this->total);
+    }
+
+    public function unsnoozeSignal(string $kind): void
+    {
+        $userId = auth()->id();
+        $householdId = CurrentHousehold::id();
+        if ($userId === null || $householdId === null) {
+            return;
+        }
+
+        RadarSnooze::where('user_id', $userId)
+            ->where('household_id', $householdId)
+            ->where('signal_kind', $kind)
+            ->delete();
+        unset($this->snoozes, $this->total);
+    }
+
     #[Computed]
     public function overdueTasks(): int
     {
@@ -391,32 +495,15 @@ new class extends Component
     #[Computed]
     public function total(): int
     {
-        return $this->overdueTasks
-            + $this->unreconciled
-            + $this->overdueBills
-            + $this->pendingReminders
-            + $this->trialsEndingSoon
-            + $this->autorenewingContractsEndingSoon
-            + $this->giftCardsExpiringSoon
-            + $this->domainsExpiringSoon
-            + $this->taxPaymentsDueSoon
-            + $this->billsInbox
-            + $this->unprocessedInventory
-            + $this->budgetEnvelopesAtRisk
-            + $this->spendingAnomalies
-            + $this->savingsGoalsReadyToClose
-            + $this->unfinishedMorningRituals
-            + $this->unfinishedEveningRituals
-            + $this->expiringPetVaccinations
-            + $this->overduePetCheckups
-            + $this->expiringPetLicenses
-            + $this->decisionFollowUpsDue
-            + $this->goalsBehindPace
-            + $this->goalsStale
-            + $this->integrationsNeedingReconnect
-            + $this->vehicleServicesDueSoon
-            + $this->listingsExpiringSoon
-            + $this->petPreventiveCareDueSoon;
+        $sum = 0;
+        foreach ($this->signalCounts as $kind => $count) {
+            if ($this->isSnoozed($kind)) {
+                continue;
+            }
+            $sum += $count;
+        }
+
+        return $sum;
     }
 };
 ?>
@@ -430,207 +517,78 @@ new class extends Component
     </div>
 
     @if ($this->total === 0)
-        <div class="py-6 text-center text-xs text-neutral-600">Nothing is waiting on you.</div>
+        <div class="py-6 text-center text-xs text-neutral-600">{{ __('Nothing is waiting on you.') }}</div>
     @else
+        @php
+            // Per-signal tile specs — one source of truth for label, color,
+            // optional href, and kind (used by snooze + future severity).
+            $tiles = [
+                ['kind' => 'overdue_tasks', 'label' => __('Overdue tasks'), 'color' => 'text-amber-400'],
+                ['kind' => 'overdue_bills', 'label' => __('Overdue bills'), 'color' => 'text-rose-400'],
+                ['kind' => 'unreconciled', 'label' => __('Unreconciled transactions'), 'color' => 'text-neutral-400'],
+                ['kind' => 'pending_reminders', 'label' => __('Due reminders'), 'color' => 'text-amber-400'],
+                ['kind' => 'trials_ending_soon', 'label' => __('Trials ending ≤ 7d'), 'color' => 'text-rose-400'],
+                ['kind' => 'autorenewing_contracts_ending_soon', 'label' => __('Auto-renewing ≤ 14d'), 'color' => 'text-amber-400', 'href' => route('relationships.contracts')],
+                ['kind' => 'gift_cards_expiring_soon', 'label' => __('Gift cards expiring ≤ 30d'), 'color' => 'text-amber-400'],
+                ['kind' => 'domains_expiring_soon', 'label' => __('Domains expiring ≤ 30d'), 'color' => 'text-amber-400', 'href' => route('assets.domains', ['status' => 'expiring'])],
+                ['kind' => 'tax_payments_due_soon', 'label' => __('Estimated tax due ≤ 30d'), 'color' => 'text-rose-400', 'href' => route('fiscal.tax')],
+                ['kind' => 'bills_inbox', 'label' => __('Bills Inbox'), 'color' => 'text-sky-300', 'href' => route('fiscal.inbox')],
+                ['kind' => 'unprocessed_inventory', 'label' => __('Unprocessed inventory'), 'color' => 'text-amber-400', 'href' => route('assets.inventory', ['status' => 'unprocessed'])],
+                ['kind' => 'budget_envelopes_at_risk', 'label' => __('Envelopes ≥ 80% used'), 'color' => 'text-rose-400', 'href' => route('fiscal.budgets')],
+                ['kind' => 'spending_anomalies', 'label' => __('Unusual charges ≤ 7d'), 'color' => 'text-amber-400'],
+                ['kind' => 'savings_goals_ready_to_close', 'label' => __('Savings goals hit target'), 'color' => 'text-emerald-400', 'href' => route('fiscal.savings_goals')],
+                ['kind' => 'unfinished_morning_rituals', 'label' => __('Unfinished morning routine'), 'color' => 'text-amber-400', 'href' => route('life.checklists.today')],
+                ['kind' => 'unfinished_evening_rituals', 'label' => __('Unfinished evening routine'), 'color' => 'text-amber-400', 'href' => route('life.checklists.today')],
+                ['kind' => 'expiring_pet_vaccinations', 'label' => __('Pet vaccines expiring / expired'), 'color' => 'text-amber-400', 'href' => route('pets.index', ['tab' => 'vaccinations'])],
+                ['kind' => 'overdue_pet_checkups', 'label' => __('Overdue pet checkups'), 'color' => 'text-rose-400', 'href' => route('pets.index', ['tab' => 'checkups'])],
+                ['kind' => 'expiring_pet_licenses', 'label' => __('Pet licenses expiring ≤ 30d'), 'color' => 'text-amber-400', 'href' => route('pets.index', ['tab' => 'licenses', 'status' => 'expiring'])],
+                ['kind' => 'decision_follow_ups_due', 'label' => __('Decisions awaiting follow-up'), 'color' => 'text-amber-400', 'href' => route('life.decisions', ['status' => 'awaiting_followup'])],
+                ['kind' => 'goals_behind_pace', 'label' => __('Goals behind pace'), 'color' => 'text-amber-400', 'href' => route('life.goals', ['mode' => 'target', 'status' => 'active'])],
+                ['kind' => 'goals_stale', 'label' => __('Directions due for check-in'), 'color' => 'text-amber-400', 'href' => route('life.goals', ['mode' => 'direction', 'status' => 'active'])],
+                ['kind' => 'integrations_needing_reconnect', 'label' => __('Integrations need reconnection'), 'color' => 'text-rose-400', 'href' => route('profile').'#personal-integrations-heading'],
+                ['kind' => 'vehicle_services_due_soon', 'label' => __('Vehicle services due ≤ 30d'), 'color' => 'text-amber-400', 'href' => route('assets.vehicle_services')],
+                ['kind' => 'listings_expiring_soon', 'label' => __('Listings expiring ≤ 7d'), 'color' => 'text-amber-400', 'href' => route('assets.listings', ['status' => 'live'])],
+                ['kind' => 'pet_preventive_care_due_soon', 'label' => __('Pet preventive care due ≤ 14d'), 'color' => 'text-amber-400', 'href' => route('pets.index')],
+            ];
+            $counts = $this->signalCounts;
+            $snoozed = $this->snoozes;
+        @endphp
         <ul class="space-y-2 text-sm">
-            @if ($this->overdueTasks)
-                <li class="flex items-baseline justify-between">
-                    <span class="text-neutral-300">Overdue tasks</span>
-                    <span class="tabular-nums text-amber-400">{{ $this->overdueTasks }}</span>
-                </li>
-            @endif
-            @if ($this->overdueBills)
-                <li class="flex items-baseline justify-between">
-                    <span class="text-neutral-300">Overdue bills</span>
-                    <span class="tabular-nums text-rose-400">{{ $this->overdueBills }}</span>
-                </li>
-            @endif
-            @if ($this->unreconciled)
-                <li class="flex items-baseline justify-between">
-                    <span class="text-neutral-300">Unreconciled transactions</span>
-                    <span class="tabular-nums text-neutral-400">{{ $this->unreconciled }}</span>
-                </li>
-            @endif
-            @if ($this->pendingReminders)
-                <li class="flex items-baseline justify-between">
-                    <span class="text-neutral-300">Due reminders</span>
-                    <span class="tabular-nums text-amber-400">{{ $this->pendingReminders }}</span>
-                </li>
-            @endif
-            @if ($this->trialsEndingSoon)
-                <li class="flex items-baseline justify-between">
-                    <span class="text-neutral-300">Trials ending ≤ 7d</span>
-                    <span class="tabular-nums text-rose-400">{{ $this->trialsEndingSoon }}</span>
-                </li>
-            @endif
-            @if ($this->autorenewingContractsEndingSoon)
-                <li class="flex items-baseline justify-between">
-                    <a href="{{ route('relationships.contracts') }}" class="text-neutral-300 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">{{ __('Auto-renewing ≤ 14d') }}</a>
-                    <span class="tabular-nums text-amber-400">{{ $this->autorenewingContractsEndingSoon }}</span>
-                </li>
-            @endif
-            @if ($this->giftCardsExpiringSoon)
-                <li class="flex items-baseline justify-between">
-                    <span class="text-neutral-300">Gift cards expiring ≤ 30d</span>
-                    <span class="tabular-nums text-amber-400">{{ $this->giftCardsExpiringSoon }}</span>
-                </li>
-            @endif
-            @if ($this->domainsExpiringSoon)
-                <li class="flex items-baseline justify-between">
-                    <a href="{{ route('assets.domains', ['status' => 'expiring']) }}" class="text-neutral-300 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">{{ __('Domains expiring ≤ 30d') }}</a>
-                    <span class="tabular-nums text-amber-400">{{ $this->domainsExpiringSoon }}</span>
-                </li>
-            @endif
-            @if ($this->taxPaymentsDueSoon)
-                <li class="flex items-baseline justify-between">
-                    <a href="{{ route('fiscal.tax') }}" class="text-neutral-300 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">{{ __('Estimated tax due ≤ 30d') }}</a>
-                    <span class="tabular-nums text-rose-400">{{ $this->taxPaymentsDueSoon }}</span>
-                </li>
-            @endif
-            @if ($this->billsInbox)
-                <li class="flex items-baseline justify-between">
-                    <a href="{{ route('fiscal.inbox') }}" class="text-neutral-300 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">{{ __('Bills Inbox') }}</a>
-                    <span class="tabular-nums text-sky-300">{{ $this->billsInbox }}</span>
-                </li>
-            @endif
-            @if ($this->unprocessedInventory)
-                <li class="flex items-baseline justify-between">
-                    <a href="{{ route('assets.inventory', ['status' => 'unprocessed']) }}" class="text-neutral-300 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">{{ __('Unprocessed inventory') }}</a>
-                    <span class="tabular-nums text-amber-400">{{ $this->unprocessedInventory }}</span>
-                </li>
-            @endif
-            @if ($this->budgetEnvelopesAtRisk)
-                <li class="flex items-baseline justify-between">
-                    <a href="{{ route('fiscal.budgets') }}"
-                       class="text-neutral-300 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
-                        {{ __('Envelopes ≥ 80% used') }}
-                    </a>
-                    <span class="tabular-nums text-rose-400">{{ $this->budgetEnvelopesAtRisk }}</span>
-                </li>
-            @endif
-            @if ($this->spendingAnomalies)
-                <li class="flex items-baseline justify-between">
-                    <span class="text-neutral-300">{{ __('Unusual charges ≤ 7d') }}</span>
-                    <span class="tabular-nums text-amber-400">{{ $this->spendingAnomalies }}</span>
-                </li>
-            @endif
-            @if ($this->savingsGoalsReadyToClose)
-                <li class="flex items-baseline justify-between">
-                    <a href="{{ route('fiscal.savings_goals') }}"
-                       class="text-neutral-300 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
-                        {{ __('Savings goals hit target') }}
-                    </a>
-                    <span class="tabular-nums text-emerald-400">{{ $this->savingsGoalsReadyToClose }}</span>
-                </li>
-            @endif
-            @if ($this->unfinishedMorningRituals)
-                <li class="flex items-baseline justify-between">
-                    <a href="{{ route('life.checklists.today') }}"
-                       class="text-neutral-300 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
-                        {{ __('Unfinished morning routine') }}
-                    </a>
-                    <span class="tabular-nums text-amber-400">{{ $this->unfinishedMorningRituals }}</span>
-                </li>
-            @endif
-            @if ($this->unfinishedEveningRituals)
-                <li class="flex items-baseline justify-between">
-                    <a href="{{ route('life.checklists.today') }}"
-                       class="text-neutral-300 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
-                        {{ __('Unfinished evening routine') }}
-                    </a>
-                    <span class="tabular-nums text-amber-400">{{ $this->unfinishedEveningRituals }}</span>
-                </li>
-            @endif
-            @if ($this->expiringPetVaccinations)
-                <li class="flex items-baseline justify-between">
-                    <a href="{{ route('pets.index', ['tab' => 'vaccinations']) }}"
-                       class="text-neutral-300 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
-                        {{ __('Pet vaccines expiring / expired') }}
-                    </a>
-                    <span class="tabular-nums text-amber-400">{{ $this->expiringPetVaccinations }}</span>
-                </li>
-            @endif
-            @if ($this->overduePetCheckups)
-                <li class="flex items-baseline justify-between">
-                    <a href="{{ route('pets.index', ['tab' => 'checkups']) }}"
-                       class="text-neutral-300 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
-                        {{ __('Overdue pet checkups') }}
-                    </a>
-                    <span class="tabular-nums text-rose-400">{{ $this->overduePetCheckups }}</span>
-                </li>
-            @endif
-            @if ($this->expiringPetLicenses)
-                <li class="flex items-baseline justify-between">
-                    <a href="{{ route('pets.index', ['tab' => 'licenses', 'status' => 'expiring']) }}"
-                       class="text-neutral-300 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
-                        {{ __('Pet licenses expiring ≤ 30d') }}
-                    </a>
-                    <span class="tabular-nums text-amber-400">{{ $this->expiringPetLicenses }}</span>
-                </li>
-            @endif
-            @if ($this->decisionFollowUpsDue)
-                <li class="flex items-baseline justify-between">
-                    <a href="{{ route('life.decisions', ['status' => 'awaiting_followup']) }}"
-                       class="text-neutral-300 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
-                        {{ __('Decisions awaiting follow-up') }}
-                    </a>
-                    <span class="tabular-nums text-amber-400">{{ $this->decisionFollowUpsDue }}</span>
-                </li>
-            @endif
-            @if ($this->goalsBehindPace)
-                <li class="flex items-baseline justify-between">
-                    <a href="{{ route('life.goals', ['mode' => 'target', 'status' => 'active']) }}"
-                       class="text-neutral-300 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
-                        {{ __('Goals behind pace') }}
-                    </a>
-                    <span class="tabular-nums text-amber-400">{{ $this->goalsBehindPace }}</span>
-                </li>
-            @endif
-            @if ($this->goalsStale)
-                <li class="flex items-baseline justify-between">
-                    <a href="{{ route('life.goals', ['mode' => 'direction', 'status' => 'active']) }}"
-                       class="text-neutral-300 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
-                        {{ __('Directions due for check-in') }}
-                    </a>
-                    <span class="tabular-nums text-amber-400">{{ $this->goalsStale }}</span>
-                </li>
-            @endif
-            @if ($this->integrationsNeedingReconnect)
-                <li class="flex items-baseline justify-between">
-                    <a href="{{ route('profile') }}#personal-integrations-heading"
-                       class="text-neutral-300 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
-                        {{ __('Integrations need reconnection') }}
-                    </a>
-                    <span class="tabular-nums text-rose-400">{{ $this->integrationsNeedingReconnect }}</span>
-                </li>
-            @endif
-            @if ($this->vehicleServicesDueSoon)
-                <li class="flex items-baseline justify-between">
-                    <a href="{{ route('assets.vehicle_services') }}"
-                       class="text-neutral-300 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
-                        {{ __('Vehicle services due ≤ 30d') }}
-                    </a>
-                    <span class="tabular-nums text-amber-400">{{ $this->vehicleServicesDueSoon }}</span>
-                </li>
-            @endif
-            @if ($this->listingsExpiringSoon)
-                <li class="flex items-baseline justify-between">
-                    <a href="{{ route('assets.listings', ['status' => 'live']) }}"
-                       class="text-neutral-300 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
-                        {{ __('Listings expiring ≤ 7d') }}
-                    </a>
-                    <span class="tabular-nums text-amber-400">{{ $this->listingsExpiringSoon }}</span>
-                </li>
-            @endif
-            @if ($this->petPreventiveCareDueSoon)
-                <li class="flex items-baseline justify-between">
-                    <a href="{{ route('pets.index') }}"
-                       class="text-neutral-300 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
-                        {{ __('Pet preventive care due ≤ 14d') }}
-                    </a>
-                    <span class="tabular-nums text-amber-400">{{ $this->petPreventiveCareDueSoon }}</span>
-                </li>
-            @endif
+            @foreach ($tiles as $t)
+                @php($count = $counts[$t['kind']] ?? 0)
+                @if ($count > 0 && ! array_key_exists($t['kind'], $snoozed))
+                    <x-radar.tile
+                        :kind="$t['kind']"
+                        :label="$t['label']"
+                        :count="$count"
+                        :color="$t['color']"
+                        :href="$t['href'] ?? null" />
+                @endif
+            @endforeach
         </ul>
+
+        @if (count($snoozed) > 0)
+            <details class="mt-4 text-xs text-neutral-500">
+                <summary class="cursor-pointer hover:text-neutral-300">
+                    {{ __(':n snoozed', ['n' => count($snoozed)]) }}
+                </summary>
+                <ul class="mt-2 space-y-1">
+                    @foreach ($snoozed as $kind => $until)
+                        @php($spec = collect($tiles)->firstWhere('kind', $kind))
+                        <li class="flex items-baseline justify-between gap-2">
+                            <span class="truncate text-neutral-500">{{ $spec['label'] ?? $kind }}</span>
+                            <span class="flex shrink-0 items-center gap-2">
+                                <span class="tabular-nums">{{ \App\Support\Formatting::date($until) }}</span>
+                                <button type="button"
+                                        wire:click="unsnoozeSignal('{{ $kind }}')"
+                                        class="text-neutral-500 hover:text-neutral-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                                    {{ __('wake') }}
+                                </button>
+                            </span>
+                        </li>
+                    @endforeach
+                </ul>
+            </details>
+        @endif
     @endif
 </div>
