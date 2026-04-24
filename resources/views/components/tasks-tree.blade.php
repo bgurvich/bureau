@@ -100,6 +100,61 @@ class extends Component
     }
 
     /**
+     * Nest a task as a subtask via drag: set parent_task_id to the
+     * target task's id. Also forces child.project_id to match the
+     * parent so nested subtasks don't drift across projects.
+     *
+     * Cycle prevention: the candidate parent must not be the child
+     * itself or any of its transitive children.
+     */
+    public function nestUnder(int $childId, int $parentId): void
+    {
+        if ($childId === $parentId) {
+            return;
+        }
+        $child = Task::find($childId);
+        $parent = Task::find($parentId);
+        if (! $child || ! $parent) {
+            return;
+        }
+        if (in_array($parentId, $this->descendantIdsOf($childId), true)) {
+            return;
+        }
+
+        $child->update([
+            'parent_task_id' => $parent->id,
+            'project_id' => $parent->project_id,
+        ]);
+
+        unset($this->projects, $this->tasks);
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    private function descendantIdsOf(int $rootId): array
+    {
+        $visited = [];
+        $queue = [$rootId];
+        $out = [];
+        while ($queue !== []) {
+            $batch = Task::whereIn('parent_task_id', $queue)->pluck('id')->all();
+            $queue = [];
+            foreach ($batch as $id) {
+                $id = (int) $id;
+                if (isset($visited[$id])) {
+                    continue;
+                }
+                $visited[$id] = true;
+                $out[] = $id;
+                $queue[] = $id;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
      * Reassign a project's goal via drag. goalKey is "goal:{id}" or
      * "no-goal" (drops onto the Without-goal section). Invalid keys
      * are ignored rather than silently clearing the goal.
@@ -558,12 +613,20 @@ class extends Component
                             @endif
                         </button>
                         @if (! $isDone && $task->state !== 'dropped')
+                            <div data-tt-parent-drop-id="{{ $task->id }}"
+                                 aria-hidden="true"
+                                 title="{{ __('Drop another task here to nest as subtask') }}"
+                                 class="hidden md:flex absolute inset-y-0 right-0 w-10 flex-col items-center justify-center border-l border-dashed border-neutral-800 bg-neutral-900/20 text-neutral-600 opacity-0 transition group-hover:opacity-70 hover:!opacity-100 hover:bg-sky-900/30 hover:text-sky-300">
+                                <svg class="h-3 w-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <path d="M3 2v4a2 2 0 0 0 2 2h5"/><path d="m7 5 3 3-3 3"/>
+                                </svg>
+                            </div>
                             <button type="button"
                                     x-data
                                     x-on:click.stop="$dispatch('subentity-edit-open', { type: 'task', id: null, parentId: {{ $task->id }} })"
                                     aria-label="{{ __('Add subtask') }}"
                                     title="{{ __('Add subtask') }}"
-                                    class="absolute right-3 top-2.5 rounded-md border border-neutral-800 bg-neutral-900/80 px-1.5 py-0.5 text-[10px] text-neutral-400 opacity-0 transition group-hover:opacity-100 hover:text-neutral-100 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                                    class="absolute right-12 top-2.5 rounded-md border border-neutral-800 bg-neutral-900/80 px-1.5 py-0.5 text-[10px] text-neutral-400 opacity-0 transition group-hover:opacity-100 hover:text-neutral-100 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
                                 + {{ __('sub') }}
                             </button>
                         @endif

@@ -91,6 +91,40 @@ it('moveProjectToGoal ignores a goal that doesn\'t exist', function () {
     expect($p->fresh()->goal_id)->toBe($g->id);
 });
 
+it('nestUnder sets parent_task_id + inherits parent project_id', function () {
+    authedInHousehold();
+    $p1 = Project::create(['name' => 'Alpha', 'slug' => 'alpha']);
+    $p2 = Project::create(['name' => 'Beta', 'slug' => 'beta']);
+    $parent = Task::create(['title' => 'Parent', 'state' => 'open', 'project_id' => $p1->id]);
+    $child = Task::create(['title' => 'Child', 'state' => 'open', 'project_id' => $p2->id]);
+
+    Livewire::test('tasks-tree')->call('nestUnder', $child->id, $parent->id);
+
+    $child->refresh();
+    expect($child->parent_task_id)->toBe($parent->id);
+    expect($child->project_id)->toBe($p1->id);
+});
+
+it('nestUnder refuses a self-parent', function () {
+    authedInHousehold();
+    $t = Task::create(['title' => 'T', 'state' => 'open']);
+
+    Livewire::test('tasks-tree')->call('nestUnder', $t->id, $t->id);
+
+    expect($t->fresh()->parent_task_id)->toBeNull();
+});
+
+it('nestUnder refuses a cycle (candidate parent is a descendant)', function () {
+    authedInHousehold();
+    $root = Task::create(['title' => 'Root', 'state' => 'open']);
+    $sub = Task::create(['title' => 'Sub', 'state' => 'open', 'parent_task_id' => $root->id]);
+
+    // Trying to make root a child of sub would close a cycle.
+    Livewire::test('tasks-tree')->call('nestUnder', $root->id, $sub->id);
+
+    expect($root->fresh()->parent_task_id)->toBeNull();
+});
+
 it('reorders within a project', function () {
     authedInHousehold();
     $p = Project::create(['name' => 'Alpha', 'slug' => 'alpha']);

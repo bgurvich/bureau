@@ -372,6 +372,15 @@ document.addEventListener('alpine:init', () => {
                 `[data-tt-task-id="${CSS.escape(treeDragId)}"]`,
             );
             if (!dragEl) return;
+            // Parent-drop zone: hovering the nest-here strip on a task
+            // is the "make subtask" intent. Don't mutate the DOM (no
+            // insertBefore); the zone's :hover style signals the user.
+            const parentZone = (evt.target as HTMLElement | null)?.closest<HTMLElement>(
+                '[data-tt-parent-drop-id]',
+            );
+            if (parentZone && parentZone.getAttribute('data-tt-parent-drop-id') !== treeDragId) {
+                return;
+            }
             const target = (evt.target as HTMLElement | null)?.closest<HTMLElement>('[data-tt-task-id]');
             if (target && target !== dragEl) {
                 const rect = target.getBoundingClientRect();
@@ -393,6 +402,24 @@ document.addEventListener('alpine:init', () => {
         onDrop(this: TaskTreeSortableData, evt: DragEvent): void {
             if (!treeDragId || projDragId) return;
             evt.preventDefault();
+            // Parent-drop takes priority: if the drop landed on a nest
+            // zone of some OTHER task, nest rather than re-position.
+            const parentZone = (evt.target as HTMLElement | null)?.closest<HTMLElement>(
+                '[data-tt-parent-drop-id]',
+            );
+            if (parentZone) {
+                const parentId = Number(parentZone.getAttribute('data-tt-parent-drop-id'));
+                const childId = Number(treeDragId);
+                treeDragCommitted = true;
+                treeDragId = null;
+                if (Number.isFinite(parentId) && Number.isFinite(childId) && parentId !== childId) {
+                    const nest = this.$wire['nestUnder'];
+                    if (typeof nest === 'function') {
+                        (nest as (...a: unknown[]) => unknown).call(this.$wire, childId, parentId);
+                    }
+                }
+                return;
+            }
             treeDragCommitted = true;
             const groupKey = this.$el.dataset.ttGroupKey ?? '';
             const taskIds = Array.from(
