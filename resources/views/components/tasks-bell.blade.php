@@ -87,7 +87,7 @@ new class extends Component
         </svg>
         @if ($this->acuteCount > 0)
             <span aria-hidden="true"
-                  class="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold leading-none text-neutral-950 tabular-nums">
+                  class="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-black leading-none text-black tabular-nums">
                 {{ $this->acuteCount > 99 ? '99+' : $this->acuteCount }}
             </span>
         @endif
