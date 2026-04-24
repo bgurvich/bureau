@@ -31,7 +31,6 @@ use App\Models\Project;
 use App\Models\Property;
 use App\Models\RecurringProjection;
 use App\Models\RecurringRule;
-use App\Models\Reminder;
 use App\Models\SavingsGoal;
 use App\Models\Subscription;
 use App\Models\TagRule;
@@ -393,7 +392,6 @@ new class extends Component
                 'vehicle' => Vehicle::findOrFail($this->id)->delete(),
                 'pet' => Pet::findOrFail($this->id)->delete(),
                 'inventory' => InventoryItem::findOrFail($this->id)->delete(),
-                'reminder' => Reminder::findOrFail($this->id)->delete(),
                 'savings_goal' => SavingsGoal::findOrFail($this->id)->delete(),
                 'budget_cap' => BudgetCap::findOrFail($this->id)->delete(),
                 'category_rule' => CategoryRule::findOrFail($this->id)->delete(),
@@ -548,7 +546,6 @@ new class extends Component
             'listing' => __('listing'),
             'pet_preventive_care' => __('preventive care'),
             'body_measurement' => __('body measurement'),
-            'reminder' => __('reminder'),
             'appointment' => __('appointment'),
             'subscription' => __('subscription'),
             'savings_goal' => __('savings goal'),

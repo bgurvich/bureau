@@ -115,7 +115,7 @@ const TYPE_SHORTCUTS: Record<string, string> = {
     i: 'inventory',
     s: 'vehicle_service_log',
     o: 'online_account',
-    r: 'reminder',
+    r: 'project',
     e: 'appointment',
     g: 'savings_goal',
     u: 'subscription',

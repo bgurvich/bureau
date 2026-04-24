@@ -1,42 +1,44 @@
 @php
+    // Groups mirror the sidebar nav: Productivity → Schedule →
+    // Checklists → Logs → Contacts → Assets → Records → Money →
+    // Health. Reminder is NOT user-authored — it's an internal
+    // notification queue emitted by the system (savings milestones,
+    // expiry warnings), so it's absent here. "I want to remember"
+    // lands on Task with a due date.
     $pickerGroups = [
-        __('Money') => [
-            ['transaction', __('Transaction'), 'X'],
-            ['bill', __('Bill'), 'B'],
-            ['account', __('Account'), 'A'],
-            ['subscription', __('Subscription'), 'U'],
-            ['budget_cap', __('Budget'), null],
-            ['savings_goal', __('Savings goal'), 'G'],
-            ['category_rule', __('Category rule'), null],
-            ['tag_rule', __('Tag rule'), null],
-            ['transfer', __('Transfer'), null],
-        ],
-        __('Life') => [
+        __('Productivity') => [
             ['task', __('Task'), 'T'],
-            ['note', __('Note'), 'N'],
-            ['journal_entry', __('Journal'), 'J'],
-            ['decision', __('Decision'), 'Z'],
+            ['project', __('Project'), 'R'],
             ['goal', __('Goal'), 'Q'],
-            ['media_log_entry', __('Reading / watching'), 'W'],
-            ['food_entry', __('Food entry'), 'F'],
-            ['contact', __('Contact'), 'C'],
+        ],
+        __('Schedule') => [
             ['meeting', __('Meeting'), 'M'],
-            ['reminder', __('Reminder'), 'R'],
+            ['appointment', __('Appointment'), 'E'],
+        ],
+        __('Checklists') => [
             ['checklist_template', __('Checklist'), 'K'],
         ],
-        __('Commitments') => [
-            ['contract', __('Contract'), null],
-            ['insurance', __('Insurance policy'), null],
+        __('Logs') => [
+            ['journal_entry', __('Journal'), 'J'],
+            ['decision', __('Decision'), 'Z'],
+            ['media_log_entry', __('Reading / watching'), 'W'],
+            ['food_entry', __('Food entry'), 'F'],
+            ['body_measurement', __('Body measurement'), null],
+            ['time_entry', __('Time entry'), 'L'],
+            ['note', __('Note'), 'N'],
+        ],
+        __('Contacts') => [
+            ['contact', __('Contact'), 'C'],
         ],
         __('Assets') => [
             ['property', __('Property'), 'H'],
             ['vehicle', __('Vehicle'), 'V'],
+            ['vehicle_service_log', __('Vehicle service'), 'S'],
             ['inventory', __('Inventory item'), 'I'],
             ['location', __('Location'), null],
             ['listing', __('Listing'), null],
             ['domain', __('Domain'), null],
             ['meter_reading', __('Meter reading'), 'Y'],
-            ['vehicle_service_log', __('Vehicle service'), 'S'],
         ],
         __('Records') => [
             ['document', __('Document'), 'D'],
@@ -44,22 +46,29 @@
             ['physical_mail', __('Post'), 'P'],
             [null, __('Media / scan'), null],
         ],
-        __('Health') => [
-            ['appointment', __('Appointment'), 'E'],
-            ['body_measurement', __('Body measurement'), null],
-            ['pet_license', __('Pet license'), null],
-            ['pet_preventive_care', __('Pet preventive care'), null],
-            [null, __('Health provider'), null],
-            [null, __('Prescription'), null],
-        ],
-        __('Time') => [
-            ['project', __('Project'), null],
-            ['time_entry', __('Time entry'), 'L'],
+        __('Money') => [
+            ['transaction', __('Transaction'), 'X'],
+            ['bill', __('Bill'), 'B'],
+            ['account', __('Account'), 'A'],
+            ['subscription', __('Subscription'), 'U'],
+            ['savings_goal', __('Savings goal'), 'G'],
+            ['budget_cap', __('Budget'), null],
+            ['transfer', __('Transfer'), null],
+            ['contract', __('Contract'), null],
+            ['insurance', __('Insurance policy'), null],
+            ['category_rule', __('Category rule'), null],
+            ['tag_rule', __('Tag rule'), null],
         ],
         __('Taxes') => [
             ['tax_year', __('Tax year'), null],
             ['tax_document', __('Tax document'), null],
             ['tax_estimated_payment', __('Estimated payment'), null],
+        ],
+        __('Health') => [
+            ['pet_license', __('Pet license'), null],
+            ['pet_preventive_care', __('Pet preventive care'), null],
+            [null, __('Health provider'), null],
+            [null, __('Prescription'), null],
         ],
     ];
 @endphp
