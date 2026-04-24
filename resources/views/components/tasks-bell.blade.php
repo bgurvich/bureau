@@ -101,9 +101,19 @@ new class extends Component
         class="absolute right-0 z-30 mt-2 w-80 overflow-hidden rounded-md border border-neutral-800 bg-neutral-900 shadow-xl"
     >
         <header class="border-b border-neutral-800 px-4 py-2.5">
-            <div class="flex items-baseline justify-between">
+            <div class="flex items-center justify-between">
                 <span class="text-sm font-medium text-neutral-100">{{ __('Tasks') }}</span>
-                <span class="text-[11px] text-neutral-500 tabular-nums">{{ __(':n open', ['n' => $this->openCount]) }}</span>
+                <div class="flex items-center gap-2">
+                    <span class="text-[11px] text-neutral-500 tabular-nums">{{ __(':n open', ['n' => $this->openCount]) }}</span>
+                    <button type="button"
+                            @click="open = false; $dispatch('tasks-bulk-open')"
+                            aria-label="{{ __('Bulk add tasks') }}"
+                            title="{{ __('Bulk add tasks') }}"
+                            class="inline-flex h-6 items-center gap-1 rounded border border-neutral-700 px-2 text-[11px] font-medium text-neutral-300 hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                        <span aria-hidden="true">+</span>
+                        <span>{{ __('Bulk') }}</span>
+                    </button>
+                </div>
             </div>
         </header>
 
