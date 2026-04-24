@@ -140,6 +140,7 @@
                                 <path d="M8 3v10M3 8h10"/>
                             </svg>
                         </button>
+                        <livewire:tasks-bell />
                         <livewire:alerts-bell />
                         <livewire:user-menu />
                     @endauth
