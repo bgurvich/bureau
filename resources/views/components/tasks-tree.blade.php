@@ -412,6 +412,7 @@ class extends Component
 @endphp
 
 <div class="space-y-5">
+    <span id="project-drag-hint" class="sr-only">{{ __('Drag this project header onto a goal section to move it.') }}</span>
     <header class="flex items-baseline justify-between gap-4">
         <div>
             <h2 class="text-base font-semibold text-neutral-100">{{ __('Tasks tree') }}</h2>
@@ -502,23 +503,21 @@ class extends Component
                          @dragover="onDragOver($event)"
                          @drop="onDrop($event)"
                          @dragend="onDragEnd()">
-                    <header class="flex items-baseline justify-between border-b border-neutral-800/60 px-4 py-2">
-                        <h3 id="group-{{ $groupKey }}-h" class="flex items-center gap-2 text-sm font-medium text-neutral-200">
+                    {{-- Whole header is the drag target for moving the
+                         project between goals. The nested project-name
+                         button still handles click → inspector because
+                         clicks and drags are distinct browser events.
+                         Unassigned group (no $project) stays static —
+                         nothing to drag. --}}
+                    <header class="flex items-baseline justify-between border-b border-neutral-800/60 px-4 py-2 {{ $project ? 'cursor-grab active:cursor-grabbing' : '' }}"
                             @if ($project)
-                                <button type="button"
-                                        x-data="projectDragHandle"
-                                        draggable="true"
-                                        @dragstart="onDragStart({{ $project->id }}, $event)"
-                                        @dragend="onDragEnd()"
-                                        aria-label="{{ __('Drag project') }}"
-                                        title="{{ __('Drag to move between goals') }}"
-                                        class="flex h-4 w-4 shrink-0 items-center justify-center text-neutral-500 hover:text-neutral-300 cursor-grab active:cursor-grabbing focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
-                                    <svg class="h-3 w-3" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
-                                        <circle cx="4" cy="2.5" r="1"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="9.5" r="1"/>
-                                        <circle cx="8" cy="2.5" r="1"/><circle cx="8" cy="6" r="1"/><circle cx="8" cy="9.5" r="1"/>
-                                    </svg>
-                                </button>
-                            @endif
+                                x-data="projectDragHandle"
+                                draggable="true"
+                                @dragstart="onDragStart({{ $project->id }}, $event)"
+                                @dragend="onDragEnd()"
+                                aria-describedby="project-drag-hint"
+                            @endif>
+                        <h3 id="group-{{ $groupKey }}-h" class="flex items-center gap-2 text-sm font-medium text-neutral-200">
                             @if ($project && $project->color)
                                 <span aria-hidden="true" class="h-2.5 w-2.5 rounded-full" style="background-color: {{ $project->color }}"></span>
                             @endif
