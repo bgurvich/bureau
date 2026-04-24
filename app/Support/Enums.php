@@ -448,6 +448,48 @@ class Enums
     }
 
     /**
+     * Pet preventive-care kinds — monthly heartworm, flea/tick,
+     * quarterly dewormer, annual dental, grooming + nail-trim cadences.
+     * Free strings so one-off kinds land without migrations.
+     *
+     * @return array<string, string>
+     */
+    public static function petPreventiveCareKinds(): array
+    {
+        return [
+            'heartworm' => __('Heartworm'),
+            'flea_tick' => __('Flea / tick'),
+            'dewormer' => __('Dewormer'),
+            'dental' => __('Dental'),
+            'nail_trim' => __('Nail trim'),
+            'grooming' => __('Grooming'),
+            'ear_clean' => __('Ear clean'),
+            'other' => __('Other'),
+        ];
+    }
+
+    /**
+     * Default interval in days per preventive-care kind. Null = one-off
+     * (no auto-fill). Form uses these to prefill interval + next_due_on
+     * when the user picks a kind.
+     *
+     * @return array<string, int|null>
+     */
+    public static function petPreventiveCareDefaultIntervals(): array
+    {
+        return [
+            'heartworm' => 30,
+            'flea_tick' => 30,
+            'dewormer' => 90,
+            'dental' => 365,
+            'nail_trim' => 45,
+            'grooming' => 45,
+            'ear_clean' => 30,
+            'other' => null,
+        ];
+    }
+
+    /**
      * Listing lifecycle state. draft → live → sold / expired / cancelled.
      *
      * @return array<string, string>

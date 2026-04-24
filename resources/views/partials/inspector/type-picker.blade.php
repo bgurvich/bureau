@@ -47,6 +47,7 @@
             ['appointment', __('Appointment'), 'E'],
             ['body_measurement', __('Body measurement'), null],
             ['pet_license', __('Pet license'), null],
+            ['pet_preventive_care', __('Pet preventive care'), null],
             [null, __('Health provider'), null],
             [null, __('Prescription'), null],
         ],

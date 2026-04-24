@@ -12,6 +12,7 @@ use App\Models\Listing;
 use App\Models\Media;
 use App\Models\PetCheckup;
 use App\Models\PetLicense;
+use App\Models\PetPreventiveCare;
 use App\Models\PetVaccination;
 use App\Models\RecurringProjection;
 use App\Models\Reminder;
@@ -330,6 +331,29 @@ new class extends Component
     }
 
     /**
+     * Pet preventive-care rows whose next_due_on is within 14 days
+     * (or past). Deduped by (pet, kind) so a stale older log doesn't
+     * keep firing after a newer dose supersedes it.
+     */
+    #[Computed]
+    public function petPreventiveCareDueSoon(): int
+    {
+        // Outer table stays un-aliased so BelongsToHousehold's
+        // pet_preventive_care.household_id scope still binds. The
+        // MAX subquery takes its own alias to avoid the self-join
+        // ambiguity.
+        return PetPreventiveCare::query()
+            ->whereNotNull('next_due_on')
+            ->where('next_due_on', '<=', now()->addDays(14)->toDateString())
+            ->whereRaw('pet_preventive_care.applied_on = (
+                SELECT MAX(inner_ppc.applied_on) FROM pet_preventive_care AS inner_ppc
+                WHERE inner_ppc.pet_id = pet_preventive_care.pet_id
+                  AND inner_ppc.kind = pet_preventive_care.kind
+            )')
+            ->count();
+    }
+
+    /**
      * Live listings whose expiry window is within 7 days (or past).
      * Prompts the owner to either relist / delist / lower price
      * before the platform auto-expires the posting.
@@ -391,7 +415,8 @@ new class extends Component
             + $this->goalsStale
             + $this->integrationsNeedingReconnect
             + $this->vehicleServicesDueSoon
-            + $this->listingsExpiringSoon;
+            + $this->listingsExpiringSoon
+            + $this->petPreventiveCareDueSoon;
     }
 };
 ?>
@@ -595,6 +620,15 @@ new class extends Component
                         {{ __('Listings expiring ≤ 7d') }}
                     </a>
                     <span class="tabular-nums text-amber-400">{{ $this->listingsExpiringSoon }}</span>
+                </li>
+            @endif
+            @if ($this->petPreventiveCareDueSoon)
+                <li class="flex items-baseline justify-between">
+                    <a href="{{ route('pets.index') }}"
+                       class="text-neutral-300 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                        {{ __('Pet preventive care due ≤ 14d') }}
+                    </a>
+                    <span class="tabular-nums text-amber-400">{{ $this->petPreventiveCareDueSoon }}</span>
                 </li>
             @endif
         </ul>

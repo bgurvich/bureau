@@ -24,6 +24,7 @@ use App\Models\Note;
 use App\Models\OnlineAccount;
 use App\Models\Pet;
 use App\Models\PetLicense;
+use App\Models\PetPreventiveCare;
 use App\Models\PhysicalMail;
 use App\Models\Project;
 use App\Models\Property;
@@ -343,6 +344,7 @@ new class extends Component
                 'goal' => Goal::findOrFail($this->id)->delete(),
                 'appointment' => Appointment::findOrFail($this->id)->delete(),
                 'listing' => Listing::findOrFail($this->id)->delete(),
+                'pet_preventive_care' => PetPreventiveCare::findOrFail($this->id)->delete(),
                 'body_measurement' => BodyMeasurement::findOrFail($this->id)->delete(),
                 default => null,
             };
@@ -381,6 +383,7 @@ new class extends Component
         'pet_vaccination' => ['petId' => 'subentityParentId'],
         'pet_checkup' => ['petId' => 'subentityParentId'],
         'pet_license' => ['petId' => 'subentityParentId'],
+        'pet_preventive_care' => ['parentId' => 'subentityParentId'],
         'tax_document' => ['parentId' => 'subentityParentId', 'mediaId' => 'source_media_id'],
         'tax_estimated_payment' => ['parentId' => 'subentityParentId'],
         'meter_reading' => ['parentId' => 'subentityParentId'],
@@ -472,6 +475,7 @@ new class extends Component
             'decision' => __('decision'),
             'goal' => __('goal'),
             'listing' => __('listing'),
+            'pet_preventive_care' => __('preventive care'),
             'body_measurement' => __('body measurement'),
             'reminder' => __('reminder'),
             'appointment' => __('appointment'),
