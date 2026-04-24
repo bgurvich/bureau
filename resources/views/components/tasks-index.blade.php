@@ -183,10 +183,6 @@ class extends Component
             <p class="mt-1 text-xs text-neutral-500">{{ __('Open work, sorted by priority and due date.') }}</p>
         </div>
         <div class="flex items-center gap-2">
-            <a href="{{ route('calendar.tasks.tree') }}"
-               class="rounded-md border border-neutral-800 bg-neutral-900 px-3 py-1.5 text-xs text-neutral-300 hover:border-neutral-600 hover:text-neutral-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
-                {{ __('Tree view') }}
-            </a>
             <button type="button" wire:click="toggleBulk"
                     aria-expanded="{{ $bulkOpen ? 'true' : 'false' }}"
                     aria-controls="task-bulk-panel"

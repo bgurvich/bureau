@@ -6,9 +6,11 @@ use App\Models\Task;
 use App\Support\Formatting;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Str;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\On;
+use Livewire\Attributes\Url;
 use Livewire\Component;
 
 /**
@@ -25,10 +27,61 @@ new
 #[Layout('components.layouts.app', ['title' => 'Tasks tree'])]
 class extends Component
 {
+    #[Url(as: 'goal')]
+    public string $goalFilter = '';
+
+    #[Url(as: 'project')]
+    public string $projectFilter = '';
+
     #[On('inspector-saved')]
     public function refresh(): void
     {
-        unset($this->projects, $this->tasks);
+        unset($this->projects, $this->tasks, $this->goals);
+    }
+
+    public function createGoal(string $title, ?string $modelKey = null): void
+    {
+        $title = trim($title);
+        if ($title === '') {
+            return;
+        }
+        $goal = Goal::firstOrCreate(
+            ['title' => $title, 'status' => 'active'],
+            ['mode' => 'direction', 'category' => 'other']
+        );
+        $this->goalFilter = (string) $goal->id;
+        unset($this->goals);
+        $this->dispatch(
+            'ss-option-added',
+            model: $modelKey ?: 'goalFilter',
+            id: $goal->id,
+            label: $goal->title,
+        );
+    }
+
+    public function createProject(string $name, ?string $modelKey = null): void
+    {
+        $name = trim($name);
+        if ($name === '') {
+            return;
+        }
+        $payload = [
+            'name' => $name,
+            'slug' => Str::slug($name) ?: Str::random(8),
+            'user_id' => auth()->id(),
+        ];
+        if ($this->goalFilter !== '' && ctype_digit($this->goalFilter)) {
+            $payload['goal_id'] = (int) $this->goalFilter;
+        }
+        $project = Project::create($payload);
+        $this->projectFilter = (string) $project->id;
+        unset($this->projects);
+        $this->dispatch(
+            'ss-option-added',
+            model: $modelKey ?: 'projectFilter',
+            id: $project->id,
+            label: $project->name,
+        );
     }
 
     public function toggle(int $id): void
@@ -106,14 +159,43 @@ class extends Component
             ->get(['id', 'title']);
     }
 
+    /**
+     * Project IDs whose goal matches the active goal filter (or all,
+     * when no goal filter is set). Used both to narrow the project
+     * sections rendered and to gate task rows by project_id.
+     *
+     * @return array<int, int>
+     */
+    private function projectIdsInGoal(): array
+    {
+        if ($this->goalFilter === '' || ! ctype_digit($this->goalFilter)) {
+            return [];
+        }
+
+        return Project::where('goal_id', (int) $this->goalFilter)
+            ->pluck('id')->map(fn ($v) => (int) $v)->all();
+    }
+
     /** @return Collection<int, Task> */
     #[Computed]
     public function tasks(): Collection
     {
-        return Task::query()
+        $q = Task::query()
             ->with(['tags:id,name,slug', 'predecessors:id,state'])
-            ->where('state', '!=', 'done')
-            ->orderBy('project_id')
+            ->where('state', '!=', 'done');
+
+        if ($this->projectFilter !== '' && ctype_digit($this->projectFilter)) {
+            $q->where('project_id', (int) $this->projectFilter);
+        } elseif ($this->goalFilter !== '' && ctype_digit($this->goalFilter)) {
+            $projectIds = $this->projectIdsInGoal();
+            if ($projectIds === []) {
+                $q->whereRaw('1 = 0'); // no projects on this goal → empty list
+            } else {
+                $q->whereIn('project_id', $projectIds);
+            }
+        }
+
+        return $q->orderBy('project_id')
             ->orderBy('position')
             ->orderBy('priority')
             ->orderByRaw('due_at IS NULL, due_at')
@@ -261,13 +343,39 @@ class extends Component
             <p class="mt-1 text-xs text-neutral-500">{{ __('Grouped by project; subtasks nest under their parent.') }}</p>
         </div>
         <div class="flex items-center gap-2">
-            <a href="{{ route('calendar.tasks') }}"
-               class="rounded-md border border-neutral-800 bg-neutral-900 px-3 py-1.5 text-xs text-neutral-300 hover:border-neutral-600 hover:text-neutral-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
-                {{ __('Flat list') }}
-            </a>
-            <x-ui.new-record-button type="task" :label="__('New task')" />
+            <x-ui.new-record-button type="task" :label="__('New task')" shortcut="T" />
         </div>
     </header>
+
+    <form wire:submit.prevent class="flex flex-wrap items-end gap-3 rounded-lg border border-neutral-800 bg-neutral-900/40 p-4" aria-label="{{ __('Tree filters') }}">
+        <div class="min-w-[200px]">
+            <label for="tt-goal" class="block text-[10px] uppercase tracking-wider text-neutral-500">{{ __('Goal') }}</label>
+            <x-ui.searchable-select
+                id="tt-goal"
+                model="goalFilter"
+                :options="['' => '— '.__('any').' —'] + $this->goals->mapWithKeys(fn ($g) => [$g->id => $g->title])->all()"
+                placeholder="{{ __('— any —') }}"
+                allow-create
+                create-method="createGoal" />
+        </div>
+        <div class="min-w-[200px]">
+            <label for="tt-project" class="block text-[10px] uppercase tracking-wider text-neutral-500">{{ __('Project') }}</label>
+            <x-ui.searchable-select
+                id="tt-project"
+                model="projectFilter"
+                :options="['' => '— '.__('any').' —'] + $this->projects->mapWithKeys(fn ($p) => [$p->id => $p->name])->all()"
+                placeholder="{{ __('— any —') }}"
+                allow-create
+                create-method="createProject" />
+        </div>
+        @if ($goalFilter !== '' || $projectFilter !== '')
+            <button type="button"
+                    wire:click="$set('goalFilter', ''); $set('projectFilter', '')"
+                    class="rounded-md border border-neutral-800 bg-neutral-900 px-3 py-1.5 text-xs text-neutral-300 hover:border-neutral-600 hover:text-neutral-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                {{ __('Clear') }}
+            </button>
+        @endif
+    </form>
 
     @foreach ($this->goalGroupedTree as $goalBlock)
         @php
