@@ -25,6 +25,7 @@
     x-on:dragover.prevent="onDragOver($event)"
     x-on:drop.prevent="onDrop()"
     x-on:dragend="onDragEnd()"
+    aria-description="{{ __('Draggable list. Grab a row and drop it to reorder.') }}"
     class="{{ $listClass }}"
     {{ $attributes->except('class') }}>
     {{ $slot }}
