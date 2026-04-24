@@ -3,8 +3,8 @@
     $modelClass = $this->adminModelMap()[0] ?? '';
     $typeSupportsMedia = $modelClass && method_exists($modelClass, 'media');
     // Allow attaching even before the record exists for types where create
-    // via photo is meaningful — inventory is the only one today, matching
-    // the mobile photo-first capture flow.
+    // via photo is meaningful — inventory / physical_mail / food_entry
+    // draft themselves through ensureDraftForPhoto() before the modal opens.
     $allowCreateWithPhoto = in_array($this->type, ['inventory', 'physical_mail', 'food_entry'], true);
     $canAttach = $typeSupportsMedia && ($this->id || $allowCreateWithPhoto);
 @endphp
@@ -17,29 +17,13 @@
         @endif
     </h4>
 
-    <div x-data="{ open: null, over: false }"
-         x-on:dragover.prevent="over = true"
-         x-on:dragleave.prevent="over = false"
-         x-on:drop.prevent="
-            over = false;
-            if (!$event.dataTransfer?.files?.length) return;
-            const dt = new DataTransfer();
-            for (const f of $event.dataTransfer.files) {
-                if (f.type.startsWith('image/')) dt.items.add(f);
-            }
-            if (!dt.files.length) return;
-            $refs.photoUpload.files = dt.files;
-            $refs.photoUpload.dispatchEvent(new Event('change', { bubbles: true }));
-         "
-         :class="over ? 'rounded-lg ring-2 ring-emerald-500/60 ring-offset-2 ring-offset-neutral-950' : ''"
-         class="transition">
+    <div x-data="{ open: null }">
         {{-- Thumbnails + the Add tile live in ONE flex-wrap row so the Add
-             tile sits next to the last thumbnail when there's space and wraps
-             to the next row only when the list overflows. The bare <li> at
-             the end has no data-item-key so Alpine's sortable ignores it.
-             The whole wrapper is a drop target — drop images anywhere in the
-             thumbnails area and they upload without needing to hit the Add
-             tile exactly. --}}
+             tile sits next to the last thumbnail when there's space and
+             wraps when the list overflows. The bare <li> at the end has
+             no data-item-key so Alpine's sortable ignores it. Clicking
+             "Add" opens the library modal — pick from existing or drop
+             new files to upload + attach in one step. --}}
         <x-ui.sortable-list reorder-method="reorderPhotos" class="flex flex-wrap gap-2">
             @foreach ($photos as $photo)
                 <x-ui.sortable-row :item-key="$photo->id" :no-handle="true"
@@ -69,32 +53,16 @@
             @endforeach
 
             <li>
-                <label :class="over ? 'border-emerald-500 text-emerald-300' : 'border-neutral-700 text-neutral-500'"
-                       class="flex h-16 w-16 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-md border-2 border-dashed transition-colors hover:border-neutral-500 hover:text-neutral-300 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-neutral-300"
-                       for="insp-photo-upload">
+                <button type="button"
+                        wire:click="openMediaLibrary"
+                        aria-label="{{ __('Add photo from library or upload') }}"
+                        class="flex h-16 w-16 flex-col items-center justify-center gap-0.5 rounded-md border-2 border-dashed border-neutral-700 text-neutral-500 transition-colors hover:border-neutral-500 hover:text-neutral-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
                     <svg class="h-4 w-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
                         <path d="M8 3v10M3 8h10" stroke-linecap="round"/>
                     </svg>
-                    <span x-text="over ? @js(__('Drop')) : @js(__('Add'))" class="text-[10px]">{{ __('Add') }}</span>
-                </label>
-                <input x-ref="photoUpload" id="insp-photo-upload" type="file" wire:model="photoUpload" accept="image/*" multiple class="sr-only" />
+                    <span class="text-[10px]">{{ __('Add') }}</span>
+                </button>
             </li>
-            @if ($this->id)
-                <li>
-                    <button type="button"
-                            x-on:click.stop="$dispatch('media-library-open', { type: @js($this->type), id: {{ $this->id }}, role: 'photo' })"
-                            aria-label="{{ __('Browse media library') }}"
-                            title="{{ __('Browse library') }}"
-                            class="flex h-16 w-16 flex-col items-center justify-center gap-0.5 rounded-md border-2 border-dashed border-neutral-700 text-neutral-500 transition-colors hover:border-neutral-500 hover:text-neutral-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
-                        <svg class="h-4 w-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-                            <rect x="2" y="3" width="12" height="10" rx="1"/>
-                            <circle cx="6" cy="7" r="1"/>
-                            <path d="m2 11 3-3 3 3 2-2 4 4"/>
-                        </svg>
-                        <span class="text-[10px]">{{ __('Library') }}</span>
-                    </button>
-                </li>
-            @endif
         </x-ui.sortable-list>
 
         <template x-teleport="body">
@@ -119,6 +87,4 @@
             </div>
         </template>
     </div>
-    @error('photoUpload')<div role="alert" class="mt-1 text-xs text-rose-400">{{ $message }}</div>@enderror
-    <div wire:loading wire:target="photoUpload,addPhoto" class="text-xs text-neutral-500">{{ __('Uploading…') }}</div>
 @endif

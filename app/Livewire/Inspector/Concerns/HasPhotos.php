@@ -8,6 +8,7 @@ use App\Models\Media;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
+use Livewire\Attributes\On;
 use Livewire\WithFileUploads;
 
 /**
@@ -169,5 +170,48 @@ trait HasPhotos
     protected function ensureDraftForPhoto(): void
     {
         // no-op
+    }
+
+    /**
+     * Opens the global media-library modal for the current record,
+     * creating a draft first if this is photo-first-capable (inventory,
+     * physical_mail, food_entry). Dispatched from the "Add" tile in
+     * the shared photos partial — consolidating all media attach paths
+     * through the library so every upload is searchable later.
+     */
+    public function openMediaLibrary(string $role = 'photo'): void
+    {
+        if (! $this->id) {
+            $this->ensureDraftForPhoto();
+        }
+        if (! $this->id) {
+            return;
+        }
+
+        $this->dispatch(
+            'media-library-open',
+            type: (string) $this->type,
+            id: (int) $this->id,
+            role: $role,
+        );
+    }
+
+    /**
+     * Modal emits this after attaching — any inspector form using
+     * HasPhotos picks it up and re-renders so the new thumbnails
+     * show up without the user having to close/reopen the drawer.
+     * The payload is checked so an attach aimed at a different record
+     * doesn't trigger a needless re-render here.
+     */
+    #[On('media-attached')]
+    public function onMediaAttached(?string $type = null, ?int $id = null): void
+    {
+        if ($id === null || $this->id === null) {
+            return;
+        }
+        if ((int) $id !== (int) $this->id) {
+            return;
+        }
+        // No-op body — the render pass re-queries inspectorPhotos().
     }
 }

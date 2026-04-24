@@ -127,6 +127,16 @@ new class extends Component
 
     public ?int $ambiguousTransactionId = null;
 
+    /**
+     * Media ids attached via the Library modal since this inspector
+     * session opened. Cleared on successful save; on a close-without-
+     * save the shell detaches them so a half-edited record doesn't
+     * end up with orphan attachments the user didn't commit.
+     *
+     * @var array<int, int>
+     */
+    public array $sessionAttachedMediaIds = [];
+
     public function mount(bool $asModal = false): void
     {
         $this->asModal = $asModal;
@@ -172,6 +182,9 @@ new class extends Component
     #[On('inspector-form-saved')]
     public function onFormSaved(?string $type = null, ?int $id = null): void
     {
+        // Save committed — any session-attached media is now part of
+        // the saved record, so the abort-path cleanup doesn't apply.
+        $this->sessionAttachedMediaIds = [];
         // When the modal instance hosts an extracted form, its save
         // fires inspector-form-saved. Forward here so searchable-select
         // pickers hear a consistent signal regardless of which path ran.
@@ -180,6 +193,26 @@ new class extends Component
         }
         if ($this->open) {
             $this->close();
+        }
+    }
+
+    /**
+     * Records the ids the media-library modal just attached, keyed to
+     * the session so a subsequent close-without-save can roll them back.
+     *
+     * @param  array<int, int>  $mediaIds
+     */
+    #[On('media-attached')]
+    public function onMediaAttached(?string $type = null, ?int $id = null, array $mediaIds = []): void
+    {
+        if ($id === null || $this->id === null || (int) $id !== (int) $this->id) {
+            return;
+        }
+        foreach ($mediaIds as $mid) {
+            $mid = (int) $mid;
+            if ($mid > 0 && ! in_array($mid, $this->sessionAttachedMediaIds, true)) {
+                $this->sessionAttachedMediaIds[] = $mid;
+            }
         }
     }
 
@@ -292,6 +325,21 @@ new class extends Component
 
     public function close(): void
     {
+        // Any photos attached via the media-library modal during this
+        // session get detached here — the user bailed on the form, so
+        // the attachments they didn't commit via save shouldn't stick.
+        // onFormSaved() clears the list before calling close(), so the
+        // happy-path save never reaches this.
+        if ($this->sessionAttachedMediaIds !== [] && $this->type !== '' && $this->id) {
+            $class = self::ATTACH_TARGET_MODELS[$this->type] ?? null;
+            if ($class !== null) {
+                $model = $class::find($this->id);
+                if ($model !== null && method_exists($model, 'media')) {
+                    $model->media()->detach($this->sessionAttachedMediaIds);
+                }
+            }
+        }
+
         $this->open = false;
         // Keep the modal-mode flag so the instance stays on its
         // subentity-edit-open channel across opens; resetting it would
@@ -299,6 +347,24 @@ new class extends Component
         // the next event.
         $this->resetExcept(['asModal']);
     }
+
+    /**
+     * Mirror of media-library-modal's whitelist — kept here because
+     * the shell needs to resolve target→class to detach session-attached
+     * media on close-without-save. Shorter list: only types that use
+     * HasPhotos / HasMedia and can legitimately receive pivot rows.
+     */
+    private const ATTACH_TARGET_MODELS = [
+        'inventory' => \App\Models\InventoryItem::class,
+        'document' => \App\Models\Document::class,
+        'vehicle' => \App\Models\Vehicle::class,
+        'property' => \App\Models\Property::class,
+        'contract' => \App\Models\Contract::class,
+        'insurance' => \App\Models\Contract::class,
+        'appointment' => \App\Models\Appointment::class,
+        'physical_mail' => \App\Models\PhysicalMail::class,
+        'food_entry' => \App\Models\FoodEntry::class,
+    ];
 
     public function deleteRecord(): void
     {

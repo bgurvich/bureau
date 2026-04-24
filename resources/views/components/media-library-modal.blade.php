@@ -38,6 +38,7 @@ new class extends Component
         'vehicle' => Vehicle::class,
         'property' => Property::class,
         'contract' => Contract::class,
+        'insurance' => Contract::class,
         'appointment' => Appointment::class,
         'physical_mail' => PhysicalMail::class,
         'food_entry' => FoodEntry::class,
@@ -160,16 +161,31 @@ new class extends Component
         }
         $model->media()->syncWithoutDetaching($rows);
 
+        $attachedIds = array_map('intval', array_keys($rows));
         $this->notice = __(':n attached', ['n' => count($rows)]);
         $this->selectedIds = [];
-        $this->dispatch('media-attached', type: $this->targetType, id: $this->targetId);
-        $this->dispatch('inspector-saved'); // refresh other UI
+        $this->dispatch(
+            'media-attached',
+            type: $this->targetType,
+            id: $this->targetId,
+            mediaIds: $attachedIds,
+        );
     }
 
     /** @return Collection<int, Media> */
     #[Computed]
     public function library(): Collection
     {
+        // Don't fetch anything while the modal is closed — the tiles
+        // aren't displayed and serializing the full media list into
+        // every page render leaks filenames through Livewire's DOM
+        // snapshot (and blows up the page weight).
+        if (! $this->open) {
+            /** @var Collection<int, Media> $empty */
+            $empty = new Collection;
+
+            return $empty;
+        }
         $q = Media::query();
         if ($this->search !== '') {
             $q->where('original_name', 'like', '%'.$this->search.'%');
@@ -202,14 +218,18 @@ new class extends Component
             input.files = dt.files;
             input.dispatchEvent(new Event('change', { bubbles: true }));
         }
-     }"
+     }">
+    {{-- Teleport to body so the modal escapes the inspector drawer's
+         stacking context and sits above both the primary drawer (z-50)
+         and the modal-mode stacked inspector (z-70). --}}
+    <template x-teleport="body">
+<div x-show="open"
      x-cloak
-     x-show="open"
      @keydown.escape.window="$wire.close()"
      role="dialog"
      aria-modal="true"
      aria-labelledby="mlm-title"
-     class="fixed inset-0 z-50 flex items-start justify-center p-4 sm:p-8">
+     class="fixed inset-0 z-[80] flex items-start justify-center p-4 sm:p-8">
     <div x-show="open"
          x-transition.opacity.duration.150ms
          @click="$wire.close()"
@@ -326,4 +346,6 @@ new class extends Component
             </div>
         </footer>
     </div>
+</div>
+    </template>
 </div>

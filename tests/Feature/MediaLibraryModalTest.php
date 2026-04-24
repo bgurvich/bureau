@@ -73,7 +73,10 @@ it('library filters by filename search', function () {
     Media::create(['disk' => 'local', 'path' => 'a.jpg', 'original_name' => 'vacation.jpg', 'mime' => 'image/jpeg', 'size' => 10]);
     Media::create(['disk' => 'local', 'path' => 'b.jpg', 'original_name' => 'receipt-jan.pdf', 'mime' => 'application/pdf', 'size' => 10]);
 
-    $lib = Livewire::test('media-library-modal')->set('search', 'vacation')->get('library');
+    $lib = Livewire::test('media-library-modal')
+        ->set('open', true)
+        ->set('search', 'vacation')
+        ->get('library');
 
     expect($lib)->toHaveCount(1);
     expect($lib->first()->original_name)->toBe('vacation.jpg');
@@ -84,6 +87,9 @@ it('library filters by mime prefix', function () {
     Media::create(['disk' => 'local', 'path' => 'a.jpg', 'original_name' => 'a.jpg', 'mime' => 'image/jpeg', 'size' => 10]);
     Media::create(['disk' => 'local', 'path' => 'b.pdf', 'original_name' => 'b.pdf', 'mime' => 'application/pdf', 'size' => 10]);
 
-    $lib = Livewire::test('media-library-modal')->set('mimeFilter', 'application/pdf')->get('library');
+    $lib = Livewire::test('media-library-modal')
+        ->set('open', true)
+        ->set('mimeFilter', 'application/pdf')
+        ->get('library');
     expect($lib->pluck('original_name')->all())->toBe(['b.pdf']);
 });
