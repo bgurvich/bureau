@@ -37,6 +37,12 @@ class InventoryItem extends Model
         return $this->belongsTo(Property::class, 'location_property_id');
     }
 
+    /** @return BelongsTo<Location, $this> */
+    public function location(): BelongsTo
+    {
+        return $this->belongsTo(Location::class);
+    }
+
     /** @return BelongsTo<Contact, $this> */
     public function purchasedFrom(): BelongsTo
     {
