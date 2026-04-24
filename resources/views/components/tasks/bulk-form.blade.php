@@ -15,6 +15,14 @@
     'autofocus' => false,
     /** Hosts that render their own bottom-docked submit (mobile page) can hide the inline one. */
     'hideSubmit' => false,
+    /**
+     * When true, renders optional Goal + Project searchable-selects
+     * above the textarea. The host must include the BulkTaskPickers
+     * trait so bulkGoalId / bulkProjectId / createBulkGoal /
+     * createBulkProject / bulkGoalOptions / bulkProjectOptions all
+     * resolve. Selection applies to every task created in the batch.
+     */
+    'showPickers' => false,
 ])
 
 @php
@@ -26,6 +34,31 @@
      panel, the tasks-bell modal, and the mobile capture page.
      Ctrl+Enter submits without requiring a pointer click. --}}
 <div class="space-y-3" x-data>
+    @if ($showPickers)
+        <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <div>
+                <label for="{{ $elementId }}-goal" class="block text-[10px] uppercase tracking-wider text-neutral-500">{{ __('Goal (optional)') }}</label>
+                <x-ui.searchable-select
+                    id="{{ $elementId }}-goal"
+                    model="bulkGoalId"
+                    :options="['' => '— '.__('none').' —'] + $this->bulkGoalOptions"
+                    placeholder="{{ __('— none —') }}"
+                    allow-create
+                    create-method="createBulkGoal" />
+            </div>
+            <div>
+                <label for="{{ $elementId }}-project" class="block text-[10px] uppercase tracking-wider text-neutral-500">{{ __('Project (optional)') }}</label>
+                <x-ui.searchable-select
+                    id="{{ $elementId }}-project"
+                    model="bulkProjectId"
+                    :options="['' => '— '.__('none').' —'] + $this->bulkProjectOptions"
+                    placeholder="{{ __('— none —') }}"
+                    allow-create
+                    create-method="createBulkProject" />
+            </div>
+        </div>
+    @endif
+
     <label for="{{ $elementId }}" class="sr-only">{{ __('Tasks') }}</label>
     <textarea id="{{ $elementId }}"
               wire:model="{{ $modelName }}"

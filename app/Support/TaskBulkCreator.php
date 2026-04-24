@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Support;
 
 use App\Models\Contact;
+use App\Models\Goal;
 use App\Models\Tag;
 use App\Models\Task;
 use Illuminate\Support\Str;
@@ -18,15 +19,24 @@ use Illuminate\Support\Str;
 final class TaskBulkCreator
 {
     /**
+     * $goalId/$projectId scope every task created in this batch. When
+     * both are provided, the tasks land under the Goal → Project pair
+     * that reveals them together on the productivity tree. Either can
+     * be null; TaskBulkCreator does not validate their consistency.
+     *
      * @return array{created: int, unmatched_contacts: array<int, string>}
      */
-    public static function run(string $text): array
+    public static function run(string $text, ?int $goalId = null, ?int $projectId = null): array
     {
         $rows = TaskLineParser::parseBlock($text);
         if ($rows === []) {
             return ['created' => 0, 'unmatched_contacts' => []];
         }
 
+        // Goal doesn't sit on Task directly; it reaches a task through
+        // the project. We look the goal up only to record it as a
+        // subject link on each task so users who prefer goal-scoped
+        // bulk entry get the thread regardless of project setting.
         $created = 0;
         $unmatched = [];
 
@@ -36,6 +46,7 @@ final class TaskBulkCreator
                 'due_at' => $row['due_at'],
                 'state' => 'open',
                 'priority' => $row['priority'] ?? 3,
+                'project_id' => $projectId,
             ]);
 
             if ($row['tags'] !== []) {
@@ -65,6 +76,13 @@ final class TaskBulkCreator
                     continue;
                 }
                 $refs[] = ['type' => Contact::class, 'id' => $hit->id];
+            }
+            // Goal assignment piggybacks on the subject-link machinery
+            // so it shows up wherever subjects surface (chip list,
+            // goal detail) without needing a separate goal_id column
+            // on Task.
+            if ($goalId !== null) {
+                $refs[] = ['type' => Goal::class, 'id' => $goalId];
             }
             if ($refs !== []) {
                 $task->syncSubjects($refs);

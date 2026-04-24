@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 use App\Models\Contact;
+use App\Models\Goal;
+use App\Models\Project;
 use App\Models\Tag;
 use App\Models\Task;
 use Carbon\CarbonImmutable;
@@ -60,6 +62,42 @@ it('uses parsed P1..P5 priority when present, defaults to 3 otherwise', function
 
     expect(Task::where('title', 'Fix critical bug')->value('priority'))->toBe(1);
     expect(Task::where('title', 'Tidy garage')->value('priority'))->toBe(3);
+});
+
+it('applies the bulk goal + project pickers to every new task', function () {
+    authedInHousehold();
+    $goal = Goal::create(['title' => 'Ship v1', 'mode' => 'target', 'status' => 'active', 'category' => 'work']);
+    $project = Project::create(['name' => 'Alpha', 'slug' => 'alpha']);
+
+    Livewire::test('tasks-index')
+        ->set('bulkOpen', true)
+        ->set('bulkGoalId', $goal->id)
+        ->set('bulkProjectId', $project->id)
+        ->set('bulkInput', "Write README\nShip deploy")
+        ->call('bulkSave');
+
+    $tasks = Task::whereIn('title', ['Write README', 'Ship deploy'])->get();
+    expect($tasks)->toHaveCount(2);
+    foreach ($tasks as $task) {
+        expect($task->project_id)->toBe($project->id);
+        // Goal attaches via subjects (not a direct FK on tasks).
+        $subjectIds = $task->subjects()->pluck('id')->all();
+        expect($subjectIds)->toContain($goal->id);
+    }
+});
+
+it('createBulkGoal + createBulkProject spawn and pre-select', function () {
+    authedInHousehold();
+
+    Livewire::test('tasks-index')
+        ->call('createBulkGoal', 'Get fit')
+        ->assertSet('bulkGoalId', function ($v) {
+            return $v !== null && Goal::where('title', 'Get fit')->value('id') === $v;
+        })
+        ->call('createBulkProject', 'Home gym')
+        ->assertSet('bulkProjectId', function ($v) {
+            return $v !== null && Project::where('name', 'Home gym')->value('id') === $v;
+        });
 });
 
 it('does nothing when the textarea is empty', function () {

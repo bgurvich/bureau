@@ -1,5 +1,6 @@
 <?php
 
+use App\Livewire\Concerns\BulkTaskPickers;
 use App\Models\Task;
 use App\Support\Formatting;
 use App\Support\TaskBulkCreator;
@@ -15,6 +16,8 @@ new
 #[Layout('components.layouts.app', ['title' => 'Tasks'])]
 class extends Component
 {
+    use BulkTaskPickers;
+
     #[Url(as: 'state')]
     public string $stateFilter = 'open';
 
@@ -44,7 +47,7 @@ class extends Component
 
     public function bulkSave(): void
     {
-        $result = TaskBulkCreator::run($this->bulkInput);
+        $result = TaskBulkCreator::run($this->bulkInput, $this->bulkGoalId, $this->bulkProjectId);
         if ($result['created'] === 0) {
             return;
         }
@@ -202,7 +205,8 @@ class extends Component
                 submit-method="bulkSave"
                 :notes="$bulkNotes"
                 :rows="6"
-                id="task-bulk-input" />
+                id="task-bulk-input"
+                :show-pickers="true" />
         </section>
     @endif
 

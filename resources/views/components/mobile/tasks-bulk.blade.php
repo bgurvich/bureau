@@ -1,5 +1,6 @@
 <?php
 
+use App\Livewire\Concerns\BulkTaskPickers;
 use App\Support\TaskBulkCreator;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
@@ -8,6 +9,8 @@ new
 #[Layout('components.layouts.mobile', ['title' => 'Tasks'])]
 class extends Component
 {
+    use BulkTaskPickers;
+
     public string $text = '';
 
     /** @var array<int, string> */
@@ -15,7 +18,7 @@ class extends Component
 
     public function save(): void
     {
-        $result = TaskBulkCreator::run($this->text);
+        $result = TaskBulkCreator::run($this->text, $this->bulkGoalId, $this->bulkProjectId);
         if ($result['created'] === 0) {
             $this->notes = [__('Type at least one task and tap Add.')];
 
@@ -50,7 +53,8 @@ class extends Component
         :notes="$notes"
         :rows="12"
         id="mtasks-input"
-        :hide-submit="true" />
+        :hide-submit="true"
+        :show-pickers="true" />
 
     <button type="button"
             wire:click="save"

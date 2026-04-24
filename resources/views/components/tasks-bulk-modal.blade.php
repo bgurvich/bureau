@@ -1,5 +1,6 @@
 <?php
 
+use App\Livewire\Concerns\BulkTaskPickers;
 use App\Support\TaskBulkCreator;
 use Livewire\Attributes\On;
 use Livewire\Component;
@@ -12,6 +13,8 @@ use Livewire\Component;
  */
 new class extends Component
 {
+    use BulkTaskPickers;
+
     public bool $open = false;
 
     public string $text = '';
@@ -34,7 +37,7 @@ new class extends Component
 
     public function save(): void
     {
-        $result = TaskBulkCreator::run($this->text);
+        $result = TaskBulkCreator::run($this->text, $this->bulkGoalId, $this->bulkProjectId);
         if ($result['created'] === 0) {
             $this->notes = [__('Type at least one task, then tap Add.')];
 
@@ -83,7 +86,8 @@ new class extends Component
                 :notes="$notes"
                 :rows="8"
                 :autofocus="true"
-                id="tbm-text">
+                id="tbm-text"
+                :show-pickers="true">
                 <x-slot:trailingActions>
                     <button type="button" wire:click="close"
                             class="rounded-md border border-neutral-800 bg-neutral-900 px-3 py-1.5 text-xs text-neutral-300 hover:border-neutral-600 hover:text-neutral-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
