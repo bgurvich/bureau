@@ -153,6 +153,7 @@
 
     @auth
         <livewire:tasks-bulk-modal />
+        <livewire:media-library-modal />
         <livewire:inspector />
         {{-- Modal-mode inspector listens on `subentity-edit-open` and
              stacks above the primary drawer. Used by searchable-select's

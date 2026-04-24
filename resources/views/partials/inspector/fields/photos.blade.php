@@ -79,6 +79,22 @@
                 </label>
                 <input x-ref="photoUpload" id="insp-photo-upload" type="file" wire:model="photoUpload" accept="image/*" multiple class="sr-only" />
             </li>
+            @if ($this->id)
+                <li>
+                    <button type="button"
+                            x-on:click.stop="$dispatch('media-library-open', { type: @js($this->type), id: {{ $this->id }}, role: 'photo' })"
+                            aria-label="{{ __('Browse media library') }}"
+                            title="{{ __('Browse library') }}"
+                            class="flex h-16 w-16 flex-col items-center justify-center gap-0.5 rounded-md border-2 border-dashed border-neutral-700 text-neutral-500 transition-colors hover:border-neutral-500 hover:text-neutral-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
+                        <svg class="h-4 w-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                            <rect x="2" y="3" width="12" height="10" rx="1"/>
+                            <circle cx="6" cy="7" r="1"/>
+                            <path d="m2 11 3-3 3 3 2-2 4 4"/>
+                        </svg>
+                        <span class="text-[10px]">{{ __('Library') }}</span>
+                    </button>
+                </li>
+            @endif
         </x-ui.sortable-list>
 
         <template x-teleport="body">
