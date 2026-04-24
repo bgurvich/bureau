@@ -197,23 +197,12 @@ class extends Component
         <section id="task-bulk-panel"
                  class="rounded-xl border border-neutral-800 bg-neutral-900/50 p-4"
                  aria-label="{{ __('Bulk task entry') }}">
-            <label for="task-bulk-input" class="block text-[10px] uppercase tracking-wider text-neutral-500">{{ __('One task per line') }}</label>
-            <p class="mt-1 text-xs text-neutral-500">{{ __('Use #tag, @contact, P1–P5, and mm-dd anywhere on the line. Leftover text becomes the title.') }}</p>
-            <textarea id="task-bulk-input"
-                      wire:model="bulkInput"
-                      rows="6"
-                      placeholder="{{ __("Pick up dry cleaning #errands 05-03\nCall @alice about taxes #admin P2\nBook dentist 06-15") }}"
-                      class="mt-2 block w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 font-mono text-sm text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300"
-                      spellcheck="false"></textarea>
-            <div class="mt-3 flex items-center gap-3">
-                <button type="button" wire:click="bulkSave"
-                        class="rounded-md border border-emerald-700/50 bg-emerald-900/30 px-3 py-1.5 text-xs font-medium text-emerald-200 hover:bg-emerald-900/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300">
-                    {{ __('Add tasks') }}
-                </button>
-                @foreach ($bulkNotes as $note)
-                    <span role="status" class="text-xs text-neutral-400">{{ $note }}</span>
-                @endforeach
-            </div>
+            <x-tasks.bulk-form
+                model-name="bulkInput"
+                submit-method="bulkSave"
+                :notes="$bulkNotes"
+                :rows="6"
+                id="task-bulk-input" />
         </section>
     @endif
 

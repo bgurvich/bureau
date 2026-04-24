@@ -44,20 +44,13 @@ class extends Component
         </p>
     </header>
 
-    <label for="mtasks-input" class="sr-only">{{ __('Tasks') }}</label>
-    <textarea id="mtasks-input"
-              wire:model="text"
-              rows="12"
-              inputmode="text"
-              autocapitalize="sentences"
-              autocomplete="off"
-              spellcheck="false"
-              placeholder="{{ __("Pick up dry cleaning #errands 05-03\nCall @alice about taxes #admin P2\nBook dentist 06-15") }}"
-              class="block flex-1 w-full rounded-2xl border border-neutral-800 bg-neutral-900/60 px-4 py-3 font-mono text-sm text-neutral-100 focus-visible:border-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-300"></textarea>
-
-    @foreach ($notes as $note)
-        <p role="status" class="text-xs text-neutral-400">{{ $note }}</p>
-    @endforeach
+    <x-tasks.bulk-form
+        model-name="text"
+        submit-method="save"
+        :notes="$notes"
+        :rows="12"
+        id="mtasks-input"
+        :hide-submit="true" />
 
     <button type="button"
             wire:click="save"
